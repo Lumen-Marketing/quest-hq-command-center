@@ -115,9 +115,15 @@ const bundle = {
     items: [],
     automations: [],
     views: [],
+    // No card totals the money, and none can: a sum widget reads item.values[fieldId], and
+    // every figure in this app is a calculation, whose value is never stored. `w-client` used
+    // to total "Total for client" and therefore showed $0.00 however many roofs were priced —
+    // the same trap the header warns about, walked into one section further down. There is no
+    // stored money field standing for the price either; the `price` fields are per-line unit
+    // costs, and adding those across records means nothing.
     dashboard: [
       { id: 'w-count', type: 'metric', size: 1, config: { metric: 'count' } },
-      { id: 'w-client', type: 'metric', size: 1, config: { metric: 'sum', fieldId: 'f-client' } },
+      { id: 'w-added', type: 'metric', size: 1, config: { metric: 'added' } },
       { id: 'w-recent', type: 'recent', size: 2, config: { limit: 5 } },
     ],
   },

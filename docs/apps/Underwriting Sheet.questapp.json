@@ -1,0 +1,744 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-17T00:00:00.000Z",
+  "app": {
+    "name": "Underwriting Sheet",
+    "recordName": "Sheet",
+    "type": "Underwriting",
+    "icon": "ti-ruler-measure",
+    "color": "#7F77DD",
+    "description": "Estimating's stage of the flow: Scope & takeoff → Underwriting sheet → Quote built → Handed to the Closer. Labor is guys × days rather than a typed figure, so changing the crew or the days moves every number below it. Line items are a sub-item list with the vendor on the line it prices. The takeoff is a spreadsheet laid out as the eight GAF measurements with a live waste column. Margin tier names the policy and Target margin % is the number the arithmetic reads — a category cannot drive a formula. Two limits are shown rather than papered over: the line items total is typed, because a calculation resolves {Label} against the app's fields and there is no per-record rollup over a sub-item list; and the hand-off button installs without a destination, because a bundle cannot name an app id in a workspace it has never seen — pick the Sales Pipeline once after installing.",
+    "fields": [
+      {
+        "id": "f-sheet",
+        "label": "Sheet",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "58th Pl — Roofing"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Sheet #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "UW-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-project",
+        "label": "Project",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Henderson — 58th Pl"
+        }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-trade",
+        "label": "Trade",
+        "type": "category",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "t-roof", "label": "Roofing", "color": "#e0552d" },
+            { "id": "t-frame", "label": "Framing", "color": "#7c3aed" },
+            { "id": "t-demo", "label": "Demo", "color": "#64748b" },
+            { "id": "t-gutter", "label": "Gutters", "color": "#0891b2" },
+            { "id": "t-solar", "label": "Solar", "color": "#eab308" },
+            { "id": "t-window", "label": "Windows", "color": "#2563eb" },
+            { "id": "t-stucco", "label": "Stucco", "color": "#d97706" },
+            { "id": "t-paint", "label": "Paint", "color": "#16a34a" }
+          ]
+        }
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "s-scope", "label": "Scope & takeoff", "color": "#64748b" },
+            { "id": "s-sheet", "label": "Underwriting sheet", "color": "#7F77DD" },
+            { "id": "s-quote", "label": "Quote built", "color": "#BA7517" },
+            { "id": "s-handed", "label": "Handed to the Closer", "color": "#639922" },
+            { "id": "s-hold", "label": "On hold", "color": "#0891b2" },
+            { "id": "s-drop", "label": "Dropped", "color": "#E24B4A" }
+          ]
+        }
+      },
+      {
+        "id": "f-estimator",
+        "label": "Estimator",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-scope",
+        "label": "Scope of work",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What is being bid, and what is explicitly excluded"
+        }
+      },
+      {
+        "id": "f-takeoff",
+        "label": "Takeoff",
+        "type": "sheet",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "sheet": {
+            "rows": 9,
+            "cols": 5,
+            "headerRow": true,
+            "title": "GAF report",
+            "cells": {
+              "A1": "Measurement",
+              "B1": "Figure",
+              "C1": "Unit",
+              "D1": "Waste %",
+              "E1": "With waste",
+              "A2": "Total SQ",
+              "C2": "SQ",
+              "D2": "10",
+              "E2": "=B2+B2*D2/100",
+              "A3": "Rakes",
+              "C3": "FT",
+              "D3": "10",
+              "E3": "=B3+B3*D3/100",
+              "A4": "Valleys",
+              "C4": "FT",
+              "D4": "10",
+              "E4": "=B4+B4*D4/100",
+              "A5": "Drip edge",
+              "C5": "FT",
+              "D5": "10",
+              "E5": "=B5+B5*D5/100",
+              "A6": "Eaves",
+              "C6": "FT",
+              "D6": "10",
+              "E6": "=B6+B6*D6/100",
+              "A7": "Ridges",
+              "C7": "FT",
+              "D7": "10",
+              "E7": "=B7+B7*D7/100",
+              "A8": "Low slope",
+              "C8": "SQ FT",
+              "D8": "10",
+              "E8": "=B8+B8*D8/100",
+              "A9": "Leak barrier",
+              "C9": "FT",
+              "D9": "10",
+              "E9": "=B9+B9*D9/100"
+            }
+          }
+        }
+      },
+      {
+        "id": "f-measured",
+        "label": "Measured on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-due",
+        "label": "Quote due",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-docs",
+        "label": "Plans, reports & photos",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-steps",
+        "label": "Scope checklist",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Measurements in (GAF report or field measure)",
+            "Photos and plans attached",
+            "Access, staging and disposal understood",
+            "Line items costed against the price book",
+            "Vendor pricing confirmed on every material line",
+            "Crew size and days agreed with the field",
+            "Margin tier applied",
+            "Quote reviewed before it leaves Estimating"
+          ]
+        }
+      },
+      {
+        "id": "f-scopepct",
+        "label": "Scope complete",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-steps"
+        }
+      },
+      {
+        "id": "f-crew",
+        "label": "Crew size",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "guys"
+        }
+      },
+      {
+        "id": "f-days",
+        "label": "Days",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "days"
+        }
+      },
+      {
+        "id": "f-hours",
+        "label": "Hours per day",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "hrs"
+        }
+      },
+      {
+        "id": "f-rate",
+        "label": "Labor rate",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "Loaded cost per man-hour"
+        }
+      },
+      {
+        "id": "f-manhours",
+        "label": "Man-hours",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Crew size} * {Days} * {Hours per day}"
+        }
+      },
+      {
+        "id": "f-laborcost",
+        "label": "Labor cost",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Crew size} * {Days} * {Hours per day} * {Labor rate}"
+        }
+      },
+      {
+        "id": "f-lines",
+        "label": "Line items total",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "Sum of the Line items list, before tax"
+        }
+      },
+      {
+        "id": "f-tax",
+        "label": "Tax %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-vendorq",
+        "label": "Vendor quotes on file",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-pricebook",
+        "label": "Price book version",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Which price book these costs came from"
+        }
+      },
+      {
+        "id": "f-oh",
+        "label": "Overhead %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-comm",
+        "label": "Commission %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-cont",
+        "label": "Contingency %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-direct",
+        "label": "Direct cost",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})"
+        }
+      },
+      {
+        "id": "f-burden",
+        "label": "Overhead, commission & contingency",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "(({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) * ({Overhead %} + {Commission %} + {Contingency %}) / 100"
+        }
+      },
+      {
+        "id": "f-total",
+        "label": "Total cost",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "(({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) + ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) * ({Overhead %} + {Commission %} + {Contingency %}) / 100)"
+        }
+      },
+      {
+        "id": "f-tier",
+        "label": "Margin tier",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "mt-ins", "label": "Insurance — 40%", "color": "#2563eb" },
+            { "id": "mt-std", "label": "Standard — 35%", "color": "#16a34a" },
+            { "id": "mt-pref", "label": "Preferred — 30%", "color": "#0891b2" },
+            { "id": "mt-vol", "label": "Volume — 25%", "color": "#d97706" },
+            { "id": "mt-custom", "label": "Custom — needs sign-off", "color": "#E24B4A" }
+          ]
+        }
+      },
+      {
+        "id": "f-target",
+        "label": "Target margin %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%",
+          "placeholder": "The tier as a number the formulas can read"
+        }
+      },
+      {
+        "id": "f-quote",
+        "label": "Quote price",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What the Closer takes to the customer"
+        }
+      },
+      {
+        "id": "f-profit",
+        "label": "Gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Quote price} - ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) + ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) * ({Overhead %} + {Commission %} + {Contingency %}) / 100))"
+        }
+      },
+      {
+        "id": "f-live",
+        "label": "Live margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Quote price} - ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) + ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) * ({Overhead %} + {Commission %} + {Contingency %}) / 100))) * 100 / {Quote price}"
+        }
+      },
+      {
+        "id": "f-vs",
+        "label": "Margin vs target",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "(({Quote price} - ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) + ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) * ({Overhead %} + {Commission %} + {Contingency %}) / 100))) * 100 / {Quote price}) - {Target margin %}"
+        }
+      },
+      {
+        "id": "f-attarget",
+        "label": "Price at target margin",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) + ((({Line items total} + ({Line items total} * {Tax %} / 100)) + ({Crew size} * {Days} * {Hours per day} * {Labor rate})) * ({Overhead %} + {Commission %} + {Contingency %}) / 100)) * 100 / (100 - {Target margin %})"
+        }
+      },
+      {
+        "id": "f-sent",
+        "label": "Quote sent on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-send",
+        "label": "Send to Sales Pipeline",
+        "type": "button",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "action": "push",
+          "text": "Hand to the Closer"
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Assumptions, exclusions, anything the Closer must not promise"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-lines",
+        "name": "Line items",
+        "recordName": "Line item",
+        "fields": [
+          {
+            "id": "l-cat",
+            "label": "Category",
+            "type": "category",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                { "id": "lc-mat", "label": "Material", "color": "#2563eb" },
+                { "id": "lc-labor", "label": "Labor", "color": "#e0552d" },
+                { "id": "lc-equip", "label": "Equipment", "color": "#0891b2" },
+                { "id": "lc-sub", "label": "Subcontractor", "color": "#7c3aed" },
+                { "id": "lc-disposal", "label": "Disposal", "color": "#64748b" },
+                { "id": "lc-permit", "label": "Permit", "color": "#d97706" },
+                { "id": "lc-other", "label": "Other", "color": "#16a34a" }
+              ]
+            }
+          },
+          {
+            "id": "l-desc",
+            "label": "Description",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Timberline HDZ — Charcoal"
+            }
+          },
+          {
+            "id": "l-vendor",
+            "label": "Vendor",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Who this price came from"
+            }
+          },
+          {
+            "id": "l-qty",
+            "label": "Quantity",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "l-unit",
+            "label": "Unit",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "SQ, FT, EA, roll"
+            }
+          },
+          {
+            "id": "l-price",
+            "label": "Unit price",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$"
+            }
+          },
+          {
+            "id": "l-amount",
+            "label": "Amount",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": "Quantity × unit price"
+            }
+          },
+          {
+            "id": "l-quote",
+            "label": "Vendor quote on file",
+            "type": "checkbox",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-job",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The job",
+          "fieldIds": ["f-sheet", "f-no", "f-contact", "f-project", "f-address", "f-trade", "f-stage", "f-estimator"]
+        }
+      },
+      {
+        "id": "b-scope",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Scope & takeoff",
+          "fieldIds": ["f-scope", "f-takeoff", "f-measured", "f-due", "f-docs", "f-steps", "f-scopepct"]
+        }
+      },
+      {
+        "id": "b-labor",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Labor — guys × days",
+          "fieldIds": ["f-crew", "f-days", "f-hours", "f-rate", "f-manhours", "f-laborcost"]
+        }
+      },
+      {
+        "id": "b-mat",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Materials & vendor pricing",
+          "fieldIds": ["f-lines", "f-tax", "f-vendorq", "f-pricebook"]
+        }
+      },
+      {
+        "id": "b-lines",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-lines"
+        }
+      },
+      {
+        "id": "b-cost",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What it costs to do",
+          "fieldIds": ["f-oh", "f-comm", "f-cont", "f-direct", "f-burden", "f-total"]
+        }
+      },
+      {
+        "id": "b-price",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Price & margin",
+          "fieldIds": ["f-tier", "f-target", "f-quote", "f-profit", "f-live", "f-vs", "f-attarget"]
+        }
+      },
+      {
+        "id": "b-handoff",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Handing it to the Closer",
+          "fieldIds": ["f-sent", "f-send", "f-notes"]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Trail",
+          "fieldIds": ["f-created", "f-touched"]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-custom",
+        "name": "A custom margin tier needs sign-off",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-tier",
+          "value": "mt-custom"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This sheet is priced off the tier table. It needs sign-off before the quote leaves Estimating."
+          }
+        ]
+      },
+      {
+        "id": "a-handed",
+        "name": "Quote built — the Closer takes the wheel",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-stage",
+          "to": "s-handed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "The quote is built and this sheet has been handed over. The deal belongs to the Closer now — one per trade per address."
+          }
+        ]
+      }
+    ],
+    "cardFields": ["f-contact", "f-trade", "f-quote", "f-stage"],
+    "views": [
+      { "id": "v-stage", "title": "By stage", "fieldId": "f-stage", "scope": "team" },
+      { "id": "v-trade", "title": "By trade", "fieldId": "f-trade", "scope": "team" },
+      { "id": "v-tier", "title": "By margin tier", "fieldId": "f-tier", "scope": "team" }
+    ],
+    "dashboard": [
+      { "id": "w-count", "type": "metric", "size": 1, "config": { "metric": "count" } },
+      { "id": "w-quoted", "type": "metric", "size": 1, "config": { "metric": "sum", "fieldId": "f-quote" } },
+      { "id": "w-stages", "type": "stages", "size": 2, "config": { "fieldId": "f-stage" } },
+      { "id": "w-due", "type": "calendar", "size": 2, "config": { "fieldId": "f-due" } },
+      { "id": "w-recent", "type": "recent", "size": 2, "config": { "limit": 6 } },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": {
+          "text": "Margin tier is the policy; Target margin % is the number the formulas read. Set both, or Margin vs target compares against zero."
+        }
+      }
+    ]
+  }
+}

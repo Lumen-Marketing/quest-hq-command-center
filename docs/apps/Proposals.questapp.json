@@ -1,0 +1,457 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-17T00:00:00.000Z",
+  "app": {
+    "name": "Proposals",
+    "recordName": "Proposal",
+    "type": "Sales",
+    "icon": "ti-file-signature",
+    "color": "#7c3aed",
+    "description": "The document the client signs, sitting ABOVE the per-trade deals rather than replacing them. One deal is one trade, so a lump sum wrapped across three trades had nowhere to live and a partial signing had to be inferred from which deals went Lost. Scopes is the list of trades this document covers — each with its own Signed tick — so a partial signing is recorded on the thing that was signed, and Partially won is a stage of its own. Two limits are shown rather than papered over: Contract price is TYPED, because a calculation resolves {Label} against the app's fields and never a sub-item list, and there is no per-record rollup over a collection; and \"the draw schedule must total 100%\" is shown by Draw total %, not enforced, because the formula grammar has no conditional. There is deliberately no hand-off button — one press creates one record, and the handoff fans out to one job per SIGNED trade, so a single button would file one job carrying no trade and read as working. The checklist carries the step instead.",
+    "fields": [
+      {
+        "id": "f-proposal",
+        "label": "Proposal",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": { "placeholder": "Henderson — 58th Pl" }
+      },
+      {
+        "id": "f-no",
+        "label": "Proposal #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": { "prefix": "PR-", "padding": 4 }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-company",
+        "label": "Company",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "If they are not a homeowner" }
+      },
+      {
+        "id": "f-project",
+        "label": "Project",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "The project these trades belong to" }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "pp-draft", "label": "Draft", "color": "#64748b" },
+            { "id": "pp-sent", "label": "Sent", "color": "#378ADD" },
+            { "id": "pp-neg", "label": "Negotiating", "color": "#BA7517" },
+            { "id": "pp-partial", "label": "Partially won", "color": "#d97706" },
+            { "id": "pp-won", "label": "Won", "color": "#639922" },
+            { "id": "pp-lost", "label": "Lost", "color": "#E24B4A" }
+          ]
+        }
+      },
+      {
+        "id": "f-closer",
+        "label": "Closer",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-type",
+        "label": "Proposal type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "pt-lump", "label": "Lump sum", "color": "#2563eb" },
+            { "id": "pt-split", "label": "Split per scope", "color": "#7c3aed" }
+          ]
+        }
+      },
+      {
+        "id": "f-price",
+        "label": "Contract price",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$", "placeholder": "The one number the client signs" }
+      },
+      {
+        "id": "f-cost",
+        "label": "Cost",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$", "placeholder": "Total from the underwriting sheets" }
+      },
+      {
+        "id": "f-profit",
+        "label": "Gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Contract price} - {Cost}" }
+      },
+      {
+        "id": "f-margin",
+        "label": "Gross margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "({Contract price} - {Cost}) * 100 / {Contract price}" }
+      },
+      {
+        "id": "f-d1",
+        "label": "Draw 1 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "%" }
+      },
+      {
+        "id": "f-d2",
+        "label": "Draw 2 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "%" }
+      },
+      {
+        "id": "f-d3",
+        "label": "Draw 3 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "%" }
+      },
+      {
+        "id": "f-dtotal",
+        "label": "Draw total %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "({Draw 1 %} + {Draw 2 %} + {Draw 3 %})" }
+      },
+      {
+        "id": "f-d1amt",
+        "label": "Draw 1 amount",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Contract price} * {Draw 1 %} / 100" }
+      },
+      {
+        "id": "f-d2amt",
+        "label": "Draw 2 amount",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Contract price} * {Draw 2 %} / 100" }
+      },
+      {
+        "id": "f-d3amt",
+        "label": "Draw 3 amount",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Contract price} * {Draw 3 %} / 100" }
+      },
+      {
+        "id": "f-sent",
+        "label": "Sent on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-valid",
+        "label": "Valid until",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-signed",
+        "label": "Signed on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-docs",
+        "label": "Proposal & contract",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": { "multiple": true }
+      },
+      {
+        "id": "f-handoff",
+        "label": "Handoff at signature",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Signed contract filed on this record",
+            "Signed ticked on every accepted scope",
+            "Draw schedule armed and totalling 100%",
+            "Budget buckets pre-loaded from the underwriting sheets",
+            "One job created per signed trade",
+            "Unsigned scopes closed or sent back to be re-quoted"
+          ]
+        }
+      },
+      {
+        "id": "f-handoffpct",
+        "label": "Handoff progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": { "source": "f-handoff" }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "Concessions, exclusions, who signs and when" }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-scopes",
+        "name": "Scopes",
+        "recordName": "Scope",
+        "fields": [
+          {
+            "id": "sc-trade",
+            "label": "Trade",
+            "type": "category",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                { "id": "t-roof", "label": "Roofing", "color": "#e0552d" },
+                { "id": "t-frame", "label": "Framing", "color": "#7c3aed" },
+                { "id": "t-demo", "label": "Demo", "color": "#64748b" },
+                { "id": "t-gutter", "label": "Gutters", "color": "#0891b2" },
+                { "id": "t-solar", "label": "Solar", "color": "#eab308" },
+                { "id": "t-window", "label": "Windows", "color": "#2563eb" },
+                { "id": "t-stucco", "label": "Stucco", "color": "#d97706" },
+                { "id": "t-paint", "label": "Paint", "color": "#16a34a" }
+              ]
+            }
+          },
+          {
+            "id": "sc-covers",
+            "label": "What it covers",
+            "type": "textarea",
+            "required": false,
+            "hidden": false,
+            "config": { "placeholder": "The scope as the client reads it" }
+          },
+          {
+            "id": "sc-amount",
+            "label": "Amount",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": { "currency": "$", "placeholder": "Left blank on a lump sum" }
+          },
+          {
+            "id": "sc-in",
+            "label": "In the proposal",
+            "type": "checkbox",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "sc-signed",
+            "label": "Signed",
+            "type": "checkbox",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "sc-status",
+            "label": "Status",
+            "type": "category",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                { "id": "ss-offered", "label": "Offered", "color": "#378ADD" },
+                { "id": "ss-accepted", "label": "Accepted", "color": "#639922" },
+                { "id": "ss-declined", "label": "Declined", "color": "#E24B4A" },
+                { "id": "ss-requote", "label": "To be re-quoted", "color": "#BA7517" },
+                { "id": "ss-withdrawn", "label": "Withdrawn", "color": "#64748b" }
+              ]
+            }
+          },
+          {
+            "id": "sc-job",
+            "label": "Job",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": { "placeholder": "The job this signed trade became" }
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-doc",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The document",
+          "fieldIds": ["f-proposal", "f-no", "f-contact", "f-company", "f-project", "f-address", "f-stage", "f-closer"]
+        }
+      },
+      {
+        "id": "b-money",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What they sign for",
+          "fieldIds": ["f-type", "f-price", "f-cost", "f-profit", "f-margin"]
+        }
+      },
+      {
+        "id": "b-scopes",
+        "type": "collection",
+        "size": 4,
+        "config": { "collectionId": "c-scopes" }
+      },
+      {
+        "id": "b-draws",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Draw schedule — must total 100%",
+          "fieldIds": ["f-d1", "f-d2", "f-d3", "f-dtotal", "f-d1amt", "f-d2amt", "f-d3amt"]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Out and back",
+          "fieldIds": ["f-sent", "f-valid", "f-signed", "f-docs"]
+        }
+      },
+      {
+        "id": "b-handoff",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "At signature",
+          "fieldIds": ["f-handoff", "f-handoffpct", "f-notes"]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": { "title": "Trail", "fieldIds": ["f-created", "f-touched"] }
+      },
+      { "id": "b-comments", "type": "comments", "size": 4, "config": {} }
+    ],
+    "automations": [
+      {
+        "id": "a-won",
+        "name": "Won — arm the draws and split the jobs",
+        "trigger": { "event": "stage_moves", "fieldId": "f-stage", "to": "pp-won" },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Signed. Each accepted scope becomes its own job with its draws armed and its buckets pre-loaded. Work the Handoff at signature checklist — it is the step, not a button."
+          }
+        ]
+      },
+      {
+        "id": "a-partial",
+        "name": "Partially won — only the signed trades travel",
+        "trigger": { "event": "stage_moves", "fieldId": "f-stage", "to": "pp-partial" },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A partial signing. Only scopes with Signed ticked become jobs; the rest are closed or sent back to be re-quoted. The proposal stays open on this record."
+          }
+        ]
+      }
+    ],
+    "cardFields": ["f-contact", "f-price", "f-signed", "f-stage"],
+    "views": [
+      { "id": "v-stage", "title": "By stage", "fieldId": "f-stage", "scope": "team" },
+      { "id": "v-type", "title": "By proposal type", "fieldId": "f-type", "scope": "team" }
+    ],
+    "dashboard": [
+      { "id": "w-count", "type": "metric", "size": 1, "config": { "metric": "count" } },
+      { "id": "w-value", "type": "metric", "size": 1, "config": { "metric": "sum", "fieldId": "f-price" } },
+      { "id": "w-stages", "type": "stages", "size": 2, "config": { "fieldId": "f-stage" } },
+      { "id": "w-valid", "type": "calendar", "size": 2, "config": { "fieldId": "f-valid" } },
+      { "id": "w-recent", "type": "recent", "size": 2, "config": { "limit": 6 } },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": { "text": "Draw total % is shown, not enforced — the formula grammar has no conditional. Read it before the proposal goes out." }
+      }
+    ]
+  }
+}

@@ -1,0 +1,343 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-17T00:00:00.000Z",
+  "app": {
+    "name": "Prospects",
+    "recordName": "Prospect",
+    "type": "Prospecting",
+    "icon": "ti-user-search",
+    "color": "#64748b",
+    "description": "The first stage of the flow: somebody being drip-worked, with no money attached. There is deliberately no money field of any kind here — a price box on a prospect invites a guess, and a funnel total built from guesses is worse than no total. The drip is a checklist of six touches feeding a progress bar, and Next touch drives the calendar that is this app's main screen. Something to bid is the gate out: tick it and the prospect is promoted to Leads, where money attaches as an estimate. The two hand-off buttons install without a destination — a bundle cannot name an app id in a workspace it has never seen — so pick Leads and Nurturing once after installing.",
+    "fields": [
+      {
+        "id": "f-prospect",
+        "label": "Prospect",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": { "placeholder": "Henderson — 58th Pl" }
+      },
+      {
+        "id": "f-no",
+        "label": "Prospect #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": { "prefix": "P-", "padding": 4 }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-company",
+        "label": "Company",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "If they are not a homeowner" }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-interest",
+        "label": "Trade interest",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "t-roof", "label": "Roofing", "color": "#e0552d" },
+            { "id": "t-frame", "label": "Framing", "color": "#7c3aed" },
+            { "id": "t-demo", "label": "Demo", "color": "#64748b" },
+            { "id": "t-gutter", "label": "Gutters", "color": "#0891b2" },
+            { "id": "t-solar", "label": "Solar", "color": "#eab308" },
+            { "id": "t-window", "label": "Windows", "color": "#2563eb" },
+            { "id": "t-stucco", "label": "Stucco", "color": "#d97706" },
+            { "id": "t-paint", "label": "Paint", "color": "#16a34a" }
+          ]
+        }
+      },
+      {
+        "id": "f-source",
+        "label": "Source",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "src-referral", "label": "Referral", "color": "#16a34a" },
+            { "id": "src-door", "label": "Door knock", "color": "#e0552d" },
+            { "id": "src-storm", "label": "Storm response", "color": "#2563eb" },
+            { "id": "src-call", "label": "Inbound call", "color": "#0891b2" },
+            { "id": "src-web", "label": "Website form", "color": "#7c3aed" },
+            { "id": "src-repeat", "label": "Repeat customer", "color": "#BA7517" },
+            { "id": "src-adjuster", "label": "Insurance adjuster", "color": "#64748b" },
+            { "id": "src-partner", "label": "Trade partner", "color": "#d97706" }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "ps-cold", "label": "Cold", "color": "#64748b" },
+            { "id": "ps-working", "label": "Working", "color": "#2563eb" },
+            { "id": "ps-warming", "label": "Warming", "color": "#BA7517" },
+            { "id": "ps-quiet", "label": "Gone quiet", "color": "#7c3aed" },
+            { "id": "ps-stop", "label": "Do not contact", "color": "#E24B4A" }
+          ]
+        }
+      },
+      {
+        "id": "f-bid",
+        "label": "Something to bid",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-drip",
+        "label": "Drip sequence",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "First call",
+            "Follow-up text",
+            "Door knock",
+            "Email with recent work nearby",
+            "Second call",
+            "Seasonal check-in"
+          ]
+        }
+      },
+      {
+        "id": "f-drippct",
+        "label": "Drip progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": { "source": "f-drip" }
+      },
+      {
+        "id": "f-touches",
+        "label": "Touches",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-last",
+        "label": "Last touch",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-next",
+        "label": "Next touch",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-channel",
+        "label": "Best channel",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "ch-call", "label": "Call", "color": "#16a34a" },
+            { "id": "ch-text", "label": "Text", "color": "#2563eb" },
+            { "id": "ch-email", "label": "Email", "color": "#7c3aed" },
+            { "id": "ch-door", "label": "Door", "color": "#e0552d" },
+            { "id": "ch-social", "label": "Social", "color": "#0891b2" }
+          ]
+        }
+      },
+      {
+        "id": "f-interestlevel",
+        "label": "Interest",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "What was said on the call — this rides the whole way to Production" }
+      },
+      {
+        "id": "f-promote",
+        "label": "Promote to Leads",
+        "type": "button",
+        "required": false,
+        "hidden": false,
+        "config": { "action": "move", "text": "They have something to bid" }
+      },
+      {
+        "id": "f-nurture",
+        "label": "Send to Nurturing",
+        "type": "button",
+        "required": false,
+        "hidden": false,
+        "config": { "action": "move", "text": "Warm, but not ready yet" }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-who",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Who they are",
+          "fieldIds": ["f-prospect", "f-no", "f-contact", "f-company", "f-address", "f-phone", "f-email"]
+        }
+      },
+      {
+        "id": "b-where",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Where they came from",
+          "fieldIds": ["f-interest", "f-source", "f-owner", "f-status", "f-bid"]
+        }
+      },
+      {
+        "id": "b-drip",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Working the drip",
+          "fieldIds": ["f-drip", "f-drippct", "f-touches", "f-last", "f-next", "f-channel", "f-interestlevel"]
+        }
+      },
+      {
+        "id": "b-out",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes, and the way out",
+          "fieldIds": ["f-notes", "f-promote", "f-nurture"]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": { "title": "Trail", "fieldIds": ["f-created", "f-touched"] }
+      },
+      { "id": "b-comments", "type": "comments", "size": 4, "config": {} }
+    ],
+    "automations": [
+      {
+        "id": "a-bid",
+        "name": "Something to bid — promote them",
+        "trigger": { "event": "field_is", "fieldId": "f-bid", "value": true },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This prospect has something to bid. Promote them to Leads, where the estimate attaches — one lead per trade per address."
+          }
+        ]
+      },
+      {
+        "id": "a-quiet",
+        "name": "Gone quiet — decide, do not drift",
+        "trigger": { "event": "stage_moves", "fieldId": "f-status", "to": "ps-quiet" },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Gone quiet. Either send them to Nurturing with a day it rings on, or mark Do not contact — a prospect left drifting is a drip nobody is working."
+          }
+        ]
+      }
+    ],
+    "cardFields": ["f-contact", "f-interest", "f-next", "f-status"],
+    "views": [
+      { "id": "v-status", "title": "By status", "fieldId": "f-status", "scope": "team" },
+      { "id": "v-source", "title": "By source", "fieldId": "f-source", "scope": "team" }
+    ],
+    "dashboard": [
+      { "id": "w-count", "type": "metric", "size": 1, "config": { "metric": "count" } },
+      { "id": "w-added", "type": "metric", "size": 1, "config": { "metric": "added" } },
+      { "id": "w-next", "type": "calendar", "size": 2, "config": { "fieldId": "f-next" } },
+      { "id": "w-status", "type": "stages", "size": 2, "config": { "fieldId": "f-status" } },
+      { "id": "w-recent", "type": "recent", "size": 2, "config": { "limit": 6 } },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": { "text": "No money lives on a prospect. The estimate attaches at Lead, and the price at Sales." }
+      }
+    ]
+  }
+}

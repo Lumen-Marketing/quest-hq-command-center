@@ -1080,12 +1080,11 @@
         }
       },
       {
-        "id": "w-client",
+        "id": "w-added",
         "type": "metric",
         "size": 1,
         "config": {
-          "metric": "sum",
-          "fieldId": "f-client"
+          "metric": "added"
         }
       },
       {

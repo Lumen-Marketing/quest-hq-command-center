@@ -141,6 +141,145 @@ for (const [name, bundle] of bundles) {
     (app.recordLayout || []).filter((b) => b.type === 'collection').forEach((block) => {
       assert.ok((app.collections || []).some((c) => c.id === block.config?.collectionId),
         `a layout block points at a sub-item list that is not in the file`);
+      // remapApp remaps `collectionId` and ONLY that. `collectionIds` — which the editor
+      // writes and record-page.js:206 PREFERS whenever it is a non-empty array — travels
+      // verbatim, so it would arrive naming the bundle's own ids and the card would render
+      // empty while looking configured. Singular only in a bundle.
+      assert.ok(!Array.isArray(block.config?.collectionIds),
+        'a layout block ships collectionIds, which install does not remap and record-page prefers');
+    });
+  });
+
+  test(`${name}: a record layout shows every field`, () => {
+    // `fieldIds: null` means "whatever fields exist", but an explicit list is honoured
+    // EXACTLY (record-layout.js blockFields). So a field the author forgot to place is not
+    // merely out of order — it is invisible on the record page, with nothing to say why.
+    const layout = app.recordLayout || [];
+    if (!layout.length) return;
+    const groups = layout.filter((b) => b.type === 'fields');
+    if (groups.some((b) => b.config?.fieldIds == null)) return;
+    const placed = groups.flatMap((b) => b.config.fieldIds);
+    const seen = new Set();
+    placed.forEach((id) => {
+      assert.ok(app.fields.some((f) => f.id === id), `the layout places ${id}, which is not a field`);
+      assert.ok(!seen.has(id), `${id} is placed in two groups, so it renders twice`);
+      seen.add(id);
+    });
+    app.fields.forEach((field) => {
+      assert.ok(seen.has(field.id), `"${field.label}" is in no layout group, so the record page never shows it`);
+    });
+    layout.forEach((block) => {
+      assert.ok(['fields', 'comments', 'meta', 'note', 'collection'].includes(block.type),
+        `layout block ${block.id} has type ${block.type}, which normalizes to a field group`);
+      assert.ok(block.size >= 1 && block.size <= 4, `layout block ${block.id} has size ${block.size}, which is clamped`);
+    });
+  });
+
+  test(`${name}: a progress field fills from a checklist in this app`, () => {
+    // config.source is the ONE field-config key wbBuildInstalledApp remaps (main.js), and it
+    // only remaps a same-app id. A `link:<rel>:<field>` source is not remapped at all, and a
+    // relationship cannot be in a bundle anyway, so it would install pointing at nothing.
+    app.fields.filter((f) => f.type === 'progress' && f.config?.source).forEach((field) => {
+      const source = String(field.config.source);
+      assert.ok(!source.startsWith('link:'), `"${field.label}" fills from a linked record, which install cannot remap`);
+      const target = app.fields.find((f) => f.id === source);
+      assert.ok(target, `"${field.label}" fills from ${source}, which is not a field here`);
+      assert.equal(target.type, 'checklist', `"${field.label}" fills from "${target.label}", which is not a checklist`);
+    });
+  });
+
+  test(`${name}: a button carries nothing install would leave dangling`, () => {
+    // Field ids are reminted on install and NOTHING inside a button's config is remapped —
+    // not `when[].field`, not `set[].field`. A condition shipped in a bundle would compare a
+    // field that no longer exists, which reads as "always false" and locks the button shut;
+    // a set row would write to nothing. Both look configured and do nothing.
+    app.fields.filter((f) => f.type === 'button').forEach((field) => {
+      const config = field.config || {};
+      assert.ok(!Array.isArray(config.when) || !config.when.length,
+        `"${field.label}" ships conditions, whose field ids install cannot remap`);
+      assert.ok(!Array.isArray(config.set) || !config.set.length,
+        `"${field.label}" ships field changes, whose field ids install cannot remap`);
+      assert.ok(!Array.isArray(config.fields) || !config.fields.length,
+        `"${field.label}" ships a chosen field list, whose ids install cannot remap`);
+      // A record button's `link` action is only implemented on the Company Contacts card
+      // (button-push.js press() has no link branch for a record seat), so one here installs
+      // enabled and does nothing when pressed.
+      assert.ok(['push', 'move'].includes(config.action || 'push'),
+        `"${field.label}" uses the ${config.action} action, which a record button cannot run`);
+    });
+  });
+
+  test(`${name}: every automation resolves after install`, () => {
+    // Automation field ids ARE remapped (trigger.fieldId and each action's fieldId), and
+    // option ids are preserved — so these travel. Member ids do not.
+    const byId = new Map(app.fields.map((f) => [f.id, f]));
+    (app.automations || []).forEach((auto) => {
+      assert.ok(auto.id && auto.name, 'an automation needs an id and a name');
+      const trigger = auto.trigger || {};
+      assert.ok(['created', 'updated', 'stage_moves', 'field_is'].includes(trigger.event),
+        `"${auto.name}" has trigger ${trigger.event}, which falls back to "created"`);
+      if (trigger.event === 'stage_moves') {
+        const field = byId.get(trigger.fieldId);
+        assert.equal(field?.type, 'status', `"${auto.name}" moves stages on a field that is not a status`);
+        [trigger.from, trigger.to].filter(Boolean).forEach((id) => {
+          assert.ok(field.config.options.some((o) => o.id === id), `"${auto.name}" names stage ${id}, which does not exist`);
+        });
+      }
+      if (trigger.event === 'field_is') {
+        const field = byId.get(trigger.fieldId);
+        assert.ok(field, `"${auto.name}" triggers on ${trigger.fieldId}, which is not a field here`);
+        assert.ok(!['file', 'image'].includes(field.type), `"${auto.name}" triggers on a ${field.type}, which has no comparable value`);
+        // A sourced progress field is derived, not stored, so item.values holds nothing for
+        // the numeric comparison to read and the rule never fires.
+        assert.notEqual(field.type, 'progress', `"${auto.name}" triggers on a progress field, whose value is derived rather than stored`);
+        if (['status', 'category'].includes(field.type)) {
+          assert.ok(field.config.options.some((o) => o.id === trigger.value), `"${auto.name}" matches ${trigger.value}, which is not an option`);
+        }
+        if (field.type === 'checkbox') assert.match(String(trigger.value), /^(true|false)$/);
+      }
+      assert.ok((auto.actions || []).length, `"${auto.name}" does nothing`);
+      auto.actions.forEach((action) => {
+        assert.ok(['notify', 'set_field'].includes(action.type),
+          `"${auto.name}" uses the ${action.type} action — "assign" names a member id, which is company-specific and cannot travel`);
+        if (action.type === 'notify') { assert.ok(String(action.message || '').trim(), `"${auto.name}" posts an empty notification`); return; }
+        const field = byId.get(action.fieldId);
+        assert.ok(field, `"${auto.name}" sets ${action.fieldId}, which is not a field here`);
+        const SETTABLE = ['text', 'textarea', 'status', 'category', 'date', 'number', 'money', 'email', 'phone', 'checkbox', 'location', 'duration', 'progress'];
+        assert.ok(SETTABLE.includes(field.type), `"${auto.name}" sets "${field.label}", a ${field.type}, which the editor cannot set`);
+        if (['status', 'category'].includes(field.type)) {
+          assert.ok(field.config.options.some((o) => o.id === action.value), `"${auto.name}" sets "${field.label}" to ${action.value}, which is not an option`);
+        }
+      });
+    });
+  });
+
+  test(`${name}: every dashboard widget has what it needs`, () => {
+    const byId = new Map(app.fields.map((f) => [f.id, f]));
+    (app.dashboard || []).forEach((widget) => {
+      const cfg = widget.config || {};
+      assert.ok(widget.size >= 1 && widget.size <= 4, `widget ${widget.id} has size ${widget.size}, which is clamped`);
+      // `needs` in dashboard-widgets.js: a stages card without an option field, or a calendar
+      // without a date field, renders empty rather than saying anything.
+      if (widget.type === 'stages') {
+        assert.ok(['status', 'category', 'user', 'checkbox'].includes(byId.get(cfg.fieldId)?.type), `widget ${widget.id} bars a field that has no options`);
+      }
+      if (widget.type === 'calendar') assert.equal(byId.get(cfg.fieldId)?.type, 'date', `widget ${widget.id} is a calendar over a non-date field`);
+      if (widget.type === 'metric' && cfg.metric === 'sum') {
+        // A sub-item total is addressed `col:<collectionId>:<fieldId>`, and remapConfig maps
+        // fieldId through fieldIdMap — which holds no such key — so it installs as '' and the
+        // card silently becomes a count of records. The figure is only reachable by adding the
+        // widget after install, where the ids are real.
+        assert.ok(!String(cfg.fieldId || '').startsWith('col:'),
+          `widget ${widget.id} totals a sub-item field, which install wipes to ''`);
+        assert.ok(['money', 'number'].includes(byId.get(cfg.fieldId)?.type), `widget ${widget.id} totals a field that holds no number`);
+      }
+      if (widget.type === 'note') assert.ok(String(cfg.text || '').trim(), `note widget ${widget.id} is blank`);
+      // A records card narrowed to one option: the id is preserved on install, but only if it
+      // is really one of that field's options.
+      if (widget.type === 'records' && cfg.value) {
+        assert.ok((byId.get(cfg.fieldId)?.config?.options || []).some((o) => o.id === cfg.value),
+          `widget ${widget.id} filters to ${cfg.value}, which is not an option of that field`);
+      }
     });
   });
 }
@@ -224,6 +363,85 @@ test('Jobs carries dailies and the change-order loop as sub-item lists', () => {
   const stages = co.fields.find((f) => f.label === 'Status').config.options.map((o) => o.label);
   // Born in Production, priced in Underwriting, sent through Sales, and back.
   assert.deepEqual(stages, ['Raised', 'Pricing', 'Sent', 'Accepted', 'Rejected']);
+});
+
+const funnel = (prefix) => bundles.find(([name]) => name.startsWith(prefix))[1].app;
+const labelled = (app, label) => app.fields.find((f) => f.label === label);
+
+// --- the Underwriting Sheet prices a job the way Estimating does ------------------------------
+
+test('labor is guys x days, not a typed number', () => {
+  // "Calculating internal costs, including labor (guys x days) and line items." The existing
+  // Underwriter app has a flat Labor money field; this is the one that derives it, so changing
+  // the crew or the days moves every figure below.
+  const app = funnel('Underwriting Sheet');
+  ['Crew size', 'Days', 'Hours per day'].forEach((label) => assert.equal(labelled(app, label).type, 'number'));
+  assert.equal(labelled(app, 'Labor rate').type, 'money');
+  assert.equal(labelled(app, 'Man-hours').config.formula, '{Crew size} * {Days} * {Hours per day}');
+  assert.equal(labelled(app, 'Labor cost').type, 'calculation');
+});
+
+test('the whole sheet prices out, from the takeoff to the price at target', () => {
+  const app = funnel('Underwriting Sheet');
+  const values = {};
+  const set = (label, value) => { values[labelled(app, label).id] = value; };
+  const read = (label) => wbCalcRaw(app, labelled(app, label), values);
+  set('Line items total', 20000); set('Tax %', 8.6);
+  set('Crew size', 4); set('Days', 3); set('Hours per day', 8); set('Labor rate', 45);
+  set('Overhead %', 10); set('Commission %', 5); set('Contingency %', 3);
+  set('Target margin %', 35); set('Quote price', 48000);
+
+  assert.equal(read('Man-hours'), 96, 'four guys, three days, eight hours');
+  assert.equal(read('Labor cost'), 4320, '96 man-hours at 45');
+  assert.equal(read('Direct cost'), 26040, '20,000 + 8.6% tax + 4,320 labor');
+  assert.equal(read('Overhead, commission & contingency'), 4687.2, '18% of direct');
+  assert.equal(read('Total cost'), 30727.2);
+  assert.equal(read('Gross profit'), 17272.8);
+  assert.equal(read('Live margin %'), 35.99);
+  // Each formula rounds once, on its own, so this is 35.985 - 35 rather than 35.99 - 35.
+  assert.equal(read('Margin vs target'), 0.98, 'just under the 35% tier');
+  assert.equal(read('Price at target margin'), 47272.62, 'what it would have to sell for to hit 35%');
+});
+
+test('a sheet with no price yet shows no margin, and a 100% target no price', () => {
+  // Both denominators can legitimately be zero while somebody is still filling the sheet in.
+  // Neither may render a number that looks like an answer.
+  const app = funnel('Underwriting Sheet');
+  const bare = { [labelled(app, 'Line items total').id]: 1000 };
+  assert.equal(wbCalcRaw(app, labelled(app, 'Live margin %'), bare), null);
+  const impossible = { [labelled(app, 'Quote price').id]: 48000, [labelled(app, 'Target margin %').id]: 100 };
+  assert.equal(wbCalcRaw(app, labelled(app, 'Price at target margin'), impossible), null);
+});
+
+test('the Underwriting Sheet runs the four steps and hands off to the Closer', () => {
+  const app = funnel('Underwriting Sheet');
+  const stages = labelled(app, 'Stage').config.options.map((o) => o.label);
+  assert.deepEqual(stages.slice(0, 4), ['Scope & takeoff', 'Underwriting sheet', 'Quote built', 'Handed to the Closer']);
+  assert.ok(stages.includes('On hold'), 'a sheet that stalls has somewhere to go');
+  assert.equal(labelled(app, 'Estimator').type, 'user', 'Owner: Estimating');
+  // The takeoff is the spreadsheet field, laid out once so every record starts from it.
+  assert.equal(labelled(app, 'Takeoff').type, 'sheet');
+  assert.equal(labelled(app, 'Takeoff').config.sheet.cells.A1, 'Measurement');
+  // Vendor pricing lives on the line it prices, rather than as one field on the record.
+  const lines = app.collections.find((c) => c.name === 'Line items');
+  assert.ok(lines.fields.some((f) => f.label === 'Vendor'));
+  assert.ok(lines.fields.some((f) => f.label === 'Unit price' && f.type === 'money'));
+  // Margin tier is the policy; Target margin % is the number the arithmetic can actually use.
+  assert.equal(labelled(app, 'Margin tier').type, 'category');
+  assert.equal(labelled(app, 'Target margin %').type, 'number');
+});
+
+test('the Underwriting Sheet takeoff survives the sheet normalizer', async () => {
+  // A hand-authored grid that the normalizer rewrites would install as a different sheet than
+  // the one written here — or, with a bad shape, as an empty one.
+  const { normalizeSheetFull } = await import('../src/sheet/sheet-format.js');
+  const authored = funnel('Underwriting Sheet').fields.find((f) => f.type === 'sheet').config.sheet;
+  const normalized = normalizeSheetFull(authored);
+  assert.equal(normalized.rows, authored.rows);
+  assert.equal(normalized.cols, authored.cols);
+  assert.equal(normalized.headerRow, true);
+  assert.deepEqual(normalized.cells, authored.cells, 'the normalizer dropped or rewrote a cell');
+  assert.match(normalized.cells.E2, /^=/, 'the waste column is a formula');
 });
 
 test('the Jobs money adds up the way a PM would check it', () => {

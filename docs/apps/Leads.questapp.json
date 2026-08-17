@@ -1,0 +1,423 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-17T00:00:00.000Z",
+  "app": {
+    "name": "Leads",
+    "recordName": "Lead",
+    "type": "Prospecting",
+    "icon": "ti-target-arrow",
+    "color": "#2563eb",
+    "description": "A prospect becomes a lead once they have got something to bid. Money attaches here, and attaches as an ESTIMATE — Est. value, Est. cost, Est. gross profit, Est. margin % — deliberately not \"Contract price\", which belongs to Sales after a signature. One lead per trade per address, the same rule the Sales Pipeline runs on, so a Won lead becomes exactly one deal. It carries both Trade interest (what they asked about, arriving from the prospect) and Trade (the one this lead bids), so a two-trade prospect becomes two leads that each still remember the whole interest. The two hand-off buttons install without a destination; pick the Sales Pipeline and Nurturing once after installing.",
+    "fields": [
+      {
+        "id": "f-lead",
+        "label": "Lead",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": { "placeholder": "58th Pl — Roofing" }
+      },
+      {
+        "id": "f-no",
+        "label": "Lead #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": { "prefix": "L-", "padding": 4 }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-company",
+        "label": "Company",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "If they are not a homeowner" }
+      },
+      {
+        "id": "f-project",
+        "label": "Project",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "Henderson — 58th Pl" }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-trade",
+        "label": "Trade",
+        "type": "category",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "t-roof", "label": "Roofing", "color": "#e0552d" },
+            { "id": "t-frame", "label": "Framing", "color": "#7c3aed" },
+            { "id": "t-demo", "label": "Demo", "color": "#64748b" },
+            { "id": "t-gutter", "label": "Gutters", "color": "#0891b2" },
+            { "id": "t-solar", "label": "Solar", "color": "#eab308" },
+            { "id": "t-window", "label": "Windows", "color": "#2563eb" },
+            { "id": "t-stucco", "label": "Stucco", "color": "#d97706" },
+            { "id": "t-paint", "label": "Paint", "color": "#16a34a" }
+          ]
+        }
+      },
+      {
+        "id": "f-interest",
+        "label": "Trade interest",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "t-roof", "label": "Roofing", "color": "#e0552d" },
+            { "id": "t-frame", "label": "Framing", "color": "#7c3aed" },
+            { "id": "t-demo", "label": "Demo", "color": "#64748b" },
+            { "id": "t-gutter", "label": "Gutters", "color": "#0891b2" },
+            { "id": "t-solar", "label": "Solar", "color": "#eab308" },
+            { "id": "t-window", "label": "Windows", "color": "#2563eb" },
+            { "id": "t-stucco", "label": "Stucco", "color": "#d97706" },
+            { "id": "t-paint", "label": "Paint", "color": "#16a34a" }
+          ]
+        }
+      },
+      {
+        "id": "f-source",
+        "label": "Source",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "src-referral", "label": "Referral", "color": "#16a34a" },
+            { "id": "src-door", "label": "Door knock", "color": "#e0552d" },
+            { "id": "src-storm", "label": "Storm response", "color": "#2563eb" },
+            { "id": "src-call", "label": "Inbound call", "color": "#0891b2" },
+            { "id": "src-web", "label": "Website form", "color": "#7c3aed" },
+            { "id": "src-repeat", "label": "Repeat customer", "color": "#BA7517" },
+            { "id": "src-adjuster", "label": "Insurance adjuster", "color": "#64748b" },
+            { "id": "src-partner", "label": "Trade partner", "color": "#d97706" }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "ls-new", "label": "New", "color": "#64748b" },
+            { "id": "ls-qualifying", "label": "Qualifying", "color": "#2563eb" },
+            { "id": "ls-visit", "label": "Site visit booked", "color": "#0891b2" },
+            { "id": "ls-measured", "label": "Measured", "color": "#7c3aed" },
+            { "id": "ls-ready", "label": "Ready for Estimating", "color": "#BA7517" },
+            { "id": "ls-handed", "label": "Handed to Estimating", "color": "#639922" },
+            { "id": "ls-cooled", "label": "Cooled", "color": "#d97706" },
+            { "id": "ls-lost", "label": "Lost", "color": "#E24B4A" }
+          ]
+        }
+      },
+      {
+        "id": "f-wants",
+        "label": "What they want bid",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "In their words, before anybody scopes it" }
+      },
+      {
+        "id": "f-value",
+        "label": "Est. value",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$", "placeholder": "What it looks like it is worth" }
+      },
+      {
+        "id": "f-cost",
+        "label": "Est. cost",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$", "placeholder": "Rough cost to do it" }
+      },
+      {
+        "id": "f-profit",
+        "label": "Est. gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Est. value} - {Est. cost}" }
+      },
+      {
+        "id": "f-margin",
+        "label": "Est. margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "({Est. value} - {Est. cost}) * 100 / {Est. value}" }
+      },
+      {
+        "id": "f-confidence",
+        "label": "Confidence",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-visit",
+        "label": "Site visit on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-measured",
+        "label": "Measured on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-due",
+        "label": "Quote due",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-insurance",
+        "label": "Insurance claim",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-claim",
+        "label": "Claim #",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-carrier",
+        "label": "Carrier",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-adjuster",
+        "label": "Adjuster",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "Name and number" }
+      },
+      {
+        "id": "f-docs",
+        "label": "Photos & documents",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": { "multiple": true }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "Access, dogs, HOA, who actually decides" }
+      },
+      {
+        "id": "f-toSales",
+        "label": "Send to Sales Pipeline",
+        "type": "button",
+        "required": false,
+        "hidden": false,
+        "config": { "action": "move", "text": "Priced — hand it to the Closer" }
+      },
+      {
+        "id": "f-toNurture",
+        "label": "Send to Nurturing",
+        "type": "button",
+        "required": false,
+        "hidden": false,
+        "config": { "action": "move", "text": "Cooling — park it with a date" }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-who",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Who and where",
+          "fieldIds": ["f-lead", "f-no", "f-contact", "f-company", "f-project", "f-address", "f-phone", "f-email"]
+        }
+      },
+      {
+        "id": "b-what",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What they want bid",
+          "fieldIds": ["f-trade", "f-interest", "f-source", "f-owner", "f-stage", "f-wants"]
+        }
+      },
+      {
+        "id": "b-money",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The estimate — not a price",
+          "fieldIds": ["f-value", "f-cost", "f-profit", "f-margin", "f-confidence"]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Getting it measured",
+          "fieldIds": ["f-visit", "f-measured", "f-due", "f-docs"]
+        }
+      },
+      {
+        "id": "b-claim",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "If it is a claim",
+          "fieldIds": ["f-insurance", "f-claim", "f-carrier", "f-adjuster"]
+        }
+      },
+      {
+        "id": "b-out",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes, and the way out",
+          "fieldIds": ["f-notes", "f-toSales", "f-toNurture"]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": { "title": "Trail", "fieldIds": ["f-created", "f-touched"] }
+      },
+      { "id": "b-comments", "type": "comments", "size": 4, "config": {} }
+    ],
+    "automations": [
+      {
+        "id": "a-handed",
+        "name": "Handed to Estimating",
+        "trigger": { "event": "stage_moves", "fieldId": "f-stage", "to": "ls-handed" },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This lead is with Estimating. One lead is one trade at one address, so it becomes exactly one underwriting sheet and one deal."
+          }
+        ]
+      },
+      {
+        "id": "a-cooled",
+        "name": "Cooled — nurture it, do not lose it",
+        "trigger": { "event": "stage_moves", "fieldId": "f-stage", "to": "ls-cooled" },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Send this to Nurturing with a day it rings on rather than marking it Lost. The estimate travels with it."
+          }
+        ]
+      }
+    ],
+    "cardFields": ["f-contact", "f-trade", "f-value", "f-stage"],
+    "views": [
+      { "id": "v-stage", "title": "By stage", "fieldId": "f-stage", "scope": "team" },
+      { "id": "v-trade", "title": "By trade", "fieldId": "f-trade", "scope": "team" },
+      { "id": "v-source", "title": "By source", "fieldId": "f-source", "scope": "team" }
+    ],
+    "dashboard": [
+      { "id": "w-count", "type": "metric", "size": 1, "config": { "metric": "count" } },
+      { "id": "w-value", "type": "metric", "size": 1, "config": { "metric": "sum", "fieldId": "f-value" } },
+      { "id": "w-stages", "type": "stages", "size": 2, "config": { "fieldId": "f-stage" } },
+      { "id": "w-due", "type": "calendar", "size": 2, "config": { "fieldId": "f-due" } },
+      { "id": "w-recent", "type": "recent", "size": 2, "config": { "limit": 6 } },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": { "text": "Est. value is a guess worth having. It is not a contract price — nothing is signed until the Sales Pipeline." }
+      }
+    ]
+  }
+}

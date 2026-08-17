@@ -1,0 +1,387 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-17T00:00:00.000Z",
+  "app": {
+    "name": "Nurturing",
+    "recordName": "Nurture",
+    "type": "Prospecting",
+    "icon": "ti-flame",
+    "color": "#d97706",
+    "description": "Warm, but not ready yet. Revisit on is the only required date in the three Prospecting apps, because a nurture list with no wake-up date is a graveyard — and the calendar over it is this app's main screen. A cooling Lead lands here with its estimate intact rather than being marked Lost. Why not now records what has to change before they can buy, and a Buying signal tick turns the record Hot and says so. Both hand-off buttons install without a destination; pick Leads and Prospects once after installing.",
+    "fields": [
+      {
+        "id": "f-nurture",
+        "label": "Nurture",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": { "placeholder": "58th Pl — Roofing, next spring" }
+      },
+      {
+        "id": "f-no",
+        "label": "Nurture #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": { "prefix": "N-", "padding": 4 }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-company",
+        "label": "Company",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "If they are not a homeowner" }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-interest",
+        "label": "Trade interest",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "t-roof", "label": "Roofing", "color": "#e0552d" },
+            { "id": "t-frame", "label": "Framing", "color": "#7c3aed" },
+            { "id": "t-demo", "label": "Demo", "color": "#64748b" },
+            { "id": "t-gutter", "label": "Gutters", "color": "#0891b2" },
+            { "id": "t-solar", "label": "Solar", "color": "#eab308" },
+            { "id": "t-window", "label": "Windows", "color": "#2563eb" },
+            { "id": "t-stucco", "label": "Stucco", "color": "#d97706" },
+            { "id": "t-paint", "label": "Paint", "color": "#16a34a" }
+          ]
+        }
+      },
+      {
+        "id": "f-source",
+        "label": "Source",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "src-referral", "label": "Referral", "color": "#16a34a" },
+            { "id": "src-door", "label": "Door knock", "color": "#e0552d" },
+            { "id": "src-storm", "label": "Storm response", "color": "#2563eb" },
+            { "id": "src-call", "label": "Inbound call", "color": "#0891b2" },
+            { "id": "src-web", "label": "Website form", "color": "#7c3aed" },
+            { "id": "src-repeat", "label": "Repeat customer", "color": "#BA7517" },
+            { "id": "src-adjuster", "label": "Insurance adjuster", "color": "#64748b" },
+            { "id": "src-partner", "label": "Trade partner", "color": "#d97706" }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-temp",
+        "label": "Temperature",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "nt-hot", "label": "Hot", "color": "#E24B4A" },
+            { "id": "nt-warm", "label": "Warm", "color": "#d97706" },
+            { "id": "nt-cooling", "label": "Cooling", "color": "#0891b2" },
+            { "id": "nt-cold", "label": "Cold", "color": "#64748b" }
+          ]
+        }
+      },
+      {
+        "id": "f-why",
+        "label": "Why not now",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "wn-budget", "label": "Budget", "color": "#16a34a" },
+            { "id": "wn-timing", "label": "Timing", "color": "#2563eb" },
+            { "id": "wn-claim", "label": "Insurance pending", "color": "#7c3aed" },
+            { "id": "wn-bids", "label": "Getting other bids", "color": "#d97706" },
+            { "id": "wn-approval", "label": "Tenant, HOA or partner approval", "color": "#0891b2" },
+            { "id": "wn-season", "label": "Seasonal", "color": "#BA7517" },
+            { "id": "wn-nextyear", "label": "Deferred to next year", "color": "#64748b" },
+            { "id": "wn-silent", "label": "No answer yet", "color": "#E24B4A" }
+          ]
+        }
+      },
+      {
+        "id": "f-changes",
+        "label": "What has to change",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "The one thing that has to be true before they can buy" }
+      },
+      {
+        "id": "f-revisit",
+        "label": "Revisit on",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-lastcontact",
+        "label": "Last contact",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-cadence",
+        "label": "Check in every",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            { "id": "cad-2w", "label": "2 weeks", "color": "#E24B4A" },
+            { "id": "cad-month", "label": "Month", "color": "#d97706" },
+            { "id": "cad-quarter", "label": "Quarter", "color": "#2563eb" },
+            { "id": "cad-6m", "label": "6 months", "color": "#0891b2" },
+            { "id": "cad-year", "label": "Year", "color": "#64748b" }
+          ]
+        }
+      },
+      {
+        "id": "f-signal",
+        "label": "Buying signal",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touches",
+        "label": "Touches since",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-value",
+        "label": "Est. value",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$", "placeholder": "The estimate it arrived with" }
+      },
+      {
+        "id": "f-cost",
+        "label": "Est. cost",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$" }
+      },
+      {
+        "id": "f-plan",
+        "label": "Nurture plan",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Reason they paused is written down",
+            "Revisit date set and agreed with them",
+            "Estimate kept on the record",
+            "Seasonal or storm trigger noted",
+            "Recent nearby work sent",
+            "Checked back on the revisit date"
+          ]
+        }
+      },
+      {
+        "id": "f-planpct",
+        "label": "Plan progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": { "source": "f-plan" }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": { "placeholder": "What they said, and what would bring them back" }
+      },
+      {
+        "id": "f-backLeads",
+        "label": "Back to Leads",
+        "type": "button",
+        "required": false,
+        "hidden": false,
+        "config": { "action": "move", "text": "They are ready to bid again" }
+      },
+      {
+        "id": "f-backProspects",
+        "label": "Back to Prospects",
+        "type": "button",
+        "required": false,
+        "hidden": false,
+        "config": { "action": "move", "text": "Nothing to bid — back on the drip" }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-who",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Who they are",
+          "fieldIds": ["f-nurture", "f-no", "f-contact", "f-company", "f-address", "f-phone", "f-email"]
+        }
+      },
+      {
+        "id": "b-what",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What they wanted",
+          "fieldIds": ["f-interest", "f-source", "f-owner", "f-temp", "f-value", "f-cost"]
+        }
+      },
+      {
+        "id": "b-why",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Why not now",
+          "fieldIds": ["f-why", "f-changes", "f-signal"]
+        }
+      },
+      {
+        "id": "b-when",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The day it rings",
+          "fieldIds": ["f-revisit", "f-lastcontact", "f-cadence", "f-touches", "f-plan", "f-planpct"]
+        }
+      },
+      {
+        "id": "b-out",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes, and the way back",
+          "fieldIds": ["f-notes", "f-backLeads", "f-backProspects"]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": { "title": "Trail", "fieldIds": ["f-created", "f-touched"] }
+      },
+      { "id": "b-comments", "type": "comments", "size": 4, "config": {} }
+    ],
+    "automations": [
+      {
+        "id": "a-signal",
+        "name": "Buying signal — they are hot",
+        "trigger": { "event": "field_is", "fieldId": "f-signal", "value": true },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A buying signal on a nurture record. Set Temperature to Hot and send it back to Leads — the estimate is still on it."
+          }
+        ]
+      },
+      {
+        "id": "a-cold",
+        "name": "Gone cold — it still needs a date",
+        "trigger": { "event": "stage_moves", "fieldId": "f-temp", "to": "nt-cold" },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Cold is still nurturing, not closed. Push Revisit on out rather than leaving it in the past — a date that has gone by is how a list becomes a graveyard."
+          }
+        ]
+      }
+    ],
+    "cardFields": ["f-contact", "f-interest", "f-revisit", "f-temp"],
+    "views": [
+      { "id": "v-temp", "title": "By temperature", "fieldId": "f-temp", "scope": "team" },
+      { "id": "v-why", "title": "By why not now", "fieldId": "f-why", "scope": "team" },
+      { "id": "v-source", "title": "By source", "fieldId": "f-source", "scope": "team" }
+    ],
+    "dashboard": [
+      { "id": "w-revisit", "type": "calendar", "size": 2, "config": { "fieldId": "f-revisit" } },
+      { "id": "w-count", "type": "metric", "size": 1, "config": { "metric": "count" } },
+      { "id": "w-value", "type": "metric", "size": 1, "config": { "metric": "sum", "fieldId": "f-value" } },
+      { "id": "w-temp", "type": "stages", "size": 2, "config": { "fieldId": "f-temp" } },
+      { "id": "w-recent", "type": "recent", "size": 2, "config": { "limit": 6 } },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": { "text": "Every record here has a day it rings on. If the date has gone by, move it — do not leave it behind the calendar." }
+      }
+    ]
+  }
+}
