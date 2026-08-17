@@ -21,8 +21,8 @@ import { renderSearchCombobox } from '../ui/combobox-menu.js';
 import {
   CARD_ANCHORS, CARD_REGIONS, CARD_SPANS, PIN_PRESETS, TILE_CATALOG,
   anchorsInUse, cardElements, cardPinOf, cardRegionOf, cardSpanOf, groupByRegion,
-  movePin, normalizeCardSettings, pinFromRects, pinStyle, pinWarnings, pinsByAnchor,
-  readingOrder, regionsFor, reorderElements, spanColumns, splitStores,
+  movePin, normalizeCardSettings, patchCardButtons, pinFromRects, pinStyle, pinWarnings, pinsByAnchor,
+  readingOrder, regionsFor, reorderElements, restoreCardRegion, spanColumns, splitStores,
   CARD_BUTTON_ACTIONS, PANEL_OPTIONS, cardButtonNotReady, cardButtonReady, normalizeCardButton,
 } from './card-layout.js';
 // The App Builder's button rules, unchanged. A contact reuses them rather than owning a second
@@ -2503,7 +2503,9 @@ export function createCompanyContactsPage(ctx) {
 
   /** Take a block off the card. Nothing is deleted -- it goes back in the Add list. */
   function cardElementRemove(companyId, key) {
-    return editCardLayout(companyId, (elements) => elements.map((element) => (element.key === key ? { ...element, region: 'off' } : element)));
+    return editCardLayout(companyId, (elements) => elements.map((element) => (element.key === key
+      ? { ...element, restoreRegion: element.region, region: 'off' }
+      : element)));
   }
 
   /** Put a block back, on the shelf its kind belongs to. */
@@ -2513,7 +2515,7 @@ export function createCompanyContactsPage(ctx) {
       const region = element.kind === 'panel' ? 'panels'
         : element.kind === 'tile' ? 'tiles'
           : element.kind === 'button' ? 'header'
-            : element.field?.type === 'textarea' ? 'panels' : 'detail';
+            : restoreCardRegion(element);
       return { ...element, region };
     }));
   }
@@ -2570,9 +2572,7 @@ export function createCompanyContactsPage(ctx) {
   async function updateCardButton(companyId, buttonId, patch) {
     if (!requirePermission('company_contacts.manage', companyId)) return;
     const buttons = cardSettings(companyId).buttons;
-    const next = buttons.map((button, index) => (button.id === buttonId
-      ? normalizeCardButton({ ...button, ...patch }, index)
-      : button));
+    const next = patchCardButtons(buttons, buttonId, patch);
     if (!await saveCardButtons(companyId, next)) return;
     render();
   }
@@ -2684,7 +2684,20 @@ export function createCompanyContactsPage(ctx) {
   function bindCardButtonInputs() {
     const companyId = activeCompanyId();
     const on = (selector, key, read) => document.querySelectorAll(selector).forEach((el) => {
-      el.onchange = () => updateCardButton(companyId, el.dataset[key], read(el));
+      el.onchange = () => {
+        const buttonId = el.dataset[key];
+        const patch = read(el);
+        // Settings owns a draft and has one explicit Save button. Writing these controls
+        // straight to the live card left that draft stale, so Save faithfully overwrote the
+        // new label/icon/action with the old generic Button. Accumulate changes in the draft;
+        // the in-card arranger has no draft and still saves each change immediately.
+        if (fieldDraft?.companyId === companyId && el.closest('[data-cc-card-settings]')) {
+          fieldDraft.buttons = patchCardButtons(fieldDraft.buttons, buttonId, patch);
+          render();
+          return;
+        }
+        updateCardButton(companyId, buttonId, patch);
+      };
     });
     on('[data-cc-btn-label]', 'ccBtnLabel', (el) => ({ label: el.value }));
     on('[data-cc-btn-icon]', 'ccBtnIcon', (el) => ({ icon: el.value.trim() }));

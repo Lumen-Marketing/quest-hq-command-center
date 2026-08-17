@@ -74,6 +74,13 @@ test('apps are hidden from someone who cannot view them', () => {
   assert.match(slice('navItemsForApps'), /if \(!can\('workspaces\.view', companyId\)\) return \[\];/);
 });
 
+test('the Apps badge counts the same visible apps as the workspace strip', () => {
+  const source = slice('moduleBadgeCount');
+  assert.match(source, /wbWorkspaceApps\(doc, workspace\)\.length/);
+  assert.ok(!/loadWorkspaceBuilderState\(companyId\)\.workspaces\.length/.test(source),
+    'counting workspace containers made an Apps badge say 2 beside four visible apps');
+});
+
 test('the stage rows come from the app own status field, not a second list', () => {
   const source = slice('navItemApp');
   assert.match(source, /const field = pipelineField\(app\);/);

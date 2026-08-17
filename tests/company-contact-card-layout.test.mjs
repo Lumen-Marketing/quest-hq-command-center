@@ -6,8 +6,8 @@ import {
   CARD_ANCHORS, CARD_REGIONS, CARD_SPANS, PIN_MAX_OFFSET, PIN_PRESETS, PIN_SNAP,
   TILE_CATALOG, anchorsInUse, buildCardLayout, cardElements, cardPinOf, cardRegionOf,
   cardSpanOf, groupByRegion, movePin, normalizeCardSettings, pinFromRects, pinStyle,
-  pinWarnings, pinsByAnchor, readingOrder, regionsFor, reorderElements, spanColumns,
-  splitStores, panelConfigOf,
+  patchCardButtons, pinWarnings, pinsByAnchor, readingOrder, regionsFor, reorderElements, spanColumns,
+  splitStores, panelConfigOf, restoreCardRegion,
 } from '../src/company-contacts/card-layout.js';
 
 // The contact card stopped being a fixed shape: which tiles show, how wide each thing is, and
@@ -380,6 +380,50 @@ test('an unnarrowed button sends every field, which is the obvious thing', () =>
   const settings = normalizeCardSettings({ buttons: [button('b')] });
   assert.deepEqual(settings.buttons[0].fields, [], 'empty means all');
   assert.equal(settings.buttons[0].pickFields, false);
+});
+
+test('taking Location off and adding it back restores its Summary-line placement', () => {
+  const location = field('location', 'location', { card: 'summary' }, 'Location');
+  const [element] = cardElements([location], {});
+  const hidden = { ...element, restoreRegion: element.region, region: 'off' };
+  const stored = splitStores([hidden]).fields.location;
+
+  assert.equal(stored.card, 'off');
+  assert.equal(stored.cardRestore, 'summary', 'removal remembers the shelf it came from');
+  assert.equal(restoreCardRegion({
+    ...hidden,
+    field: { ...location, config: { ...location.config, ...stored } },
+  }), 'summary');
+  assert.equal(
+    restoreCardRegion({ kind: 'field', field: field('legacy-location', 'location', { card: 'off' }) }),
+    'summary',
+    'older cards without a remembered shelf use the field type default',
+  );
+});
+
+test('editing several button controls accumulates into one complete draft', () => {
+  let buttons = [button('b', { label: 'Button', icon: '' })];
+  buttons = patchCardButtons(buttons, 'b', { label: 'Call client' });
+  buttons = patchCardButtons(buttons, 'b', { icon: 'ti-phone' });
+  buttons = patchCardButtons(buttons, 'b', { action: 'push' });
+  buttons = patchCardButtons(buttons, 'b', { targetCompany: 'co1', targetApp: 'app2' });
+
+  assert.deepEqual(
+    {
+      label: buttons[0].label,
+      icon: buttons[0].icon,
+      action: buttons[0].action,
+      targetCompany: buttons[0].targetCompany,
+      targetApp: buttons[0].targetApp,
+    },
+    { label: 'Call client', icon: 'ti-phone', action: 'push', targetCompany: 'co1', targetApp: 'app2' },
+  );
+});
+
+test('button controls inside Contact card settings update its draft, not a competing live save', () => {
+  const page = readFileSync(new URL('../src/company-contacts/page.js', import.meta.url), 'utf8');
+  assert.match(page, /el\.closest\('\[data-cc-card-settings\]'\)/);
+  assert.match(page, /fieldDraft\.buttons = patchCardButtons\(fieldDraft\.buttons, buttonId, patch\)/);
 });
 
 // ---- spans and presets ------------------------------------------------------------------

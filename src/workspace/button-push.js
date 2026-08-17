@@ -726,13 +726,21 @@ export function createButtonPush(ctx) {
     const { app, workspace } = wbFind(companyId, modal?.workspaceId, modal?.appId);
     const field = (app?.fields || []).find((item) => item.id === fieldId);
     if (!app || !field) return false;
+    if (field.config?.action === 'set') return applySet(companyId, app, field, { values: {} }, false);
+    // A new-record modal has no durable source record yet. Minting an id here used to let the
+    // button create an orphaned "Untitled" arrival in the target even though the source form
+    // was never saved. Keep form buttons available on existing records, but require the new
+    // record to be saved once before it can be sent anywhere.
+    if (!modal?.editId) {
+      showToast('Save this record before sending it to another app.', 'local', 'Workspaces');
+      return false;
+    }
     const values = { ...(modal?.draft?.values || {}) };
     app.fields.forEach((item) => {
       const read = wbReadFieldInput(item);
       if (read !== undefined) values[item.id] = read;
     });
-    if (field.config?.action === 'set') return applySet(companyId, app, field, { values }, false);
-    return pressButton(companyId, app, field, { id: modal?.editId || wbUid(), values }, workspace);
+    return pressButton(companyId, app, field, { id: modal.editId, values }, workspace);
   }
 
   return {

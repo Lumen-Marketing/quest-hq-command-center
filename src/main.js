@@ -2,7 +2,7 @@ import './tabler-icons.css';
 import './styles.css';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import {
-  companiesToSave, resolveAppEntry, tileTargetApp, workspaceApps,
+  companiesToSave, resolveAppEntry, targetableCompanyApps, tileTargetApp, workspaceApps,
 } from './workspace/builder-core.js';
 import { readPullRows } from './workspace/pull-rows.js';
 import { arrivalRef as wbArrivalRef } from './workspace/record-ref.js';
@@ -6730,7 +6730,11 @@ function moduleBadgeCount(moduleId, companyId = activeCompanyId()) {
   if (moduleId === 'tasks') return companyTasks(companyId).length;
   if (moduleId === 'files') return companyFiles(companyId).length;
   if (moduleId === 'client-portals') return companyClientPortals(companyId).length;
-  if (moduleId === 'workspaces') return loadWorkspaceBuilderState(companyId).workspaces.length;
+  if (moduleId === 'workspaces') {
+    const doc = wbDoc(companyId);
+    const workspace = doc ? wbCompanyWorkspacePeek(companyId) : null;
+    return workspace ? wbWorkspaceApps(doc, workspace).length : '';
+  }
   if (moduleId === 'forms') return companyForms(companyId).length;
   if (moduleId === 'crm') return companyAccounts(companyId).length;
   if (moduleId === 'contacts') return companyContacts(companyId).length;
@@ -15759,9 +15763,12 @@ function wbContactsTargetApp(companyId) {
 // {workspace, app} for every app in a company, for the relationship app-picker.
 function wbCompanyApps(companyId) {
   const cid = canonicalCompanyId(companyId);
-  const out = [];
-  for (const entry of wbAppIndex().values()) if (entry.companyId === cid) out.push({ workspace: entry.workspace, app: entry.app });
-  return out;
+  return targetableCompanyApps(
+    wbDoc(cid),
+    cid,
+    state.operationalWorkspaces,
+    allowedOperationalWorkspaces(cid),
+  );
 }
 
 // The company holding a relationship's target app: an explicitly linked company
@@ -17975,9 +17982,12 @@ function wbViewRecycleBin(companyId, workspace, app) {
 // items table, not from the bin -- so it awaits it rather than dropping the record on the floor.
 async function wbTrashItems(companyId, workspace, app, itemIds) {
   const mod = await loadRecycleBin();
-  const moved = mod.sendToTrash(app, itemIds, activeSession()?.profile?.id || '');
-  if (moved) wbSave(companyId);
-  return moved;
+  return mod.sendToTrashAndSave(
+    app,
+    itemIds,
+    activeSession()?.profile?.id || '',
+    () => wbSave(companyId),
+  );
 }
 
 /**
@@ -17991,7 +18001,7 @@ async function wbTrashItems(companyId, workspace, app, itemIds) {
 async function wbTrashFields(companyId, app, fieldIds) {
   const mod = await loadRecycleBin();
   const moved = mod.sendFieldsToTrash(app, fieldIds, activeSession()?.profile?.id || '');
-  if (moved) wbSave(companyId);
+  if (moved) await wbSave(companyId);
   return moved;
 }
 
@@ -19812,11 +19822,25 @@ async function wbConfirmDelete() {
   else if (c.op === 'del-item') {
     const gone = app.items.find((i) => i.id === c.itemId);
     if (gone) { const title = wbItemTitle(app, gone); wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted <b>${h(title)}</b> from ${h(app.name)}` }); wbNotifyItem(companyId, workspace, app, gone, `Deleted: ${title}`, `${actorName()} deleted ${title} from ${app.name}`); }
-    wbTrashItems(companyId, workspace, app, [c.itemId]).catch(() => null);
+    const moved = await wbTrashItems(companyId, workspace, app, [c.itemId]).catch((error) => {
+      showToast(error?.message || 'Could not delete that record.', 'error', 'Workspaces');
+      return null;
+    });
+    if (moved === null) return;
+    state.builderModal = null;
+    showToast(moved ? 'Deleted.' : 'That record was already gone.', 'local', 'Workspaces');
+    render();
+    return;
   } else if (c.op === 'del-items') {
     const kill = new Set(c.itemIds || []); const n = app.items.filter((i) => kill.has(i.id)).length;
-    wbTrashItems(companyId, workspace, app, [...kill]).catch(() => null); wbItemsUI(app.id).sel.clear();
     if (n) { wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted <b>${n}</b> record${n === 1 ? '' : 's'} from ${h(app.name)}` }); wbNotifyWorkspace(companyId, workspace, app, `${n} record${n === 1 ? '' : 's'} deleted`, `${actorName()} deleted ${n} record${n === 1 ? '' : 's'} from ${app.name}`); }
+    try { await wbTrashItems(companyId, workspace, app, [...kill]); }
+    catch (error) { showToast(error?.message || 'Could not delete those records.', 'error', 'Workspaces'); return; }
+    wbItemsUI(app.id).sel.clear();
+    state.builderModal = null;
+    showToast(n ? 'Deleted.' : 'Those records were already gone.', 'local', 'Workspaces');
+    render();
+    return;
   } else if (c.op === 'del-auto') { app.automations = app.automations.filter((a) => a.id !== c.autoId); }
   state.builderModal = null; wbSave(companyId); showToast('Deleted.', 'local', 'Workspaces'); render();
 }

@@ -972,6 +972,14 @@ scroll pin.
 - **`authenticated` holds `TRUNCATE` on both tables, and on every other table in the schema.** That is Supabase's default `GRANT ALL`, not something this migration added — `clients`, `jobs`, `forms`, `company_contacts` and `workspace_builder_state` all read the same. It is worth knowing that **TRUNCATE is not subject to RLS**, so the grant is wider than the policies suggest; the practical exposure is small because PostgREST has no TRUNCATE verb, so it is unreachable from a browser session. Narrowing it is a schema-wide decision, not one to make inside a feature migration.
 - **Still to do**: the config panel creates a link over *every* fillable field. `field_ids` is stored and honoured end to end, but nothing yet chooses the subset. Uploads are not offered. **The client half is not yet deployed** — the tables are live, the code is local and uncommitted.
 
+## 2026-08-18 Live QA regression hardening
+
+- A Button on a brand-new, unsaved App Builder form can no longer create an orphaned `Untitled` record in another app. Send and move actions ask for one source save first; a Change-fields button still works inside the draft because it does not create a second record.
+- Record deletion now waits for the recycle-bin write to finish before closing the confirmation or reporting success. A refused save restores the browser's in-memory record list instead of leaving the screen ahead of storage.
+- Company Contact card-button edits made in Settings remain in the shared draft until Save, so later fields no longer overwrite the chosen label, icon, action, or destination with the generic Button defaults.
+- Taking Location or another Company Contact field off the card remembers its prior card region. Adding it back restores that region instead of forcing it into Details.
+- Cross-app destination lists now exclude apps stranded in deleted, inactive, or inaccessible operational workspaces. The Apps navigation badge counts the resolved apps visible in the selected workspace rather than the number of builder workspace containers.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

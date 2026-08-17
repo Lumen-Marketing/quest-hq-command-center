@@ -87,6 +87,49 @@ export function workspaceHasApp(workspace, appId) {
 }
 
 /**
+ * Apps that may be offered as a destination across one company.
+ *
+ * Builder workspaces live inside a JSON document and can outlive the operational workspace
+ * that created them. Those orphan entries remain useful for recovery, but they must not show
+ * up in a live target picker. When operational-workspace data exists, only active workspaces
+ * the current user may enter are included. A legacy company-wide builder workspace follows
+ * the allowed default workspace until it is adopted into its id-based entry.
+ */
+export function targetableCompanyApps(
+  doc,
+  companyId,
+  operationalWorkspaces = [],
+  allowedOperationalWorkspaces = [],
+) {
+  const cid = String(companyId || '');
+  const companyOperational = (operationalWorkspaces || []).filter(
+    (workspace) => String(workspace?.company_id || '') === cid,
+  );
+  let allowedBuilderIds = null;
+  if (companyOperational.length) {
+    const allowed = (allowedOperationalWorkspaces || []).filter((workspace) => (
+      String(workspace?.company_id || '') === cid
+      && String(workspace?.status || 'active').toLowerCase() === 'active'
+    ));
+    allowedBuilderIds = new Set(allowed.map((workspace) => `ws-${workspace.id}`));
+    if (allowed.some((workspace) => workspace.is_default)) allowedBuilderIds.add(`ws-${cid}`);
+  }
+
+  const out = [];
+  const seen = new Set();
+  for (const workspace of (doc?.workspaces || [])) {
+    if (allowedBuilderIds && !allowedBuilderIds.has(String(workspace?.id || ''))) continue;
+    for (const app of (workspace?.apps || [])) {
+      // A link is a second doorway to its source app, not another destination.
+      if (!app || app.linked || seen.has(app.id)) continue;
+      seen.add(app.id);
+      out.push({ workspace, app });
+    }
+  }
+  return out;
+}
+
+/**
  * Every company whose document may have been changed by editing inside `companyId`.
  *
  * This is the part that makes a cross-company link safe. A linked app's data lives in the

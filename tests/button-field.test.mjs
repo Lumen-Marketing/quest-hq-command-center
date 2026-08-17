@@ -417,6 +417,81 @@ test('each row is judged on its own values', () => {
   assert.equal(second.disabled, true, 'Someone Else does not');
 });
 
+test('a button on an unsaved new-record form cannot send an Untitled record', async () => {
+  const app1 = APP1();
+  const app2 = APP2();
+  const toasts = [];
+  const push = createButtonPush({
+    h: (value) => String(value ?? ''),
+    wbItemTitle: () => 'Untitled',
+    wbLogActivity: () => {},
+    can: () => true,
+    wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app1, app2] }] }),
+    wbSave: async () => {},
+    wbUid: () => 'temporary-record-id',
+    showToast: (message) => toasts.push(message),
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+    state: {
+      builderModal: {
+        kind: 'item', companyId: 'co1', workspaceId: 'ws', appId: 'app1', editId: '', draft: { values: {} },
+      },
+    },
+    wbFind: () => ({ app: app1, workspace: { id: 'ws', apps: [app1, app2] } }),
+    wbReadFieldInput: () => undefined,
+    activeCompanyId: () => 'co1',
+  });
+  app1.fields[2].config = { targetCompany: 'co1', targetApp: 'app2' };
+
+  const before = app2.items.length;
+  const ok = await push.pressFromForm('f-btn');
+
+  assert.equal(ok, false);
+  assert.equal(app2.items.length, before, 'no target record is created before the source is saved');
+  assert.match(toasts[0], /save this record/i);
+});
+
+test('a change-fields button still works inside an unsaved new-record form', async () => {
+  const app1 = APP1();
+  const targetInput = {
+    type: 'text', tagName: 'INPUT', value: '',
+    dispatchEvent: () => {},
+  };
+  const scope = { querySelector: (selector) => (selector === '[data-f="f-name"]' ? targetInput : null) };
+  const previousDocument = globalThis.document;
+  globalThis.document = { querySelector: () => scope };
+  try {
+    const push = createButtonPush({
+      h: (value) => String(value ?? ''),
+      wbItemTitle: () => 'Untitled',
+      wbLogActivity: () => {},
+      can: () => true,
+      wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app1] }] }),
+      wbSave: async () => {},
+      wbUid: () => 'temporary-record-id',
+      showToast: () => {},
+      render: () => {},
+      canonicalCompanyId: (id) => id,
+      activeSession: () => ({ profile: { id: 'me' } }),
+      state: {
+        builderModal: {
+          kind: 'item', companyId: 'co1', workspaceId: 'ws', appId: 'app1', editId: '', draft: { values: {} },
+        },
+      },
+      wbFind: () => ({ app: app1, workspace: { id: 'ws', apps: [app1] } }),
+      wbReadFieldInput: () => undefined,
+      activeCompanyId: () => 'co1',
+    });
+    app1.fields[2].config = { action: 'set', set: [{ field: 'f-name', value: 'Draft customer' }] };
+
+    assert.equal(await push.pressFromForm('f-btn'), true);
+    assert.equal(targetInput.value, 'Draft customer');
+  } finally {
+    globalThis.document = previousDocument;
+  }
+});
+
 test('a row button with no destination stays disabled and says why', () => {
   const { push, app1 } = listSetup();
   app1.fields[2].config.targetApp = '';
