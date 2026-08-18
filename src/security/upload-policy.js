@@ -28,6 +28,11 @@ export const FILE_SIGNATURES = {
   // OLE2 compound file: the container the pre-2007 Office formats use (.doc/.xls/.ppt).
   // Modern .docx/.xlsx/.pptx are zip containers instead and verify against `zip` above.
   ole: [{ bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] }],
+  // ISO base media: 'ftyp' at offset 4, which is how .mp4, .m4v, .m4a and .mov all begin --
+  // including the fragmented mp4 a phone's MediaRecorder writes.
+  isobmff: [{ offset: 4, bytes: [0x66, 0x74, 0x79, 0x70] }],
+  // Matroska / WebM, the container Chrome and Android record into.
+  ebml: [{ bytes: [0x1a, 0x45, 0xdf, 0xa3] }],
 };
 
 // Which signature an extension must satisfy. `text` types carry no binary
@@ -41,6 +46,9 @@ const EXT_SIGNATURE = {
   xlsx: 'zip', docx: 'zip', pptx: 'zip',
   // The pre-2007 formats are OLE compound files.
   doc: 'ole', xls: 'ole', ppt: 'ole',
+  // Video. mp4 and webm are shared with the voice-note policy, and both signatures hold for
+  // what a browser's MediaRecorder writes, so verifying them tightens that path too.
+  mp4: 'isobmff', m4v: 'isobmff', mov: 'isobmff', webm: 'ebml',
 };
 
 // Canonical MIME allowlist per extension (Layer 2 — extension and MIME must
@@ -75,6 +83,12 @@ const EXT_MIME = {
   doc: ['application/msword', 'application/octet-stream', ''],
   xls: ['application/vnd.ms-excel', 'application/octet-stream', ''],
   ppt: ['application/vnd.ms-powerpoint', 'application/octet-stream', ''],
+  // Only the two video extensions nothing else already accepts. .mp4 and .webm are deliberately
+  // absent: a browser recording reports them WITH a codec suffix ("audio/webm;codecs=opus"),
+  // which is not a member of any list you could write, so listing them here would refuse every
+  // voice note. Their bytes are checked instead, which a codec suffix cannot dress up.
+  mov: ['video/quicktime', 'video/mp4', 'application/octet-stream', ''],
+  m4v: ['video/x-m4v', 'video/mp4', 'application/octet-stream', ''],
 };
 
 // Per-context upload policies: the extension allowlist and a hard size cap.
@@ -106,6 +120,14 @@ export const UPLOAD_POLICIES = {
     ],
     max: 25 * MB,
     label: 'document',
+  },
+  // What the image/media button on a comment takes: something you look at or play, as opposed
+  // to something you open in another program. Bigger than `document` because a phone clip of a
+  // roof is measured in tens of megabytes and refusing it is refusing the feature.
+  media: {
+    exts: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp4', 'webm', 'mov', 'm4v'],
+    max: 50 * MB,
+    label: 'image or video',
   },
   csv: { exts: ['csv', 'tsv', 'txt'], max: 10 * MB, label: 'spreadsheet' },
   // .xlsx is a zip, so it stays a kind of its own rather than widening 'csv' -- the

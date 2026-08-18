@@ -222,6 +222,9 @@ export function recordFeed(workspace, appId, itemId, comments = []) {
       actor: entry.author || '',
       actorId: entry.authorId || '',
       editedAt: entry.editedAt || '',
+      // Carried through, or a comment that is nothing BUT a photo reads as an empty line in
+      // the history it is supposed to be a record of.
+      files: Array.isArray(entry.files) ? entry.files : [],
     });
   });
   // Oldest first, so the list reads downwards like the conversation it contains and the newest

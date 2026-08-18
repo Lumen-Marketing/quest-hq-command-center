@@ -34,6 +34,7 @@ function stubNode() {
       add() {}, remove() {}, toggle() {}, contains: () => false,
     },
     setAttribute() {}, getAttribute: () => null, removeAttribute() {},
+    disabled: false,
     addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true,
     appendChild() {}, remove() {}, focus() {}, blur() {}, click() {},
     closest: () => null, matches: () => false, insertAdjacentHTML() {},
@@ -73,10 +74,14 @@ function harness() {
     return named[selector];
   };
 
+  // The keydown listener goes on the document, not on the overlay, so it is captured here or
+  // the shortcuts cannot be pressed in a test at all.
+  const onDoc = {};
   globalThis.document = {
     createElement: () => stubNode(),
     body: { appendChild() {}, classList: { add() {}, remove() {} } },
-    addEventListener() {}, removeEventListener() {},
+    addEventListener: (type, fn) => { (onDoc[type] ||= []).push(fn); },
+    removeEventListener() {},
     querySelector: () => null,
     activeElement: null,
   };
@@ -115,7 +120,13 @@ function harness() {
     return Promise.all((listeners[type] || []).map((fn) => fn(event)));
   };
 
-  return { overlay, fire, listeners, blobs, named };
+  /** A key, through the real document-level handler the editor installs. */
+  const press = (init) => Promise.all((onDoc.keydown || [])
+    .map((fn) => fn({ preventDefault() {}, stopPropagation() {}, ...init })));
+
+  return {
+    overlay, fire, press, listeners, blobs, named,
+  };
 }
 
 async function open(options = {}) {
@@ -381,6 +392,43 @@ test('text is only editable while it is being typed into', async () => {
   assert.equal((editor.named['[data-fd-page]'].innerHTML.match(/contenteditable/g) || []).length, 1);
 });
 
+test('a press that has not moved yet captures nothing', async () => {
+  // Capturing the pointer on press retargets the click AND the double-click that follow it to
+  // the capturing node. While that node was the overlay, `closest('[data-fd-el]')` found nothing
+  // and no text on the page could be typed into at all.
+  let captured = 0;
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'Words', x: 10, y: 10, w: 60, h: 8 }] } });
+  editor.overlay.setPointerCapture = () => { captured += 1; };
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  assert.equal(captured, 0, 'a press is not yet a drag');
+  await editor.fire('pointermove', '[data-fd-el]', { fdEl: 'e1' }, { clientX: 40, clientY: 20 });
+  assert.equal(captured, 0, 'and when it becomes one, the element is captured -- never the overlay');
+});
+
+test('a double-click that lands on the paper still opens the box that was selected', async () => {
+  // This is what made every text element permanently unwritable-into. The FIRST click selects,
+  // and selecting repaints the page -- so the node that click landed on no longer exists when
+  // the second one arrives, and the browser fires the dblclick at their nearest common
+  // ancestor, which is the paper. Looking only under the pointer found nothing to type into.
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'Words', x: 10, y: 10, w: 60, h: 8 }] } });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('dblclick', '[data-fd-page]', {});
+  assert.match(editor.named['[data-fd-page]'].innerHTML, /contenteditable/, 'the caret never got into the box');
+});
+
+test('a double-click on bare paper with nothing selected opens nothing', async () => {
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'Words', x: 10, y: 10, w: 60, h: 8 }] } });
+  await editor.fire('dblclick', '[data-fd-page]', {});
+  assert.ok(!editor.named['[data-fd-page]'].innerHTML.includes('contenteditable'));
+});
+
+test('a double-click on the rails is not a double-click on the page', async () => {
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'Words', x: 10, y: 10, w: 60, h: 8 }] } });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('dblclick', '[data-fd-margin]', {});
+  assert.ok(!editor.named['[data-fd-page]'].innerHTML.includes('contenteditable'));
+});
+
 test('a field element and a shape are never editable, whatever is double-clicked', async () => {
   // Their words belong to the record, so typing over them would be a change that vanishes on the
   // next repaint.
@@ -407,37 +455,138 @@ test('an empty text element being typed into shows nothing, not its placeholder'
 
 // --- Save, from the header, without opening anything ------------------------------------------------
 
-test('the header carries a Save button, so keeping a version is one press', async () => {
+test('the header carries a Save button, beside the Versions panel rather than inside it', async () => {
   const editor = await open();
   assert.match(editor.named['[data-fd-acts]'].innerHTML, /data-fd-save\b/, 'Save is not in the header');
-  // Beside Versions, not inside it: the panel is for reading the list, not for the common case.
   assert.match(editor.named['[data-fd-acts]'].innerHTML, /data-fd-versions/);
 });
 
-test('one press saves a version, without a prompt and without opening the panel', async () => {
-  // Stopping to answer a dialog every time is the reason people stop pressing Save, so the header
-  // button stamps the date and time instead of asking.
+test('Save saves the document, through whoever opened the editor', async () => {
+  // It used to keep a VERSION and nothing else, which read as "saved" and was not: the document
+  // was still only in the hidden input it came from, and closing the panel took it with it.
+  const saves = [];
   let asked = false;
-  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'Draft', x: 10, y: 10, w: 60, h: 8 }] } });
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'text', text: 'Draft', x: 10, y: 10, w: 60, h: 8 }] },
+    onSave: (doc) => { saves.push(doc); return 'Saved to the field.'; },
+  });
   globalThis.window.prompt = () => { asked = true; return 'typed'; };
   await editor.fire('click', '[data-fd-save]', {});
-  assert.equal(asked, false, 'the header Save must not prompt');
-  const doc = editor.doc();
-  assert.equal(doc.versions.length, 1);
-  // Not the generic fallback: every press would then produce another 'Saved version' and the list
-  // would be a column of identical rows. The stamp is what somebody would have typed anyway.
-  assert.notEqual(doc.versions[0].name, 'Saved version', 'an unnamed save must still be identifiable');
-  assert.match(doc.versions[0].name, /\d/, 'a version saved without a name is stamped with the time');
-  assert.equal(doc.versions[0].elements[0].text, 'Draft', 'and it holds what was on the page');
-  assert.match(editor.named['[data-fd-status]'].textContent, /Saved as a version/, 'it has to say it worked');
+  assert.equal(asked, false, 'Save must not stop to ask anything');
+  assert.equal(saves.length, 1, 'the host was never told to save');
+  assert.equal(saves[0].elements[0].text, 'Draft', 'and it was handed what is on the page');
+  assert.match(editor.named['[data-fd-status]'].textContent, /Saved to the field/, 'it says where it went');
+  // A version is a different thing, wanted far less often, and has its own button.
+  assert.equal((editor.doc().versions || []).length, 0, 'Save must not fill the history with versions');
 });
 
-test('pressing Save twice keeps two versions, newest first', async () => {
-  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'One', x: 10, y: 10, w: 60, h: 8 }] } });
+test('a host that cannot say where it went still gets a plain confirmation', async () => {
+  const editor = await open({ onSave: () => undefined });
   await editor.fire('click', '[data-fd-save]', {});
-  await editor.fire('dblclick', '[data-fd-el]', { fdEl: 'e1' });
+  assert.match(editor.named['[data-fd-status]'].textContent, /Saved/);
+});
+
+test('a save that throws says so instead of looking like it worked', async () => {
+  const editor = await open({ onSave: () => { throw new Error('the network is down'); } });
   await editor.fire('click', '[data-fd-save]', {});
-  assert.equal(editor.doc().versions.length, 2);
+  assert.match(editor.named['[data-fd-status]'].textContent, /the network is down/);
+  assert.equal(editor.named['[data-fd-status]'].className, 'fd-status bad');
+});
+
+// --- undo and redo ----------------------------------------------------------------------------------
+
+test('undo takes the last change back, and redo puts it on again', async () => {
+  const editor = await open();
+  await editor.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  assert.equal(editor.doc().elements.length, 1);
+  await editor.fire('click', '[data-fd-undo]', {});
+  assert.equal(editor.doc().elements.length, 0, 'undo did not reach the document');
+  await editor.fire('click', '[data-fd-redo]', {});
+  assert.equal(editor.doc().elements.length, 1, 'redo did not put it back');
+});
+
+test('undo is written through, so the record does not keep what was taken back', async () => {
+  // The whole point: a document that lives in a hidden input is only ever as good as the last
+  // thing written to it.
+  const editor = await open();
+  await editor.fire('click', '[data-fd-add-shape]', { fdAddShape: 'rect' });
+  await editor.fire('click', '[data-fd-undo]', {});
+  assert.equal(editor.written.at(-1).elements.length, 0);
+});
+
+test('the buttons are offered only when there is something to do with them', async () => {
+  const editor = await open();
+  assert.match(editor.named['[data-fd-acts]'].innerHTML, /data-fd-undo[^>]*disabled/, 'nothing to undo yet');
+  await editor.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  assert.ok(!/data-fd-undo[^>]*disabled/.test(editor.named['[data-fd-acts]'].innerHTML), 'now there is');
+  await editor.fire('click', '[data-fd-undo]', {});
+  assert.ok(!/data-fd-redo[^>]*disabled/.test(editor.named['[data-fd-acts]'].innerHTML), 'and something to redo');
+});
+
+test('undo with nothing behind it says so rather than doing nothing silently', async () => {
+  const editor = await open();
+  await editor.fire('click', '[data-fd-undo]', {});
+  assert.match(editor.named['[data-fd-status]'].textContent, /Nothing left to undo/);
+  assert.equal(editor.written.length, 0, 'and it writes nothing');
+});
+
+test('a whole drag is one undo, not one per pointermove', async () => {
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'Move me', x: 10, y: 10, w: 60, h: 8 }] } });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('pointermove', '[data-fd-el]', { fdEl: 'e1' }, { clientX: 20, clientY: 10 });
+  await editor.fire('pointermove', '[data-fd-el]', { fdEl: 'e1' }, { clientX: 40, clientY: 25 });
+  await editor.fire('pointerup', '[data-fd-el]', { fdEl: 'e1' });
+  assert.ok(editor.doc().elements[0].x > 10);
+  await editor.fire('click', '[data-fd-undo]', {});
+  const back = editor.doc().elements[0];
+  assert.equal(back.x, 10, 'one undo has to reach all the way back to where the drag started');
+  assert.equal(back.y, 10);
+});
+
+test('a typed name is one undo, however many letters it took', async () => {
+  const editor = await open();
+  const type = (value) => editor.fire('input', '[data-fd-title]', {}, {
+    target: {
+      matches: (want) => want === '[data-fd-title]', closest: () => null, value, dataset: {}, type: 'text',
+    },
+  });
+  await type('R');
+  await type('Ro');
+  await type('Roof');
+  assert.equal(editor.doc().title, 'Roof');
+  await editor.fire('click', '[data-fd-undo]', {});
+  assert.equal(editor.doc().title, '', 'undoing a name letter by letter is an undo nobody can use');
+});
+
+test('a change after an undo abandons the redo branch', async () => {
+  const editor = await open();
+  await editor.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  await editor.fire('click', '[data-fd-undo]', {});
+  await editor.fire('click', '[data-fd-add-shape]', { fdAddShape: 'ellipse' });
+  await editor.fire('click', '[data-fd-redo]', {});
+  assert.equal(editor.doc().elements.length, 1);
+  assert.equal(editor.doc().elements[0].shape, 'ellipse', 'the branch that was left must not come back');
+});
+
+test('Ctrl+Z undoes and Ctrl+Shift+Z redoes, but never while a box has the caret', async () => {
+  const editor = await open();
+  await editor.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  await editor.press({ key: 'z', ctrlKey: true });
+  assert.equal(editor.doc().elements.length, 0);
+  await editor.press({ key: 'z', ctrlKey: true, shiftKey: true });
+  assert.equal(editor.doc().elements.length, 1);
+  // A name half-typed belongs to the browser's own undo, which is undoing letters.
+  globalThis.document.activeElement = { tagName: 'INPUT' };
+  await editor.press({ key: 'z', ctrlKey: true });
+  assert.equal(editor.doc().elements.length, 1, 'the document must not move under somebody typing');
+  globalThis.document.activeElement = null;
+});
+
+test('a read-only document has no history to walk', async () => {
+  const editor = await open({ readOnly: true, doc: { elements: [{ id: 'e1', kind: 'text', text: 'x', x: 10, y: 10, w: 60, h: 8 }] } });
+  assert.ok(!editor.named['[data-fd-acts]'].innerHTML.includes('data-fd-undo'), 'nothing changes, so nothing undoes');
+  await editor.press({ key: 'z', ctrlKey: true });
+  assert.equal(editor.written.length, 0);
 });
 
 test('the panel keeps its own named save, and that one does ask', async () => {
@@ -537,6 +686,126 @@ test('somebody who cannot manage the app gets it read-only', async () => {
   assert.match(row.named['[data-fd-rail]'].innerHTML, /not change it/);
   await row.fire('click', '[data-fd-add]', { fdAdd: 'text' });
   assert.equal(row.item.values['f-doc'].includes('New text'), false);
+});
+
+test('Save from a row persists the record, rather than only keeping a version', async () => {
+  const row = await openRow('i-blank');
+  await row.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  await row.fire('click', '[data-fd-save]', {});
+  assert.deepEqual(row.saved, ['co'], 'Save has to reach the record');
+  assert.match(row.named['[data-fd-status]'].textContent, /Saved to the record/);
+  // And closing after a save does not save the same thing twice.
+  await row.fire('click', '[data-fd-close]', {});
+  assert.deepEqual(row.saved, ['co']);
+});
+
+// --- the hidden input a form keeps its document in --------------------------------------------------
+
+test('a repaint under the builder does not send the document to a node nobody reads', async () => {
+  // The page underneath repaints for all sorts of reasons -- a toast, a save, a refresh -- and a
+  // repaint replaces this input with a new one holding the value from before the builder opened.
+  // Writing to the node captured on open is how a document came back blank after being saved.
+  const box = harness();
+  const mod = await import('../src/form/doc-editor.js');
+  const before = { ...stubNode(), value: '{}' };
+  const after = { ...stubNode(), value: '{}' };
+  let onPage = before;
+  globalThis.document.querySelector = (selector) => (selector.includes('data-f=') ? onPage : null);
+  mod.openFor('f-doc', { state: {}, wbFind: () => ({}) });
+  onPage = after;
+  await box.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  assert.equal(before.value, '{}', 'the input that is no longer on the page must not be written to');
+  assert.match(after.value, /"kind":"text"/, 'the one that is must be');
+});
+
+/** A field's own panel, open over the app it belongs to, with the document in a hidden input. */
+function openPanel(modal = {}) {
+  const box = harness();
+  const input = { ...stubNode(), value: '{}' };
+  globalThis.document.querySelector = (selector) => (selector.includes('data-f=') ? input : null);
+  const app = { id: 'app-deals', fields: [{ id: 'f-doc', type: 'form', label: 'Proposal', config: {} }], collections: [] };
+  const saved = [];
+  const collected = [];
+  const rendered = [];
+  const state = {
+    builderModal: {
+      kind: 'field',
+      companyId: 'co',
+      workspaceId: 'ws',
+      appId: 'app-deals',
+      editId: 'f-doc',
+      draft: { id: 'f-doc', type: 'form', label: 'Proposal', config: {} },
+      ...modal,
+    },
+  };
+  return {
+    ...box,
+    input,
+    app,
+    saved,
+    collected,
+    rendered,
+    state,
+    open: async () => {
+      const mod = await import('../src/form/doc-editor.js');
+      return mod.openFor('f-doc', {
+        state,
+        wbFind: () => ({ app }),
+        wbSave: (id) => saved.push(id),
+        // The real one reads the hidden input back into the draft; this records that it ran and
+        // does the one thing the save depends on.
+        wbCollectModalDraft: () => {
+          collected.push(1);
+          state.builderModal.draft.config = { doc: JSON.parse(input.value || '{}') };
+        },
+        render: () => rendered.push(1),
+        fieldTypeLabel: () => 'Form',
+      });
+    },
+  };
+}
+
+test('Save over a field panel writes the document onto the field, without closing the panel', async () => {
+  const panel = openPanel();
+  await panel.open();
+  await panel.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  await panel.fire('click', '[data-fd-save]', {});
+  assert.deepEqual(panel.saved, ['co'], 'the app was never saved');
+  assert.equal(panel.app.fields[0].config.doc.elements.length, 1, 'the field did not get the document');
+  assert.match(panel.named['[data-fd-status]'].textContent, /Saved to the field/);
+  assert.ok(panel.state.builderModal, 'the panel underneath stays open to finish');
+});
+
+test('a field still being added is told which button finishes the job', async () => {
+  // Putting it on the app now would create a field behind the back of somebody who has not
+  // pressed Add field.
+  const panel = openPanel({ editId: '' });
+  await panel.open();
+  await panel.fire('click', '[data-fd-save]', {});
+  assert.deepEqual(panel.saved, [], 'nothing may be created early');
+  assert.match(panel.named['[data-fd-status]'].textContent, /press "Add field"/);
+});
+
+test('closing over a field panel redraws it, so the thumbnail catches up', async () => {
+  const panel = openPanel();
+  await panel.open();
+  await panel.fire('click', '[data-fd-add]', { fdAdd: 'text' });
+  await panel.fire('click', '[data-fd-close]', {});
+  assert.equal(panel.collected.length > 0, true, 'the panel has to be read before it is repainted');
+  assert.equal(panel.rendered.length, 1);
+});
+
+test('a record form is never repainted from underneath, and says where its Save is', async () => {
+  // A record's form is drawn from a draft that does not hold what has been typed into it, so a
+  // repaint would take the rest of the form down with it.
+  const panel = openPanel();
+  panel.state.builderModal = { kind: 'item', companyId: 'co', draft: { values: {} } };
+  await panel.open();
+  await panel.fire('click', '[data-fd-save]', {});
+  await panel.fire('click', '[data-fd-close]', {});
+  assert.deepEqual(panel.saved, []);
+  assert.deepEqual(panel.rendered, [], 'the form must not be rebuilt under somebody filling it in');
+  assert.match(panel.named['[data-fd-status]'].textContent, /press Save on the record/);
 });
 
 test('a row pointing at a record that is gone says so instead of throwing at the DOM', async () => {

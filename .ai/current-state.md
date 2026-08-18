@@ -972,6 +972,226 @@ scroll pin.
 - **`authenticated` holds `TRUNCATE` on both tables, and on every other table in the schema.** That is Supabase's default `GRANT ALL`, not something this migration added — `clients`, `jobs`, `forms`, `company_contacts` and `workspace_builder_state` all read the same. It is worth knowing that **TRUNCATE is not subject to RLS**, so the grant is wider than the policies suggest; the practical exposure is small because PostgREST has no TRUNCATE verb, so it is unreachable from a browser session. Narrowing it is a schema-wide decision, not one to make inside a feature migration.
 - **Still to do**: the config panel creates a link over *every* fillable field. `field_ids` is stored and honoured end to end, but nothing yet chooses the subset. Uploads are not offered. **The client half is not yet deployed** — the tables are live, the code is local and uncommitted.
 
+## 2026-08-17 A day on the contact calendar opens what is on it
+
+- "On the contact card date I want it to be clickable to view if there is an event set on that date — a modal with the records on that date and their label info, and clicking one redirects to that record."
+- **A count is not something you can read.** Month and year cells showed only a number; pressing one now opens the records behind it, each row carrying the record's title, the FIELD LABEL that put it on that day ("Site visit", "Revisit on") and the app it lives in, and each row is a link to the record.
+- **Only a cell showing a bare count is pressable.** Day and week already list their entries as links, so making the cell a button there would nest a link inside a button and put two different things to hit in the same place. It is a real `<button>`, so it is keyboard-reachable without a `tabindex`/`keydown` pair.
+- **The dialog stores the KEY, not the entries**, and reads them back out of the same `byDay` map the grid was drawn from — so it can never show a list the cell behind it has stopped agreeing with. A day cell keys `YYYY-MM-DD`; a year cell is a whole month and keys `YYYY-MM`. The month lookup keeps the trailing dash, because `2026-1` would otherwise swallow October, November and December.
+- **An open day belongs to the contact it was opened on** (`ccCalDayFor`). Without that, walking to another contact carries the dialog across, where the same key finds nothing and it reads as "nothing on this day" about a day nobody asked to see.
+- **The row links do NOT go through the card's `bind` helper**, which calls `preventDefault()` on everything it binds — on a real link that is the difference between navigating and doing nothing at all. They get a plain listener that only banks the closed state on the way past.
+- Rendered inside the card rather than through `state.modal`: the card is already a lazily-fetched chunk, and routing it through the shell would put it in an entry bundle with no room, for a panel most sessions never open. Entry JavaScript is unchanged at 504 bytes of headroom; the work lands in `page-*.js` (90 KB).
+- `cellKey`, `entriesForKey` and `keyTitle` are pure and in `timeline.js`, so the month-boundary case is checked by running it rather than by matching source.
+- **The wiring is clicked, not grepped.** `tests/company-contact-calendar-day.test.mjs` renders the card for real, builds the elements out of the markup that render actually produced, runs `mountCard` to bind the real handlers, and presses them — because a source-text assertion cannot tell a bound handler from one that throws, nor a link that navigates from one whose default was cancelled on the way out. Each of the four guards was confirmed by putting the bug back: routing the rows through `bind` fails the navigation test, dropping `ccCalDayFor` fails the contact test, focusing on every mount fails the focus test, and removing the backdrop identity check fails the backdrop test. Still **not clicked in a real browser** — the operating rules forbid a local server, so that waits for the deployed environment.
+
+## 2026-08-17 The location pin works on the record page too
+
+- "On this I want the button location to open the modal too to pick a location." The record page reuses the SAME field markup as the modal, so the pin had been drawn there all along — and did nothing at all, in any session, since the day it shipped.
+- **One line explains it**: `wbOpenLocationPicker` began `if (!m || !fieldId) return;` where `m` is `state.builderModal`. A record page is a page, not a modal, so `m` was always null and the function returned before doing anything. Nothing threw and nothing was logged; pressing the pin was simply inert.
+- **The two paths differ in what Save means, not in what the map is.** From the modal the address goes into `builderModal.draft` and the record's own Save owns it, because a pin dropped on a record somebody then cancels must not persist behind their back. From the page there is no draft and no Save button — every other field on that page commits on its own the moment you click away — so the pin writes to the record immediately. Same map, same picker markup, no second copy.
+- **It writes through `wbCommitFieldValue`**, split out of `wbSaveInlineValue` for this. An address dropped on the map lands in the record's history and fires the same automations as one typed into the box; a second write path is a second place for those to be forgotten. A test now pins that both callers go through it.
+- **The half-typed value wins over the saved one** when seeding the map, so pressing the pin beside a box somebody is part-way through does not throw away what is in it.
+- **A refusal leaves the map open** rather than closing over the pin that was just dropped; an unchanged address says so instead of claiming a save.
+- The record's identity travels on `wbInlineRecord`, set by `wbBindInlineEdits`: the ids are resolved by the section mount and are not in the DOM, and the pin's handler is the document-wide action dispatcher, so it has no other way to know which record it is on. A record or field that has gone since is checked before the map opens.
+- `tests/workspace-location-pin.test.mjs` **runs the real functions** against a page-shaped state rather than matching source — 8 new cases, including that the modal path is unchanged by the addition. Entry headroom is down to **216 bytes**; nothing further should go into `main.js` before an extraction pays for it.
+
+## 2026-08-18 The document builder: Save meant nothing, text could not be typed into, and there was no Undo
+
+Reported from use: "this form field does not really save what I edited even the save button, also the
+text I added is uneditable… when I close and open again it became blank."
+
+- **Save kept a version and nothing else.** Pressing it stamped a snapshot into `versions[]` and said
+  so, which reads as "saved" and was not: the document was still only in the hidden input it came
+  from, and closing the field panel took it with it. Save now saves — `openDocEditor` takes an
+  `onSave`, and the host decides what that means. From a row or the record page, `wbSave(companyId)`.
+  From a field's panel, `saveHost` in `doc-editor.js` collects the panel and writes the field back to
+  the app **without closing the dialog over it**; a field still being *added* has nowhere to go yet, so
+  it says which button finishes the job rather than creating a field behind the user's back. The named
+  version save stays where it belongs, inside the Versions panel. That logic sits in the **lazy chunk**
+  and main.js gains three names in the ctx (`wbSave`, `wbCollectModalDraft`, `fieldTypeLabel`) — 35
+  bytes gz, leaving **181 bytes** of entry headroom.
+- **The hidden input was captured once and held.** `openFor` kept the node it found on open. The page
+  under the builder repaints for all sorts of reasons — a toast alone does it — and a repaint replaces
+  that input with a new one carrying the value from before the builder opened. Every later write then
+  landed on a detached node and the next open read the stale replacement. **That is the blank page.**
+  The input is now looked up again on every read and write.
+- **No text element could ever be typed into.** The first click of a double-click selects, selecting
+  repaints the page, and the node that click landed on no longer exists when the second arrives — so
+  the browser fires `dblclick` at the nearest surviving common ancestor, the paper. `closest('[data-fd-el]')`
+  found nothing and editing never started. Pointer capture made it worse: it was taken on the *overlay*
+  at `pointerdown`, and a capture retargets the following click and dblclick to the capturing node.
+  Both are fixed: the dblclick falls back to the selected element when it lands on the paper, and the
+  capture is taken in `pointermove` — once it is definitely a drag — on the element itself, never on
+  the overlay. `preventDefault` moved with it; `user-select: none` on `.fd-el` does the job it was
+  doing without swallowing the click pair.
+- **Undo and redo**, asked for in the same breath. Whole-document snapshots (60 deep) rather than an
+  operation log, because every change already goes through `commit()`. A gesture *mark* coalesces a
+  burst into one step: a typed name is one undo, not one per letter, and a drag goes back to where the
+  pointer went down rather than to the last `pointermove`. Ctrl/Cmd+Z and Ctrl+Shift+Z / Ctrl+Y, live
+  in the header beside Save, disabled when there is nothing to walk, and silent inside a text box —
+  there the browser's own undo is the right one.
+- **The margin slider repainted the rail it lives in**, replacing itself under the pointer after one
+  step. It now repaints the page only and writes its own readout.
+- `tests/doc-editor-boots.test.mjs` is 52 cases (was 28): the repaint-detaches-the-input case, the
+  dblclick-on-paper case, Save reaching the field and refusing to create one early, and eleven on the
+  history.
+
+## 2026-08-18 The app strip follows you into a record
+
+"I want the Activity and the apps to stay on top even when I'm inside the item record."
+
+- A record is a page **inside** an app, but `wbWorkspaceHeader` was drawn on the app's own pages and
+  on the workspace home and nowhere else. Opening a record took the switcher away, so the only route
+  to the next app was back out to the list first. The record route now draws it too, with the record's
+  own app marked active. Costs main.js one expression (~10 bytes gz; **171 bytes** of entry headroom
+  left) and nothing else — `wbMountTopbar` already runs on every render in this section, so the
+  measuring, the drag-scroll and the ‹ › arrows all came with it.
+- **The strip was already sticky** (`position: sticky; top: 0; z-index: 30`, height measured into
+  `--wb-strip-h`). What needed fixing was what sits under it. `.wb-record-top` — the way back, the
+  record's name, the stepper and Customize — stuck at `top: -18px; margin-top: -18px`, which was
+  right when it was the top of the page and wrong the moment something sat above it: at rest it
+  pulled itself up *into* the strip, and on scroll it pinned underneath it (z-index 8 against 30) and
+  vanished. It now stops at `top: var(--wb-strip-h, 0px)`, the same arrangement `.wb-tabs-row`
+  already uses on the app pages.
+- **`.wb-record` had to stop being a grid.** A grid item's containing block is its own grid area —
+  one row, sized to the item — so `position: sticky` on the header had no room to move and had never
+  actually stuck, on any screen, since the day it shipped. A flex item's containing block is the
+  whole container, which is the length of the record. `display: flex; flex-direction: column` with
+  the same 14px gap is otherwise identical for full-width block children.
+- A record's panels cap themselves at `100vh - var(--wb-record-chrome)`. The strip is now subtracted
+  as well, and deliberately **separately**: it is measured, not counted, so folding it into the
+  constant would be wrong by however much a wrapped app name or a different font moved it, and
+  erring small hides a panel's last row below the fold.
+- Three cases in `tests/workspace-record-page-static.test.mjs`, and the existing panel-cap assertion
+  re-pointed.
+
+## 2026-08-18 A comment can carry a file, a photo or a clip — and Enter sends it
+
+"Allow the user to attach a document like PDF, DOCS, SPREADSHEET, opened in a modal to view it,
+with the option to view full size in another tab or download it; also a picture or video. So two
+icons in the comment. Also when I hit enter it automatically comments, and Alt+Enter makes a new
+line."
+
+- **Two pickers, because they are two intentions.** A paperclip for the document being filed
+  against the record (`document` policy: PDF, Word, Excel, PowerPoint, text, zip, 25 MB) and an
+  image button for the photo or clip that IS the comment (new `media` policy: images plus MP4,
+  WebM, MOV, M4V, 50 MB — a phone clip of a roof is tens of megabytes and refusing it would refuse
+  the feature). A comment may now be nothing but files: requiring words beside a screenshot means
+  captioning every one with "see attached".
+- **No new viewer was written.** The record modal's file field already opened a preview dialog
+  with an iframe/`<video>`/Office-viewer stage, **Open in new tab** and **Download**. Every
+  attachment renders as the same `[data-wb-view-file]` button, so there is one dialog and one
+  place "this cannot be previewed" is worded. What was missing was that its binding only existed
+  inside the record modal — it is delegated from the document now, which is what makes an
+  attachment on the record *page* openable at all.
+- **Video is verified by its bytes**, not by its name: `isobmff` (`ftyp` at offset 4) and `ebml`
+  signatures were added. MP4 and WebM are deliberately left OUT of the MIME allowlist even though
+  they are now listed for signatures — a browser recording reports `audio/webm;codecs=opus`, which
+  is not a member of any list anyone could write, so listing them would have refused every voice
+  note. Their bytes are what a codec suffix cannot dress up.
+- **Enter sends, Alt+Enter breaks the line** (Shift+Enter too). Alt+Enter has no default behaviour
+  at all, so the break is inserted by hand at the caret and over any selection. Both @-mention
+  guards from the feed's box apply: the `mentionHandled` flag and the "is the list open" check,
+  because either listener can run first. IME composition is left alone — mid-word, Enter is
+  choosing a character.
+- **Paid for, twice over.** The feed's uploader moved out of main.js into
+  `src/workspace/attachments.js` (lazy) so a comment and a post cannot drift apart about what
+  "attached" means, and the five comment-thread bindings that existed in **two** copies — once on
+  the record page, once on the record modal, differing only in whether they remembered the modal's
+  scroll — collapsed into one delegated dispatcher. Entry headroom is **32 bytes** under the real
+  ceiling, not borrowed from the 64-byte gzip-environment tolerance.
+- **The composer is a column.** First cut put the two pickers and Comment beside the box, which
+  took about two hundred pixels out of a panel that is already the narrow half of a record and
+  left a comment box too small to see a sentence in. Box across the full width, buttons under it
+  — pickers left, send right. The Enter/Alt+Enter line under it went with them: it wrapped in a
+  narrow panel, and it lives in the send button's tooltip instead.
+- `tests/comment-attachments.test.mjs` is 31 cases: the kind/size/markup helpers, the escaping of
+  a filename in three positions, an upload that never embeds bytes on a live session, the
+  two-policy split, the voice-note regression that the MIME decision above exists to prevent, and
+  the Enter/Alt+Enter contract.
+
+## 2026-08-17 The attach sheet goes dark, and the back button becomes one icon
+
+- Two asks off one screenshot: **"fix its UI to be like this"** against a messaging-app attachment sheet, and **"the button to back to all record is just a single icon"**.
+- **The attach menu was already the right shape** — a `+` opening Document / Photos & videos / Camera, each with its own colour, its own upload policy and its own accept list. What was asked for was the LOOK, so this is a restyle, not a rebuild: a near-black rounded sheet, light text, one line per entry, the glyph carrying its colour with no tinted tile behind it.
+- **It was fixed at `#1f2023` in both themes, and that is now reverted.** The next instruction was explicit: "the uploading file make it themed with the system do not adapt the them on image i just want the idea." The sheet follows the page like every other menu — `var(--surface)`, `var(--border)`, `var(--text)`, hover on `var(--surface-2)` — and what is kept from the reference is the shape: one `+`, three named rows, each glyph in its own colour. The test that refused `var(--…)` inside the rule now requires it. The lesson is not about colour: a screenshot answers "what should this look like", and the reader has to decide which half of it is the idea and which half is that app.
+- **The second line under each name is gone**, which is what the asked-for look does. The name already answers which takes the contract and which takes the photo; the detail ("PDF, Word, Excel…") stays as the row's tooltip. The test was rewritten to assert the `title` ATTRIBUTE rather than the bare string — the strings are still in the markup either way, so the old assertion would have passed with the tooltip missing entirely.
+- **The back button keeps its name where it counts.** It used to read "All Prospect"; it is now the arrow alone, sized like the stepper arrows beside it. The app name moved to `title` and `aria-label` rather than being deleted: an unlabelled arrow is announced as "link" and answers nothing on hover, and naming the destination is why it reads the same as the deck row it came from.
+- **A measurement worth not repeating**: the entry chunk read 21 bytes OVER the ceiling and was passing only on the 64-byte environment tolerance the budget file says is unspendable. **The 364144 recorded here as the "clean rebuild" was not one** — that build was made while `src/main.js` was temporarily reverted to `HEAD` during a parallel attribution experiment, so it is the entry WITHOUT the comment work in it. Re-measured with `dist` deleted first, one `index-*.js` present, and the file read through `.vite/manifest.json` exactly as `check-bundle-budget.mjs` reads it: **364509, 35 bytes under**. The lesson stands and gains a second half — measure on a fresh `dist`, and check nothing else is mid-edit while you do.
+- **35 bytes is not a margin.** Two consecutive clean builds agree to within 2 bytes, so the figure is real rather than noisy — but it is smaller than the change any single edit to `main.js` makes. The next person to touch that file should expect to fail the gate, and should arrive with an extraction rather than a seventh raise, which the budget file already refuses.
+
+## 2026-08-18 The comment box grows as you type, and the + is where attaching starts
+
+- "on the comment can you make this? on attaching files? also I want the text field box to be auto expand when entering new line, so it expand downards. and a plus icon to attach files."
+- **One `+` in place of two bare icons.** A paperclip and a picture could not say which took the contract and which took the photo, and the answer is not something an icon carries. The menu names them — Document, Photos & videos, Camera — and each keeps its own upload policy and accept list, which is the part that matters underneath: a 40 MB roof clip has no business going through the allowlist a contract PDF goes through.
+- **Camera is offered only where there is one.** `capture` is ignored by desktop browsers, so the entry there would open the same dialog as Photos & videos and lie about what it does. A coarse pointer is the honest proxy.
+- **The box grows downward and then stops.** `grownHeight` is pure — content plus the border `scrollHeight` leaves out on a border-box element, capped, with a flag for whether it has to scroll. Uncapped, a long comment pushes the thread it is replying to off the top of the panel. The drag handle came off with it: a height set by hand would be overwritten by the next keystroke.
+- **Height is cleared to `auto` before measuring.** `scrollHeight` on a box that already has a height reports the height it HAS, not the height it needs — so a box that had grown could never shrink again. The test's fake textarea models that rule rather than returning a constant, because a constant reports the bug as working.
+- **Typing survived attaching a file for the first time.** The panel is redrawn whole by any state change, and a redrawn textarea comes back empty — so uploading a photo threw away the sentence written to go with it, in every session there has ever been. The draft is banked on `state.wbCommentDraft` as it is typed, put back on mount, cleared when the comment sends and deliberately NOT cleared when the save fails: the files already come back on a failure, and returning the photos without the words is the wrong half to keep.
+- **The draft and the file tray belong to the record they were filled on** (`state.wbComposerFor`). Stepping to the next record in the pager carried both along, and the next Comment would have filed somebody else's photos against the wrong job.
+- **None of the wiring is in the entry bundle.** The panel mounts itself from a `queueMicrotask` inside its own render, and the two document listeners that close the menu live in the lazy chunk. Measured, not assumed: the four lines the host originally carried cost **66 gzip bytes** against **33 bytes of headroom**; moving them out leaves the entry at 364509, **35 under** — two bytes better than the feature found it. The whole feature is 125 gzip bytes of `record-panel.js`, which is fetched only when a record is opened.
+- **The press is taken on the way up, Escape on the way down.** Closing during a click's capture phase re-renders the page under a press the host has not handled yet; Escape has to be answered before the host's next stop for that key, which is "dismiss the record" — a long way to go to shut a menu.
+- `tests/comment-attach-menu.test.mjs` renders the composer and presses it: 26 cases over the menu, the pickers' accept/capture, the growing box, the draft, and the per-record claim. Four were confirmed by putting the bug back — measuring without clearing the height, never banking the draft, dropping the per-record claim, and offering Camera everywhere each fail exactly one test. **Not clicked in a browser**: the operating rules forbid a local server, so that waits for the deployed environment.
+
+## 2026-08-17 Quick Create, and the entry bundle finally runs out
+
+- A sixth record-layout card: **Quick Create**, offering Spreadsheet, Form, Image and File. Pressing one attaches the thing to the record you are looking at and opens its editor.
+- **What "attach to this record" can mean here, and why.** The App Builder keys a record's values by field id and has no per-record attachment slot, so the only honest reading is: the app gains a field of that type, and THIS record's value of it is opened. The field is made once and **reused** — a second press on another record opens the same column rather than growing a second one — and it is matched on TYPE, so renaming "Spreadsheet" to "Takeoff" does not earn you a second spreadsheet. The consequence is stated rather than discovered: the column then exists on every record in the app, blank until used, which is what a Button push already does to the app it pushes into.
+- **A made field is PLACED as well as made.** `blockFields` honours an explicit `fieldIds` list exactly, so a field in no group renders nowhere with nothing on screen to say why — Quick Create would have looked broken the first time it was pressed on a customised layout. `placeFieldInLayout` appends it to the last field group, and deliberately leaves a `fieldIds: null` layout alone rather than pinning that group to the fields that happen to exist today.
+- **Image and File open the cell, not a modal of their own.** Those two are edited by the cell they live in; building a second picker would be a second thing to drift. Sheet and Form go to the editors that already exist, through the same four-id seat string those editors already understand.
+- **It binds itself.** The card's listener lives in `record-page.js` — already fetched whenever a record is on screen — rather than as another case in main.js's action dispatcher, because there was no room for one. The seat rides on the card in a data attribute, since the listener outlives every render. The button is disabled while it works: making a field and then opening an editor is two awaits, and a second press in between makes a second field.
+- **Proposal is declared in the model but not drawn.** `proposal_documents` already has the generic `related_type`/`related_id` pair, so it needs no migration — but creating one properly means the proposals module's numbering, draft shape and client block, and a half-right proposal row is worse than no button. **Task and Estimate need a migration**: `public.tasks` and `public.deals` link only to a contact, deal, job or project, with nothing generic to hang an App Builder record on.
+- **The entry bundle is now at 2 bytes.** The six ctx keys this needed cost 33. That is passing, and it is not a margin — it is less than any single edit to `main.js` will cost. The extraction the budget file has been asking for is no longer optional: **`wbBindInlineEdits`, `wbSaveInlineValue`, `wbCommitFieldValue` and `wbResetInlineCell` are 10.8 KB of record-page-only code sitting in the entry chunk**, and `record-page.js` — already lazy, already carrying this feature's handler — is where they belong. Their ~20 ctx keys are exactly what `tests/extracted-module-references.test.mjs` FACTORY_MODULES checks, which is the failure mode that refactor has. Nothing else should touch `main.js` first.
+
+## 2026-08-18 A record's cards reach the bottom of the surface
+
+- "can you stretch the activity/comment card and the records a little? so it fills the gap on the bottom part."
+- A short record ended halfway down the page with the dotted ground showing under two cards that had stopped wherever their content did. The page is now made at least as tall as the scrollport and the grid takes what is left over, so the cards fill it.
+- **The height is handed down the whole chain.** A record renders as `.work-surface > section.tool-page.wb-page > .wb-record > [data-wb-rec-grid]`, and a rule that skips the `.wb-page` wrapper matches nothing while reading as perfectly correct — which is how the dashboard's split-scroll shipped dead once already. `tests/record-page-fills-surface.test.mjs` derives the chain out of `main.js` and `record-page.js` and builds the expected selector from it, so a rule that skips a step fails rather than passing against itself. Putting that bug back fails two of its nine cases.
+- **The surface keeps its own scroll**, unlike the dashboard split which takes it away: this page's header is sticky AGAINST the surface, and a long record with nowhere to scroll would be a worse page than a short one with a gap.
+- **`align-items: start` was what held each card at its content height.** The record grid stretches instead, scoped by `[data-wb-rec-grid]` because `.wb-dash-grid` is the company dashboard's grid too — which keeps its own behaviour, and has a test saying so.
+- **The comments card fills the height it is given** rather than floating its composer in the middle of it: tabs at the top, the box at the bottom, the feed taking the slack. The scroll cap moved from the feed to the CARD (`min(74vh, 720px)`) — on the feed it was the thing stopping a busy thread from making the page enormous, and letting the feed stretch would have thrown that away. The panel drawn anywhere else, the record modal included, keeps the 52vh/460px cap it always had.
+- Entry CSS 118160 of 122880. **Not clicked in a browser** — the operating rules forbid a local server, so the arithmetic above is reasoned and tested, not seen.
+
+## 2026-08-17 The inline editor leaves the entry bundle
+
+- The extraction the budget file has been asking for since the fifth raise. `wbBindInlineEdits`, `wbResetInlineCell`, `wbSaveInlineValue` and `wbCommitFieldValue` — **12.9 KB of source, reachable only from a record page** — moved out of `main.js` into `src/workspace/record-page.js`, which is already fetched whenever a record is on screen. Entry headroom went from **2 bytes to 790**.
+- **Moved by script, not by hand.** 12.9 KB retyped is 12.9 KB of chances to change a character; the script asserts its own boundaries (that the block contains the binder and reaches the end of the writer) and refuses to run if either moved.
+- **Two bindings could not travel.** `wbFieldUiModule` is a module-level `let` in `main.js` that says whether the field-UI chunk has been fetched — handed over as `wbFieldUiReady: () => !!wbFieldUiModule`, a getter rather than the value, because a value read once at construction would be the `null` it held before anything was fetched, for ever. `wbInlineRecord` is written by the binder and READ by the map pin, which stays in `main.js`; its assignment moved to the mount call site, which already has all four ids in hand, so no setter crosses the boundary.
+- **`saveLocationPicker` now awaits the module** to reach `commitFieldValue`. That branch only runs for a pin opened from a record page, where the module is already loaded, so the await is belt and braces rather than a new fetch.
+- **The safety net was tested, not assumed.** This refactor's failure mode is a ReferenceError on first use and nothing earlier — exactly what `tests/extracted-module-references.test.mjs` FACTORY_MODULES checks. Removing `actorName` from the ctx fails it with *"record-page.js destructures actorName but main.js never passes it"*; putting it back passes. 3,792 tests green.
+- **A test helper was quietly lying, and was fixed on the way past.** `slice()` in `workspace-record-page-static.test.mjs` bounded a function by the first closing brace at its own indent — but a `.map((c) => {` callback inside a template literal closes at column 2 as well, so the body was cut off part-way and every assertion after that point passed on text it never saw. It is bounded by the next sibling `function` now.
+
+## 2026-08-18 The record page stops wasting the screen, and the sheet stops leaving it
+
+- "fix UI, cards too much gaps... pls fix it it over laps, maximize the srceen look there are so much white spaces."
+- **The attach sheet ran off the side of the window.** It was anchored `left: 0` against a button that sits at the right of the right-hand card, so a 258px sheet opened straight past the viewport edge. It is anchored to the button's RIGHT edge now and grows back across the card it belongs to, with `max-width: min(288px, calc(100vw - 28px))` as the backstop for a narrow window.
+- **A band above the record that had never been there was mine.** `.tool-page` sets `gap: 14px`; a block wrapper ignores it and a flex one does not, so turning `.wb-page` into a column to hand the height down added 14px silently. `gap: 0`, and a test that names where the 14px comes from.
+- **The surface pads by exactly what the sticky header bleeds.** The header spans it with `margin: 0 -24px` against a 28px padding, so it had been stopping 4px short of each edge all along. 24px now, derived in the test from the header rule so changing one and not the other fails.
+- Bottom padding 42px → 14px (the white band still showing under the cards after they stretched), the app strip's margin 20px → 10px on a record, the record column gap 14px → 10px, the sticky header 10/12px → 6/10px, and the grid's own 12px `padding-top` dropped since the column gap already spaces it. About 70px of vertical room and 8px of width, none of it taken from the cards themselves.
+- A test that pinned `gap: 14px` inside the assertion for "the record is a column so its header can stick" was rewritten to assert the column. The gap is a look; the column is the rule, and hard-coding the look into a test about the rule is what made a spacing change look like a regression.
+- **Not clicked in a browser** — the operating rules forbid a local server. Spacing that has only been reasoned about is exactly the kind of change worth looking at, and this one has not been.
+
+## 2026-08-17 The cards were short because there was a number at all
+
+- "Make the cards a little long" — twice. The cause was never the number: it was that a number existed.
+- The panel cap was `100vh - chrome - strip - header`: a **tally of everything above the cards**, where each part had to be corrected whenever any of them moved. Collapsing the record header from two rows to one left it 56px out, so every card stopped short of the bottom with nothing on screen or in the stylesheet to say why. Measuring the header fixed that half and left the other half still guessed — which is why one nudge was not enough.
+- **One measurement replaces all four.** `measureRecordGrid` publishes `--wb-record-grid-top` from the grid's own `getBoundingClientRect().top`, which already contains the window chrome, the topbar, the app strip and the record header, whatever any of them happen to be doing. `--wb-record-chrome` and the short-lived `--wb-record-head-h` are gone; what remains is the measured top and `--wb-record-foot`, the work surface's own bottom padding — the one thing genuinely below the cards.
+- **A scrolled reading is discarded, not written.** The header is sticky, so once the surface scrolls the grid's top is smaller than its resting offset and the cap would grow past the screen. `scrolledAway()` refuses those; a zero is refused too, since writing it before layout would collapse every panel to nothing. The `ResizeObserver` is re-pointed on each render because the node is rebuilt every time.
+- `100dvh`, not `100vh`: on a phone the address bar makes them differ and `vh` is the taller of the two, which is the direction that hides a card's last row.
+- **It costs main.js nothing.** The measurement runs inside `bindInlineEdits`, which moved into `record-page.js` with the inline editor earlier the same day and already runs on every render of a record.
+- Two stale things were corrected on the way past: a comment claiming the panel grid is `align-items:start` when the fill-to-bottom work had made it `stretch`, and an assertion matching `max-height: calc(100vh` unanchored — which reads the FIRST such rule in the stylesheet, a modal 23,000 lines away, not the panel cap it was written for.
+
+## 2026-08-17 Move a record and you go with it
+
+- "When I move the record to another app it's gone from my view — can you make it go together with me?" A move takes the record out of the app it was in, so somebody sitting on its record PAGE was left reading *"This record is gone"* — accurate, about a record they had just sent themselves, with the copy that does exist one app away and nothing pointing at it.
+- The modal case was already handled (`state.builderModal = null` closes the form). The page was not: it has a URL, and that URL stopped resolving.
+- **Only when the page being read is that record's own.** Pressed from a list row, or while reading a different record of the same app, the reader is not on it and moving them would be the button doing something it was not asked to. The route's `app_id` + `item_id` answer that — a deck row carries neither.
+- **The id survives the move**, which is what makes the redirect a straight substitution: a move keeps the record's id, its comments and its history, because it went somewhere else rather than stopping and starting again. Only a copy mints a new one. So the link that was open stays valid and simply points into the new app.
+- **A move into Company Contacts follows too**, to the card it just became. Filed without moving, the record is still there to read and the reader stays put.
+- `tests/button-push-follow.test.mjs` presses the button and follows where the reader lands — six cases, four of which assert it must NOT move them. **Confirmed by mutation**: deleting the "am I reading this record" guard fails two of them. The first attempt at that mutation silently did not apply, because the file is CRLF and the patch was written with `
+` — a green run that proved nothing, which is worth knowing before trusting the next one.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

@@ -27,6 +27,9 @@ const PT_TO_MM = 25.4 / 72;
 /** How big an uploaded PDF may be. It rides inside the record's own value, so it has a ceiling. */
 const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
 
+/** How far back Undo reaches. Sixty pages of snapshots is an afternoon's work and a few MB. */
+const MAX_HISTORY = 60;
+
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[ch]));
@@ -55,6 +58,7 @@ export function openDocEditor({
   helpers = {},
   read,
   write,
+  onSave,
   onClose,
 }) {
   let doc = normalizeDoc(read(), () => uid('e'));
@@ -67,6 +71,16 @@ export function openDocEditor({
   let iconsOpen = false;
   let iconList = null;
   let objectUrls = [];
+  // Undo and redo, kept as whole-document snapshots rather than as a log of reversible
+  // operations: every change already goes through one function, and a page is small enough
+  // that holding sixty of them costs less than the bookkeeping an operation log needs to stay
+  // honest about drags, restores and page-size changes all at once.
+  let past = [];
+  let future = [];
+  // What the snapshot on top of `past` is a snapshot of. A burst of one gesture -- typing a
+  // name, dragging the size box -- shares a mark and undoes as one step, because an undo per
+  // keystroke is an undo nobody can use.
+  let lastMark = '';
 
   const fields = placeableFields(hostFields);
   const overlay = document.createElement('div');
@@ -107,12 +121,61 @@ export function openDocEditor({
 
   const selected = () => doc.elements.find((el) => el.id === sel) || null;
 
-  /** Every change goes through here, so nothing can be saved without being normalized first. */
-  function commit(next, { repaint = true } = {}) {
+  /**
+   * Every change goes through here, so nothing can be saved without being normalized first --
+   * and nothing can be made without Undo being able to take it back.
+   *
+   * `before` is the state to go back TO, which is the current document for everything except a
+   * drag: a drag has already moved the element a hundred times by the time it settles, so it
+   * hands over the snapshot it took when the pointer went down.
+   */
+  function commit(next, { repaint = 'all', mark = '', before = doc } = {}) {
     if (readOnly) return;
+    remember(before, mark);
     doc = normalizeDoc(next, () => uid('e'));
     write(doc);
-    if (repaint) paint();
+    if (repaint === 'all') paint();
+    else if (repaint === 'page') { paintPage(); syncHistory(); }
+    else syncHistory();
+  }
+
+  function remember(before, mark) {
+    // A repeat of the same mark adds nothing: the snapshot already on top is the state before
+    // this burst began, which is where Undo should land.
+    if (!(mark && mark === lastMark && past.length)) {
+      past.push(before);
+      if (past.length > MAX_HISTORY) past.shift();
+    }
+    lastMark = mark;
+    // Anything new abandons the redo branch, the way every editor does it.
+    future = [];
+  }
+
+  /** One step along the history, in either direction. */
+  function step(from, to) {
+    if (readOnly || !from.length) return false;
+    to.push(doc);
+    doc = normalizeDoc(from.pop(), () => uid('e'));
+    // The next change starts a fresh burst, or undoing a title and typing again would fold
+    // the two together.
+    lastMark = '';
+    write(doc);
+    // A selection pointing at an element the step removed would leave the inspector
+    // describing something that is no longer on the page.
+    if (!doc.elements.some((el) => el.id === sel)) sel = '';
+    editing = '';
+    paint();
+    return true;
+  }
+
+  const undo = () => step(past, future);
+  const redo = () => step(future, past);
+
+  /** The two buttons, after a change that repainted the page but not the header. */
+  function syncHistory() {
+    const set = (selector, on) => { const button = $(selector); if (button) button.disabled = !on; };
+    set('[data-fd-undo]', past.length > 0);
+    set('[data-fd-redo]', future.length > 0);
   }
 
   // --- what a field element says ----------------------------------------------------------------
@@ -257,7 +320,7 @@ export function openDocEditor({
           </select>
         </label>
         <label class="fd-check"><input type="checkbox" data-fd-landscape ${doc.page.landscape ? 'checked' : ''}> Landscape</label>
-        <label class="fd-pick"><span>Margin guide ${doc.page.margin} mm</span>
+        <label class="fd-pick"><span>Margin guide <b data-fd-margin-out>${doc.page.margin}</b> mm</span>
           <input type="range" min="0" max="40" step="1" value="${doc.page.margin}" data-fd-margin />
         </label>
       </div>
@@ -349,6 +412,10 @@ export function openDocEditor({
         <button type="button" class="${doc.source === 'design' ? 'on' : ''}" data-fd-source="design">Design</button>
         <button type="button" class="${doc.source === 'upload' ? 'on' : ''}" data-fd-source="upload">Uploaded PDF</button>
       </div>` : ''}
+      ${readOnly ? '' : `<div class="fd-hist">
+        <button class="wb-icon-btn" type="button" data-fd-undo title="Undo (Ctrl+Z)" aria-label="Undo" ${past.length ? '' : 'disabled'}><i class="ti ti-arrow-back-up"></i></button>
+        <button class="wb-icon-btn" type="button" data-fd-redo title="Redo (Ctrl+Shift+Z)" aria-label="Redo" ${future.length ? '' : 'disabled'}><i class="ti ti-arrow-forward-up"></i></button>
+      </div>`}
       ${readOnly ? '' : '<button class="btn btn-sm fd-save" type="button" data-fd-save><i class="ti ti-device-floppy"></i>Save</button>'}
       <div class="fd-vwrap">
         <button class="btn btn-sm" type="button" data-fd-versions><i class="ti ti-history"></i>Versions${doc.versions.length ? ` (${doc.versions.length})` : ''}</button>
@@ -395,12 +462,23 @@ export function openDocEditor({
     if (!el) return;
     const grip = event.target.closest('[data-fd-grip]')?.dataset.fdGrip || '';
     drag = {
-      id, grip, startX: event.clientX, startY: event.clientY, from: { ...el }, moved: false,
+      id,
+      grip,
+      startX: event.clientX,
+      startY: event.clientY,
+      from: { ...el },
+      moved: false,
+      pointerId: event.pointerId,
+      // Where Undo goes back to. Taken now, because by the time the pointer lifts the document
+      // has been rewritten on every pointermove.
+      was: doc,
     };
-    // Captured so a fast drag that leaves the page element still tracks -- without this, moving
-    // quickly drops the element wherever the pointer happened to leave.
-    overlay.setPointerCapture(event.pointerId);
-    event.preventDefault();
+    // Deliberately NOT captured here, and the default deliberately NOT prevented. A press that
+    // turns out to be a click -- or the first half of a double-click -- has to reach the browser
+    // as an ordinary one. Capturing the pointer retargets the click AND the dblclick that follow
+    // it to the capturing node, and while that node was the overlay, `closest('[data-fd-el]')`
+    // found nothing: double-clicking a text box did nothing at all, so nothing could be typed.
+    // The capture is taken in pointermove instead, once this is definitely a drag.
   });
 
   overlay.addEventListener('pointermove', (event) => {
@@ -408,7 +486,17 @@ export function openDocEditor({
     const dxMm = (event.clientX - drag.startX) / scale;
     const dyMm = (event.clientY - drag.startY) / scale;
     if (!drag.moved && Math.abs(dxMm) < 0.3 && Math.abs(dyMm) < 0.3) return;
-    drag.moved = true;
+    if (!drag.moved) {
+      drag.moved = true;
+      // Now that it is a drag and not a click, the pointer is captured -- on the element being
+      // dragged, never on the overlay -- so a fast drag that leaves the page still tracks
+      // instead of dropping the element wherever the pointer happened to leave.
+      const node = pageEl()?.querySelector(`[data-fd-el="${CSS.escape(drag.id)}"]`);
+      try { node?.setPointerCapture?.(drag.pointerId); } catch { /* a pointer already gone */ }
+      // And only now is the default prevented, which stops the page selecting text under the
+      // drag without stopping the click that a press-and-release is.
+      event.preventDefault();
+    }
     const next = drag.grip
       ? resizeElement({ ...doc, elements: doc.elements.map((el) => (el.id === drag.id ? drag.from : el)) }, drag.id, drag.grip, dxMm, dyMm)
       : moveElement({ ...doc, elements: doc.elements.map((el) => (el.id === drag.id ? drag.from : el)) }, drag.id, drag.from.x + dxMm, drag.from.y + dyMm);
@@ -433,7 +521,7 @@ export function openDocEditor({
     drag = null;
     // A click that never moved is a selection, already handled, and must not write a version of
     // the document identical to the one already stored.
-    if (settled.moved) commit(doc);
+    if (settled.moved) commit(doc, { before: settled.was });
   });
 
   // --- keyboard ---------------------------------------------------------------------------------
@@ -449,10 +537,20 @@ export function openDocEditor({
       close();
       return;
     }
+    const tag = document.activeElement?.tagName;
+    const inABox = editing || tag === 'INPUT' || tag === 'TEXTAREA';
+    if ((event.ctrlKey || event.metaKey) && /^[zy]$/i.test(event.key)) {
+      // Inside a box, the browser's own undo is the right one: it is undoing letters, not the
+      // document, and taking that away from somebody mid-sentence is worse than not having it.
+      if (inABox) return;
+      event.preventDefault();
+      const forward = event.key.toLowerCase() === 'y' || event.shiftKey;
+      if (!(forward ? redo() : undo())) say(`Nothing left to ${forward ? 'redo' : 'undo'}.`);
+      return;
+    }
     if (readOnly || !sel) return;
     // Delete and the arrow keys belong to the text while it is being typed into.
     if (editing) return;
-    const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
@@ -477,6 +575,9 @@ export function openDocEditor({
     const hit = (attr) => event.target.closest(`[data-fd-${attr}]`);
 
     if (hit('close')) { close(); return; }
+
+    if (hit('undo')) { if (!undo()) say('Nothing left to undo.'); return; }
+    if (hit('redo')) { if (!redo()) say('Nothing left to redo.'); return; }
 
     // Clicking the paper but not an element clears the selection, which is how every editor
     // behaves and the only way to get the inspector's help text back.
@@ -550,7 +651,7 @@ export function openDocEditor({
 
     if (hit('versions')) { versionsOpen = !versionsOpen; paint(); return; }
 
-    if (hit('save')) { keepVersion(''); return; }
+    if (hit('save')) { saveNow(); return; }
 
     if (hit('save-version')) {
       // Named, because somebody looking at a list of versions is naming one among many. The header
@@ -581,11 +682,34 @@ export function openDocEditor({
   });
 
   /**
+   * Save the document where it lives.
+   *
+   * This button used to keep a VERSION and nothing else. It read as "saved" and was not: a
+   * starting document laid out in a field's panel was still only in a hidden input, and closing
+   * the panel took it with it -- press Save, close, reopen, blank page. Keeping a version is a
+   * different thing, wanted far less often, and it has its own button inside Versions.
+   *
+   * Where "where it lives" is belongs to whoever opened the editor, so it says what it managed
+   * to do rather than claiming a save it cannot see through.
+   */
+  function saveNow() {
+    if (readOnly) return;
+    // Written again first: an inspector box still focused has committed already, but a document
+    // whose host input was replaced by a repaint underneath has not.
+    write(doc);
+    try {
+      say(onSave ? (onSave(doc) || 'Saved.') : 'Saved.');
+    } catch (error) {
+      say(`That could not be saved — ${error.message}`, 'bad');
+    }
+  }
+
+  /**
    * Keep what is on the page as a version.
    *
-   * An unnamed save is stamped with the date and time rather than prompting: the header button is
-   * pressed mid-edit, and having to answer a dialog every time is the reason people stop pressing
-   * it. Whoever wants a name uses the one in the Versions panel.
+   * An unnamed save is stamped with the date and time rather than prompting: having to answer a
+   * dialog every time is the reason people stop pressing a button. Whoever wants a name uses the
+   * one in the Versions panel.
    */
   function keepVersion(label) {
     const at = new Date();
@@ -619,13 +743,17 @@ export function openDocEditor({
 
     if (target.matches('[data-fd-title]')) {
       // Written straight through without a repaint: repainting would move the caret to the front
-      // of the box on every keystroke.
-      commit({ ...doc, title: target.value }, { repaint: false });
+      // of the box on every keystroke. One mark for the whole burst, so a typed name is one undo.
+      commit({ ...doc, title: target.value }, { repaint: false, mark: 'title' });
       return;
     }
 
     if (target.matches('[data-fd-margin]')) {
-      commit(setPage(doc, { margin: Number(target.value) }));
+      // The page only. A full repaint rebuilds the rail, which means rebuilding the slider being
+      // dragged -- and a slider replaced under the pointer stops following it after one step.
+      commit(setPage(doc, { margin: Number(target.value) }), { repaint: 'page', mark: 'margin' });
+      const out = $('[data-fd-margin-out]');
+      if (out) out.textContent = String(doc.page.margin);
       return;
     }
 
@@ -637,25 +765,19 @@ export function openDocEditor({
       const next = geo === 'x' || geo === 'y'
         ? moveElement(doc, sel, geo === 'x' ? value : el.x, geo === 'y' ? value : el.y)
         : resizeElement(doc, sel, 'se', geo === 'w' ? value - el.w : 0, geo === 'h' ? value - el.h : 0);
-      doc = normalizeDoc(next, () => uid('e'));
-      write(doc);
-      paintPage();
+      commit(next, { repaint: 'page', mark: `geo:${geo}:${sel}` });
       return;
     }
 
     const styleKey = target.dataset.fdStyle;
     if (styleKey && sel) {
       const raw = target.type === 'number' || target.type === 'range' ? Number(target.value) : target.value;
-      doc = normalizeDoc(styleElement(doc, sel, { style: { [styleKey]: raw } }), () => uid('e'));
-      write(doc);
-      paintPage();
+      commit(styleElement(doc, sel, { style: { [styleKey]: raw } }), { repaint: 'page', mark: `style:${styleKey}:${sel}` });
       return;
     }
 
     if (target.matches('[data-fd-fallback]') && sel) {
-      doc = normalizeDoc(styleElement(doc, sel, { fallback: target.value }), () => uid('e'));
-      write(doc);
-      paintPage();
+      commit(styleElement(doc, sel, { fallback: target.value }), { repaint: 'page', mark: `fallback:${sel}` });
     }
   });
 
@@ -736,7 +858,13 @@ export function openDocEditor({
 
   overlay.addEventListener('dblclick', (event) => {
     const host = event.target.closest('[data-fd-el]');
-    const el = doc.elements.find((entry) => entry.id === host?.dataset.fdEl);
+    // A double-click that lands on the paper but not on an element still means the SELECTED
+    // one, and this is what made text permanently unwritable-into: the first click of the pair
+    // selects, selecting repaints the page, and the node that click landed on is gone by the
+    // time the second arrives -- so the browser fires the dblclick at their nearest surviving
+    // common ancestor, the paper. A pointer capture taken for a drag retargets it the same way.
+    if (!host && !event.target.closest?.('[data-fd-page]')) return;
+    const el = doc.elements.find((entry) => entry.id === (host?.dataset.fdEl || sel));
     if (!el || el.kind !== 'text' || readOnly) return;
     sel = el.id;
     editing = el.id;
@@ -1029,10 +1157,69 @@ export function openDocEditor({
 export function openFor(fieldId, ctx = {}) {
   const {
     state, wbFind, render, formatDate, memberName, wbItemTitle,
+    wbSave, wbCollectModalDraft, fieldTypeLabel,
   } = ctx;
   const escapeId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(fieldId) : fieldId;
-  const holder = document.querySelector(`[data-f="${escapeId}"]`);
+  const find = () => document.querySelector(`[data-f="${escapeId}"]`);
+  let holder = find();
   if (!holder) throw new Error('That form is no longer on the page. Reload and try again.');
+  /**
+   * The input the document is kept in, found again every single time it is used.
+   *
+   * The page underneath can repaint while the builder is open -- a toast does it, a save does
+   * it, a refresh does it -- and a repaint replaces this input with a NEW one holding the value
+   * from before the builder opened. Holding on to the first node meant every write after that
+   * landed on a node nobody reads, and the next open read the stale replacement: which is
+   * exactly what "I saved it, closed it, opened it, and it was blank" was.
+   */
+  const live = () => { const now = find(); if (now) holder = now; return holder; };
+
+  /**
+   * Save the document into whatever panel is holding it.
+   *
+   * Save used to keep a VERSION and nothing else, so a starting document laid out in a field's
+   * panel was still only in that hidden input: close the panel and it was gone, which is what
+   * "I pressed Save and it came back blank" was.
+   *
+   * Where the document belongs depends on what it is sitting in. A field's starting document
+   * belongs to the field, and a field that already exists can be written to the app from here
+   * without closing the panel over it. A record's document is saved with the record, whose own
+   * Save button is one click away on the form behind -- half-submitting a form nobody finished
+   * would be worse than saying so plainly.
+   */
+  function saveHost() {
+    const open = state?.builderModal;
+    if (open?.kind === 'item') return 'Kept on the form — press Save on the record to store it.';
+    if (open?.kind !== 'field' || !wbCollectModalDraft || !wbFind || !wbSave) {
+      return 'Kept on the panel — press Save there to store it.';
+    }
+    // Reads the hidden input, and the rest of the panel with it, back into the draft -- so what
+    // was just laid out is what gets stored, and a repaint after this draws the new document
+    // rather than the one the panel opened with.
+    wbCollectModalDraft();
+    const app = wbFind(open.companyId, open.workspaceId, open.appId).app;
+    const target = open.collectionId ? (app?.collections || []).find((c) => c.id === open.collectionId) : app;
+    const at = open.editId ? (target?.fields || []).findIndex((f) => f.id === open.editId) : -1;
+    // A field still being ADDED has nowhere to go yet: putting it on the app now would create a
+    // field behind the back of somebody who has not pressed Add field.
+    if (at < 0) return `Kept on the panel — press "${open.editId ? 'Save field' : 'Add field'}" to put it on the app.`;
+    // The same default the dialog's own Save applies, so the shorter route cannot leave a field
+    // nameless.
+    open.draft.label = String(open.draft.label || '').trim()
+      || `Untitled ${fieldTypeLabel ? fieldTypeLabel(open.draft.type) : open.draft.type} field`;
+    target.fields[at] = open.draft;
+    wbSave(open.companyId);
+    return 'Saved to the field. Every record starts from this layout.';
+  }
+
+  /** Closing over a field's panel: redraw it so the thumbnail catches up with the document. */
+  function doneHost() {
+    // Only the field panel. A record's form is drawn from a draft that does NOT hold what has
+    // been typed into it, so repainting one would take the rest of the form down with it.
+    if (state?.builderModal?.kind !== 'field' || !wbCollectModalDraft) return;
+    wbCollectModalDraft();
+    render?.();
+  }
 
   const modal = state?.builderModal || {};
   const found = wbFind ? wbFind(modal.companyId, modal.workspaceId, modal.appId) : {};
@@ -1060,14 +1247,17 @@ export function openFor(fieldId, ctx = {}) {
       emailTo: emailField ? String(hostValues[emailField.id] || '') : '',
       who: state?.session?.profile?.id || '',
     },
-    read: () => { try { return JSON.parse(holder.value || '{}'); } catch { return {}; } },
+    read: () => { try { return JSON.parse(live().value || '{}'); } catch { return {}; } },
     write: (doc) => {
-      holder.value = JSON.stringify(doc);
+      const input = live();
+      input.value = JSON.stringify(doc);
       // The same two events an ordinary input fires, so whatever is watching the form -- the
       // draft collector, the dirty flag, the save button -- sees this as a normal edit.
-      holder.dispatchEvent(new Event('input', { bubbles: true }));
-      holder.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     },
+    onSave: saveHost,
+    onClose: doneHost,
   });
 }
 
@@ -1114,6 +1304,14 @@ export function openForRecord(fieldId, seat, ctx = {}) {
     // show a blank page for a record that displays a thumbnail one click away.
     read: () => (docFilled(stored) ? stored : (field?.config?.doc || {})),
     write: (doc) => { item.values[fieldId] = JSON.stringify(doc); dirty = true; },
+    // A record's document is saved with the record, and from here that is one call -- so Save
+    // means saved, not "kept a version and hoped".
+    onSave: () => {
+      wbSave(companyId);
+      dirty = false;
+      render?.();
+      return 'Saved to the record.';
+    },
     onClose: () => {
       if (!dirty) return;
       wbSave(companyId);
