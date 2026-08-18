@@ -242,6 +242,7 @@ const FACTORY_MODULES = [
   // missing key through, which is the ReferenceError this whole file exists to catch.
   ['src/underwriting/takeoff-card.js', 'createTakeoffCard', 'createUnderwriterPage'],
   ['src/workspace/button-push.js', 'createButtonPush'],
+  ['src/workspace/attachments.js', 'createAttachments'],
   ['src/workspace/app-settings.js', 'createAppSettings'],
   ['src/workspace/recycle-bin.js', 'createRecycleBin'],
   ['src/workspace/items-view.js', 'createItemsView'],

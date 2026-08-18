@@ -12,8 +12,26 @@ const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8
 const recordPage = readFileSync(new URL('../src/workspace/record-page.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // The Activity / Comments card moved out of main.js into its own fetched module too.
 const panel = readFileSync(new URL('../src/workspace/record-panel.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const slice = (name) => (name === 'wbViewItemPage' ? recordPage : main)
-  .match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0] || '';
+// The record page owns its own code now -- the page, and the inline editor that was lifted out
+// of main.js with it. Looked for there first and in main.js second, so a function moving between
+// the two does not need every assertion about it rewritten.
+// Closed on the brace at the function's OWN indent. The record page's functions live inside a
+// factory, so they close on `\n  }` -- a pattern anchored to a bare `\n}` runs on to the end of
+// the factory and quietly makes every assertion about one function true of all of them.
+// Bounded by the NEXT function at the same indent, not by the first closing brace at that
+// indent: a `.map((c) => {` callback inside a template literal closes at column 2 as well, so
+// brace-matching by indent cuts the body off part-way and every assertion after that point
+// silently passes on text it never saw.
+const slice = (name) => {
+  for (const src of [recordPage, main]) {
+    const at = src.match(new RegExp(`(^|\\n)([ \\t]*)(?:async )?function ${name}\\(`));
+    if (!at) continue;
+    const start = at.index + (at[1] ? 1 : 0);
+    const next = src.indexOf(`\n${at[2]}function `, start + 1);
+    return next < 0 ? src.slice(start) : src.slice(start, next);
+  }
+  return '';
+};
 
 test('clicking a row navigates instead of opening a modal', () => {
   const source = main.match(/el\.addEventListener\('click', \(e\) => \{[\s\S]*?\n {6}\}\);/)?.[0] || '';
@@ -27,9 +45,50 @@ test('the record route renders a page, not the app list', () => {
   assert.match(main, /wbViewItemPage\(route, companyId, workspace, app, item\)/);
 });
 
-test('the back button names the app', () => {
-  // "All Jobs", not "Back" -- it says where it goes, so it reads the same as the deck row.
-  assert.match(slice('wbViewItemPage'), /<i class="ti ti-arrow-left"><\/i>All \$\{h\(app\.name\)\}/);
+test('the header is one row: who, where in the deck, what you can do', () => {
+  // It used to be two stacked rows -- a bar with the back link and the counter, and a second
+  // row underneath with the icon and the name. That spent a whole line of a STICKY header on a
+  // back arrow and a page count.
+  const page = slice('wbViewItemPage');
+  assert.ok(!/wb-record-head/.test(page), 'the second row is gone');
+  assert.match(page, /<div class="wb-record-lead">[\s\S]*?wb-record-back[\s\S]*?wb-record-ic[\s\S]*?wb-record-title[\s\S]*?<\/div>/,
+    'back, icon and name are one group on the left');
+  // Order inside the row: the lead, then the stepper, then the controls.
+  assert.ok(page.indexOf('wb-record-lead') < page.indexOf('${stepper}'));
+  assert.ok(page.indexOf('${stepper}') < page.indexOf('wb-dash-controls'));
+});
+
+test('the counter is centred against the header, not against what is left of it', () => {
+  // A flex row with auto margins centres the counter in the LEFTOVER space, so a long record
+  // name shoves it right and it moves from record to record. Explicit columns, and each child
+  // placed into one, so a missing stepper or a missing Customize does not slide the others.
+  const bar = styles.match(/\.wb-record-bar \{[^}]*\}/)[0];
+  assert.match(bar, /display: grid/);
+  assert.match(bar, /grid-template-columns: minmax\(0, 1fr\) auto minmax\(0, 1fr\)/);
+  assert.match(styles, /\.wb-record-bar \.wb-record-step \{[^}]*grid-column: 2;[^}]*justify-self: center/);
+  assert.match(styles, /\.wb-record-bar \.wb-dash-controls \{[^}]*grid-column: 3;[^}]*justify-self: end/);
+  assert.match(styles, /\.wb-record-lead \{[^}]*grid-column: 1/);
+  // Three columns need room; below that it stacks rather than crushing the name.
+  assert.match(styles, /@media \(max-width: 720px\) \{\s*\.wb-record-bar \{ grid-template-columns: minmax\(0, 1fr\) auto; \}/);
+});
+
+test('a long record name is truncated rather than pushing the row apart', () => {
+  // Both lines of the lead are one line each now that the header is a single row.
+  assert.match(styles, /\.wb-record-title h1 \{[^}]*text-overflow: ellipsis/);
+  assert.match(styles, /\.wb-record-meta \{[^}]*text-overflow: ellipsis/);
+  assert.match(styles, /\.wb-record-lead \{[^}]*min-width: 0/, 'or the flex child refuses to shrink');
+});
+
+test('the back button is one icon, and still says where it goes', () => {
+  // It used to read "All Jobs". Asked for as a single icon, so the visual label goes -- but the
+  // information does NOT: an unlabelled arrow is announced as "link" and answers nothing on
+  // hover, and "All Jobs" is the whole reason it reads the same as the deck row it came from.
+  const page = slice('wbViewItemPage');
+  assert.match(page, /class="wb-record-back"[\s\S]*?title="All \$\{h\(app\.name\)\}"/);
+  assert.match(page, /aria-label="All \$\{h\(app\.name\)\}"/);
+  assert.match(page, /<i class="ti ti-arrow-left"><\/i><\/a>/, 'nothing but the icon inside it');
+  // And it is sized as a control rather than inheriting the old pill's text padding.
+  assert.match(styles, /\.wb-record-back \{[^}]*justify-content: center;/);
 });
 
 test('back returns to the list you left, filters intact', () => {
@@ -107,8 +166,9 @@ test('clicking away saves, and Escape puts it back', () => {
 
 test('an inline save is a real save, not a quieter one', () => {
   // A change made here must not skip what the modal did, or there are two ways to edit a
-  // record and they drift.
-  const save = slice('wbSaveInlineValue');
+  // record and they drift. The writing half now lives in wbCommitFieldValue so the map pin
+  // can go through it too -- which is the same argument one level along.
+  const save = slice('wbCommitFieldValue');
   assert.match(save, /wbLogActivity\(workspace, \{/);
   assert.match(save, /wbNotifyItem\(companyId, workspace, app, item/);
   assert.match(save, /wbRunAutomations\(companyId, workspace, app, item, 'updated', prev\)/);
@@ -116,20 +176,37 @@ test('an inline save is a real save, not a quieter one', () => {
   assert.match(save, /item\.updatedAt = stamp;/);
 });
 
+test('every way of writing one field goes through the one writer', () => {
+  // The point of the split. A second path that wrote item.values itself would be a second
+  // place for history, notifications and automations to be forgotten.
+  assert.match(slice('wbSaveInlineValue'), /wbCommitFieldValue\(companyId, workspaceId, appId, itemId, field, value\)/);
+  // The writer moved into the record page with the rest of the inline editor, so main.js reaches
+  // it through the module it already loads to draw the page.
+  assert.match(slice('saveLocationPicker'), /await loadWbViewItemPage\(\)/);
+  assert.match(slice('saveLocationPicker'), /recordPage\.commitFieldValue\(picker\.companyId, picker\.workspaceId, picker\.appId, picker\.itemId, field, address\)/);
+});
+
 test('it refuses what the form refused, and puts the value back', () => {
+  const rules = slice('wbCommitFieldValue');
+  assert.match(rules, /if \(field\.required && emptied\)/);
+  assert.match(rules, /isValidEmail\(String\(value\)\.trim\(\)\)/);
+  // A refusal is handed back rather than shown, so the caller decides what to put back: the
+  // inline editor restores its cell, the pin leaves its dialog open.
+  assert.match(rules, /return \{ saved: false, refusal: `"\$\{field\.label\}" is required\.` \}/);
   const save = slice('wbSaveInlineValue');
-  assert.match(save, /if \(field\.required && emptied\)/);
-  assert.match(save, /isValidEmail\(String\(value\)\.trim\(\)\)/);
   assert.match(save, /const restore = \(\) => \{ cell\.innerHTML = cell\.dataset\.was;/);
+  assert.match(save, /if \(outcome\.refusal\) \{ showToast\(outcome\.refusal, 'local', 'Workspaces'\); restore\(\); return; \}/);
 });
 
 test('opening a value and leaving it alone changes nothing', () => {
   // Clicking a value and clicking away is a normal thing to do. It must not stamp the record
   // as edited, log activity, or fire automations at everybody.
   assert.match(
-    slice('wbSaveInlineValue'),
-    /if \(JSON\.stringify\(before \?\? ''\) === JSON\.stringify\(value \?\? ''\)\) \{ restore\(\); return; \}/,
+    slice('wbCommitFieldValue'),
+    /if \(JSON\.stringify\(before \?\? ''\) === JSON\.stringify\(value \?\? ''\)\) return \{ saved: false, refusal: '' \};/,
   );
+  // And the cell goes back rather than being left as an open editor over an unchanged value.
+  assert.match(slice('wbSaveInlineValue'), /if \(!outcome\.saved\) \{ restore\(\); return; \}/);
 });
 
 // --- comments work in both places ---------------------------------------------------------
@@ -159,10 +236,25 @@ test('which comment is being edited is not stored on the modal', () => {
   assert.match(panel, /state\.wbEditingCommentId === entry\.id/);
 });
 
-test('the page binds its own comment handlers', () => {
-  for (const attr of ['data-wb-add-comment', 'data-wb-comment-edit', 'data-wb-comment-save', 'data-wb-comment-del']) {
-    assert.match(main, new RegExp(`bind\\('\\[${attr}\\]'`), `${attr} is unbound on the page`);
+test('one set of comment handlers serves the page and the modal alike', () => {
+  // There used to be two copies of these five bindings, one per surface, differing only in
+  // whether they remembered the modal's scroll. Every handler resolves which record it is on
+  // through wbCommentContext anyway, so the split bought nothing and cost a second place for
+  // the next binding to be forgotten in.
+  for (const attr of ['data-wb-add-comment', 'data-wb-comment-edit', 'data-wb-comment-cancel', 'data-wb-comment-save', 'data-wb-comment-del']) {
+    assert.ok(main.includes(`[${attr}]`), `${attr} is unbound`);
+    assert.ok(!new RegExp(`bind\\('\\[${attr}\\]'`).test(main), `${attr} must not also be bound per render`);
   }
+  // Delegated from the document, which is what makes one set enough.
+  assert.match(main, /const cmtAct = event\.target\.closest\('\[data-wb-add-comment\]/);
+  assert.match(main, /wbCommentAction\(cmtAct\)/);
+  const act = slice('wbCommentAction');
+  assert.match(act, /wbSaveEditedComment\(wbCommentSave\)/);
+  assert.match(act, /wbDeleteItemComment\(wbCommentDel\)/);
+  assert.match(act, /wbAddItemComment\(\)/);
+  // The scroll is kept for the modal and is a no-op on the page, which is why one path can
+  // serve both without the page losing its position.
+  assert.match(act, /wbKeepModalScroll\(\)/);
 });
 
 test('the record page reads on a phone', () => {
@@ -175,7 +267,10 @@ test('the editor waits for its module instead of blanking the value', () => {
   // the builder modal used to pull that in. Opening an editor cold blanked the cell, and
   // focusout then read no input, got '' back, and wrote it over the real value.
   const open = slice('wbBindInlineEdits');
-  assert.match(open, /if \(!wbFieldUiModule\) \{/);
+  // Asked rather than read: the flag is a module-level `let` in main.js, so a value handed over
+  // once at construction would be the null it held before anything had been fetched, for ever.
+  assert.match(open, /if \(!wbFieldUiReady\(\)\) \{/);
+  assert.match(main, /wbFieldUiReady: \(\) => !!wbFieldUiModule/);
   assert.match(open, /wbLoadFieldUi\(\)\s*[\r\n]+\s*\.then\(\(\) => open\(true\)\)/);
   // Bounded: a load that resolves without leaving the module usable must not re-enter
   // forever and hang the click.
@@ -199,7 +294,7 @@ test('an inline save recomputes derived fields before automations run', () => {
   // runs the rules. Inline editing skipped the sync, so an automation watching progress read
   // the stale number: ticking the last checklist step on a card fired it, ticking the same
   // step on the record page did not.
-  const save = slice('wbSaveInlineValue');
+  const save = slice('wbCommitFieldValue');
   assert.match(save, /wbSyncLinkedProgress\(app, item, field\.id\);/);
   assert.ok(
     save.indexOf('wbSyncLinkedProgress(app, item, field.id);') < save.indexOf('wbRunAutomations('),
@@ -261,6 +356,52 @@ test('the app strip pins to its scroll container, flush under the header', () =>
   assert.match(styles, /\.wb-topbar \{[\s\S]*?overflow: visible;/);
 });
 
+// ---- the app strip stays on top, on a record too ---------------------------------------------
+//
+// "I want the Activity and the apps to stay on top even when I'm inside the item record."
+//
+// A record is a page INSIDE an app. The strip was drawn on the app's own pages and on the
+// workspace home and nowhere else, so opening a record took the switcher away and the only way
+// to the next app was back out to the list first.
+
+test('the record route draws the app strip, with its own app marked as the one you are in', () => {
+  const source = main.match(/if \(app && itemId\) \{[\s\S]*?\n {2}\}/)?.[0] || '';
+  assert.match(source, /wbWorkspaceHeader\(companyId, workspace, app\.id\)/, 'no strip on a record');
+  // Before the record, not after it: it is the top of the page.
+  assert.ok(
+    source.indexOf('wbWorkspaceHeader') < source.indexOf('wbViewItemPage'),
+    'the strip belongs above the record, not below it',
+  );
+  // A record that has been deleted keeps it too — that page is still inside the app.
+  assert.match(source, /wbWorkspaceHeader\(companyId, workspace, app\.id\)\}\$\{item/);
+});
+
+test('the record header stops below the strip instead of sliding under it', () => {
+  // Both stick to the same scroll container. At a negative offset they claim the same spot and
+  // the lower z-index disappears on scroll, which is the bug the app tab row already had.
+  const rule = styles.match(/\.wb-record-top \{([\s\S]*?)\n\}/)?.[1] || '';
+  assert.match(rule, /position: sticky;/);
+  assert.match(rule, /top: var\(--wb-strip-h, 0px\);/);
+  assert.ok(!/top: -\d/.test(rule), 'a negative offset puts it under the strip');
+  assert.ok(!/margin: -\d+px/.test(rule), 'and pulls it up into the strip when nothing is scrolled');
+  // Opaque and full-bleed, or the cards show through it as they pass underneath.
+  assert.match(rule, /background: var\(--surface-2/);
+  assert.match(rule, /margin: 0 -24px;/);
+  // The strip stays above it.
+  assert.match(styles, /\.wb-topbar \{[\s\S]*?z-index: 30;/);
+  assert.match(rule, /z-index: 8;/);
+});
+
+test('the record is a column, so its header has room to stick', () => {
+  // A grid item's containing block is its own grid area — one row, sized to the item — so
+  // sticky had nowhere to move and never worked. A flex item's is the whole container.
+  // The gap is a look and has since been tightened; the column is the rule.
+  const rule = styles.match(/\n\.wb-record \{([^}]*)\}/);
+  assert.ok(rule);
+  assert.match(rule[1], /display: flex/);
+  assert.match(rule[1], /flex-direction: column/);
+});
+
 // ---- each panel on a record scrolls itself ---------------------------------------------------
 //
 // "Separate the scroll of the contacts record to the activity and comment section."
@@ -271,12 +412,18 @@ test('the app strip pins to its scroll container, flush under the header', () =>
 
 test('a record panel taller than the screen scrolls inside itself', () => {
   const rule = styles.match(/\.wb-record \.wb-dash-grid > \.wb-w:not\(\.editing\) \{([\s\S]*?)\}/)?.[1] || '';
-  assert.match(rule, /max-height: calc\(100vh - var\(--wb-record-chrome\)\)/);
+  // The strip is subtracted separately: it is measured, not counted, so folding it into the
+  // constant would be wrong by however much it moved.
+  // ONE measured number, not a tally. The cap used to be `100vh - chrome - strip - header`,
+  // three values that had to add up to whatever was above the cards -- and the moment the
+  // header collapsed to one row the sum was 56px out and every card stopped short. The grid's
+  // own top already contains all four, whatever they are doing.
+  assert.match(rule, /max-height: calc\(100dvh - var\(--wb-record-grid-top, 300px\) - var\(--wb-record-foot\)\)/);
   assert.match(rule, /overflow-y: auto/);
   // A scroll that reaches its end must not carry on into the page behind it -- the whole point
   // is that the two panels do not move each other.
   assert.match(rule, /overscroll-behavior: contain/);
-  assert.match(styles, /--wb-record-chrome: \d+px;/);
+  assert.match(styles, /--wb-record-grid-top: \d+px;/, 'a value for the first paint');
 });
 
 test('the cap is scoped to the record, not to every grid that shares the class', () => {

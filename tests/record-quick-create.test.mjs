@@ -1,0 +1,183 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+import {
+  BLOCK_TYPES, QUICK_CREATE, blockMeta, blockSupported, layoutFor, normalizeBlock,
+  placeFieldInLayout, quickCreateField, quickEntry,
+} from '../src/workspace/record-layout.js';
+
+// "Add a new tile Quick Create... special fields that when you create it it will automatically
+// attach to the current opened record, and it will open a modal for it."
+//
+// The App Builder keys a record's values by field id and has no per-record attachment slot, so
+// "attached to this record" means: the app gains a field of that type and THIS record's value of
+// it is opened. These are the rules that follow from that.
+
+const page = readFileSync(new URL('../src/workspace/record-page.js', import.meta.url), 'utf8');
+const quick = readFileSync(new URL('../src/workspace/quick-create.js', import.meta.url), 'utf8');
+const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+
+const ids = () => { let n = 0; return () => `new-${(n += 1)}`; };
+
+// ---- the tile ---------------------------------------------------------------------------------
+
+test('Quick Create is offered as a card like any other', () => {
+  const meta = blockMeta('quick');
+  assert.ok(meta, 'it must be in BLOCK_TYPES or the Add-a-card dialog never lists it');
+  assert.equal(meta.label, 'Quick Create');
+  assert.equal(meta.config, false, 'there is nothing to configure on it');
+  assert.ok(BLOCK_TYPES.some((entry) => entry.type === 'quick'));
+  // Unlike Sub-items it needs nothing to exist first, so it is never offered blocked.
+  assert.equal(blockSupported({ collections: [] }, 'quick'), true);
+  // And it survives the normalizer rather than falling back to a field group.
+  assert.equal(normalizeBlock({ type: 'quick' }, ids()).type, 'quick');
+});
+
+// ---- which field it writes into -----------------------------------------------------------------
+
+test('the field is made once and reused, not once per press', () => {
+  const entry = quickEntry('sheet');
+  const app = { fields: [] };
+  const first = quickCreateField(app, entry, ids());
+  assert.equal(first.created, true);
+  assert.equal(first.field.type, 'sheet');
+  assert.equal(first.field.label, 'Spreadsheet');
+
+  app.fields.push(first.field);
+  const second = quickCreateField(app, entry, ids());
+  assert.equal(second.created, false, 'a second press must not grow a second column');
+  assert.equal(second.field, first.field);
+});
+
+test('it matches on type, so a renamed field is still the same one', () => {
+  // Somebody who renames "Spreadsheet" to "Takeoff" has not asked for a second spreadsheet.
+  const app = { fields: [{ id: 'f1', label: 'Takeoff', type: 'sheet' }] };
+  const found = quickCreateField(app, quickEntry('sheet'), ids());
+  assert.equal(found.created, false);
+  assert.equal(found.field.id, 'f1');
+});
+
+test('a hidden field of that type is not reused', () => {
+  // Hidden means it is not on the page, so opening it would open nothing anybody can see.
+  const app = { fields: [{ id: 'f1', label: 'Spreadsheet', type: 'sheet', hidden: true }] };
+  assert.equal(quickCreateField(app, quickEntry('sheet'), ids()).created, true);
+});
+
+test('every entry either names a field type or a module, never neither', () => {
+  QUICK_CREATE.forEach((entry) => {
+    assert.ok(entry.key && entry.label, `${entry.key} needs a key and a label`);
+    assert.ok(entry.field || entry.module, `${entry.key} does nothing`);
+  });
+  assert.deepEqual(
+    QUICK_CREATE.filter((entry) => entry.field).map((entry) => entry.field),
+    ['sheet', 'form', 'image', 'file'],
+  );
+  assert.equal(quickEntry('nonsense'), null);
+});
+
+// ---- a new field has to be visible --------------------------------------------------------------
+
+test('a made field is placed in the layout, or it is invisible on the page', () => {
+  // blockFields honours an explicit fieldIds list EXACTLY. A field in none of them renders
+  // nowhere, with nothing on screen to say why -- so Quick Create would look broken the first
+  // time it was pressed on a customised layout.
+  const blocks = [
+    { id: 'b1', type: 'fields', config: { fieldIds: ['a'] } },
+    { id: 'b2', type: 'fields', config: { fieldIds: ['b'] } },
+    { id: 'b3', type: 'comments', config: {} },
+  ];
+  const out = placeFieldInLayout(blocks, 'new-1');
+  assert.deepEqual(out[1].config.fieldIds, ['b', 'new-1'], 'appended to the last group');
+  assert.deepEqual(out[0].config.fieldIds, ['a'], 'the others are untouched');
+  assert.notEqual(out, blocks, 'the blocks are replaced, not mutated');
+});
+
+test('a layout that already shows every field is left alone', () => {
+  // fieldIds: null means "whatever fields exist", which is already true of the new one. Pinning
+  // it to a list it never had would freeze that group to the fields present today.
+  const blocks = [{ id: 'b1', type: 'fields', config: { fieldIds: null } }];
+  assert.equal(placeFieldInLayout(blocks, 'new-1'), blocks);
+  assert.equal(placeFieldInLayout([], 'new-1').length, 0);
+  assert.deepEqual(placeFieldInLayout(null, 'new-1'), []);
+});
+
+test('placing the same field twice does not list it twice', () => {
+  const blocks = [{ id: 'b1', type: 'fields', config: { fieldIds: ['a', 'new-1'] } }];
+  assert.equal(placeFieldInLayout(blocks, 'new-1'), blocks, 'it renders twice if it is listed twice');
+});
+
+test('a layout with no field group at all is left alone', () => {
+  // Nothing to append to, and inventing a group would be a layout change nobody asked for.
+  const blocks = [{ id: 'b1', type: 'quick', config: {} }];
+  assert.equal(placeFieldInLayout(blocks, 'new-1'), blocks);
+});
+
+// ---- the card ------------------------------------------------------------------------------------
+
+test('the card draws only what actually works', () => {
+  // Proposal is declared in the model -- it is next -- but nothing creates one yet, and a button
+  // that does nothing is worse than one that is not there.
+  assert.match(page, /\.filter\(\(entry\) => entry\.field\)/);
+  assert.match(page, /data-wb-quick="\$\{h\(entry\.key\)\}"/);
+  assert.ok(QUICK_CREATE.some((entry) => entry.key === 'proposal' && !entry.field));
+});
+
+test('only a manager sees the card, and the press is checked again anyway', () => {
+  assert.match(page, /if \(block\.type === 'quick'\)[\s\S]{0,400}?if \(!canManage\) return ''/);
+  // A card left open in a tab whose permission has since gone must not still write.
+  assert.match(quick, /if \(!can\('workspaces\.manage', companyId\)\)/);
+});
+
+test('the card carries the record it is on, because the listener outlives the render', () => {
+  assert.match(page, /data-wb-quick-seat="\$\{h\(\[companyId, workspace\.id, app\.id, item\.id\]\.join\('\|'\)\)\}"/);
+  assert.match(page, /closest\('\[data-wb-quick-seat\]'\)/);
+  assert.match(page, /if \(!itemId\) return;/, 'a card with no seat must do nothing, not guess');
+});
+
+test('the button is held while it works', () => {
+  // Making a field and then opening an editor is two awaits. A second press in between makes a
+  // second field.
+  assert.match(page, /button\.disabled = true;/);
+  assert.match(page, /\.finally\(\(\) => \{ button\.disabled = false; \}\)/);
+  assert.match(page, /if \(button\.disabled\) return;/);
+});
+
+test('it binds itself rather than adding a case to the entry bundle', () => {
+  // The record page module is already fetched whenever a record is on screen, and main.js has no
+  // room. One listener for the module's life, so a re-rendered card is never dead.
+  assert.match(page, /document\.addEventListener\('click'/);
+  assert.match(page, /if \(quickBound \|\| typeof document === 'undefined'\) return;/);
+  assert.ok(!/data-wb-quick/.test(main), 'main.js must not learn about the buttons');
+});
+
+test('main.js hands over every key the press needs', () => {
+  // Missing one is a ReferenceError on the first press and on no earlier code path.
+  const at = main.indexOf('createRecordPage({');
+  const passed = main.slice(at, main.indexOf('});', at));
+  for (const key of ['wbDoc', 'wbSave', 'wbUid', 'render', 'showToast', 'can', 'memberName']) {
+    assert.ok(passed.includes(key), `main.js must pass ${key}`);
+  }
+});
+
+test('the sheet and the document are opened by the seat they already understand', () => {
+  // Both editors take one string of four ids; building a second shape here would be a second
+  // thing to keep in step with them.
+  assert.match(quick, /\[companyId, workspaceId, appId, itemId\]\.join\('\|'\)/);
+  assert.match(quick, /import\('\.\.\/sheet\/sheet-editor\.js'\)/);
+  assert.match(quick, /import\('\.\.\/form\/doc-editor\.js'\)/);
+  // An image and a file have no modal of their own -- the cell is the control.
+  assert.match(quick, /data-wb-inline="\$\{escape\}"/);
+});
+
+test('every class the card uses is styled', () => {
+  ['wb-quick-grid', 'wb-quick-btn', 'wb-quick-ic', 'wb-quick-label'].forEach((name) => {
+    assert.ok(styles.includes(`.${name}`), `.${name} has no rule`);
+  });
+});
+
+test('a saved Quick Create card survives a reload', () => {
+  const app = { recordLayout: [{ id: 'b1', type: 'quick', size: 2, config: {} }] };
+  assert.equal(layoutFor(app, ids())[0].type, 'quick');
+});

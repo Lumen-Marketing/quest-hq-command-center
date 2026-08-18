@@ -27,10 +27,11 @@ const fn = (name) => {
 
 // One harness for all three transitions, so they are exercised against the same state the
 // way the app runs them, rather than three isolated snapshots.
-function harness(initialDraftValues = {}) {
-  const calls = { collected: 0, renders: 0, toasts: [] };
+function harness(initialDraftValues = {}, opts = {}) {
+  const calls = { collected: 0, renders: 0, toasts: [], commits: [] };
   const state = {
-    builderModal: {
+    // The record PAGE has no modal at all: that is the whole difference between the two paths.
+    builderModal: opts.onRecordPage ? null : {
       kind: 'item',
       companyId: 'co-1',
       workspaceId: 'ws-1',
@@ -43,9 +44,13 @@ function harness(initialDraftValues = {}) {
     modal: '',
   };
   const api = new Function(
-    'state', 'calls', 'typedIntoOtherFields',
+    'state', 'calls', 'typedIntoOtherFields', 'opts',
     `
     let locationPickerMap = {}, locationPickerMarker = {};
+    // Set by wbBindInlineEdits in the real app; the page's identity is not in the DOM.
+    let wbInlineRecord = opts.record === undefined
+      ? { companyId: 'co-1', workspaceId: 'ws-1', appId: 'app-1', itemId: 'item-1' }
+      : opts.record;
     const render = () => { calls.renders += 1; };
     const showToast = (msg) => { calls.toasts.push(msg); };
     // Stands in for the real one: it copies what is on screen into the draft. The point of
@@ -55,13 +60,31 @@ function harness(initialDraftValues = {}) {
       Object.assign(state.builderModal.draft.values, typedIntoOtherFields);
     };
     const locationPickerDefaultPin = () => ({ lat: 33.4484, lng: -112.074 });
-    const document = { querySelector: () => null };
+    const CSS = { escape: (value) => value };
+    // Selector-aware: saveLocationPicker looks for its own form and must not find one, or it
+    // would try to read a FormData that does not exist here.
+    const document = {
+      querySelector: (selector) => (
+        String(selector).startsWith('[data-f=') && opts.typed !== undefined ? { value: opts.typed } : null
+      ),
+    };
+    const wbFind = () => ({ app: opts.app === undefined ? {
+      fields: [{ id: 'loc', label: 'Location', type: 'location' }],
+      items: [{ id: 'item-1', values: { loc: 'Cebu' } }],
+    } : opts.app });
+    // The one writer moved into the record page's module with the rest of the inline editor, so
+    // main.js reaches it through the loader it already uses to draw the page.
+    const commitFieldValue = (companyId, workspaceId, appId, itemId, field, value) => {
+      calls.commits.push({ companyId, workspaceId, appId, itemId, field: field.id, value });
+      return opts.commit || { saved: true, refusal: '' };
+    };
+    const loadWbViewItemPage = async () => ({ commitFieldValue });
     ${fn('wbOpenLocationPicker')}
     ${fn('wbCloseLocationPicker')}
     ${fn('saveLocationPicker')}
     return { wbOpenLocationPicker, wbCloseLocationPicker, saveLocationPicker };
     `,
-  )(state, calls, { name: 'Roman Juan', phone: '+639-565-970762' });
+  )(state, calls, { name: 'Roman Juan', phone: '+639-565-970762' }, opts);
   return { state, calls, ...api };
 }
 
@@ -201,4 +224,106 @@ test('only the input carries the field id, not the pin beside it', () => {
   assert.equal((line.match(/data-f="/g) || []).length, 1, 'exactly one element may claim the id');
   assert.match(line, /<input class="wb-input" data-f=/, 'and it is the input');
   assert.match(line, /data-wb-loc-for=/, 'the pin gets its own hook');
+});
+
+// ---- the same pin, on the record page ---------------------------------------------------------
+//
+// "On this I want the button location to open the modal too to pick a location."
+//
+// The record page reuses the SAME field markup, so the pin was already drawn there -- and did
+// nothing at all, because wbOpenLocationPicker began `if (!m || !fieldId) return;` and there is
+// no builder modal on a page. These run the real function against a page-shaped state.
+
+test('the pin opens on the record page, where there is no modal to swap', () => {
+  const h = harness({}, { onRecordPage: true });
+  h.wbOpenLocationPicker('loc');
+  assert.equal(h.state.modal, 'location-picker', 'it opens over the page');
+  assert.equal(h.state.builderModal, null, 'and invents no modal to return to');
+  assert.equal(h.state.locationPicker.kind, 'wb-record');
+  assert.equal(h.state.locationPicker.field, 'loc');
+  // The record it belongs to travels with it: Save has no DOM to read it back from.
+  assert.equal(h.state.locationPicker.companyId, 'co-1');
+  assert.equal(h.state.locationPicker.workspaceId, 'ws-1');
+  assert.equal(h.state.locationPicker.appId, 'app-1');
+  assert.equal(h.state.locationPicker.itemId, 'item-1');
+  assert.equal(h.calls.collected, 0, 'there is no draft on a page to collect');
+});
+
+test('it seeds from the saved value, and from a half-typed one over that', () => {
+  const saved = harness({}, { onRecordPage: true });
+  saved.wbOpenLocationPicker('loc');
+  assert.equal(saved.state.locationPicker.address, 'Cebu', 'what the record already holds');
+
+  // Pressing the pin beside a box somebody is typing into must not throw away what is in it.
+  const typing = harness({}, { onRecordPage: true, typed: '58th Pl' });
+  typing.wbOpenLocationPicker('loc');
+  assert.equal(typing.state.locationPicker.address, '58th Pl');
+});
+
+test('saving from the page writes to the record through the one writer', async () => {
+  const h = harness({}, { onRecordPage: true });
+  h.wbOpenLocationPicker('loc');
+  h.state.locationPicker.address = '123 Real Street, Paradise Valley AZ';
+  await h.saveLocationPicker();
+
+  assert.deepEqual(h.calls.commits, [{
+    companyId: 'co-1', workspaceId: 'ws-1', appId: 'app-1', itemId: 'item-1',
+    field: 'loc', value: '123 Real Street, Paradise Valley AZ',
+  }], 'it must go through wbCommitFieldValue, so history and automations happen');
+  assert.equal(h.state.modal, '', 'the map closes');
+  assert.equal(h.state.locationPicker, null);
+  assert.ok(h.calls.toasts.some((msg) => /Location saved/.test(msg)));
+});
+
+test('a refused value leaves the map open rather than closing over the mistake', async () => {
+  const h = harness({}, { onRecordPage: true, commit: { saved: false, refusal: '"Location" is required.' } });
+  h.wbOpenLocationPicker('loc');
+  h.state.locationPicker.address = 'somewhere';
+  await h.saveLocationPicker();
+  assert.equal(h.state.modal, 'location-picker', 'closing would lose the pin they dropped');
+  assert.ok(h.calls.toasts.some((msg) => /required/.test(msg)));
+});
+
+test('an unchanged address says so instead of claiming a save', async () => {
+  const h = harness({}, { onRecordPage: true, commit: { saved: false, refusal: '' } });
+  h.wbOpenLocationPicker('loc');
+  h.state.locationPicker.address = 'Cebu';
+  await h.saveLocationPicker();
+  assert.equal(h.state.modal, '', 'nothing to fix, so it closes');
+  assert.ok(h.calls.toasts.some((msg) => /already the address/.test(msg)));
+});
+
+test('with no record and no modal the pin does nothing at all', () => {
+  // Rather than opening a map that cannot save anywhere.
+  const h = harness({}, { onRecordPage: true, record: null });
+  h.wbOpenLocationPicker('loc');
+  assert.equal(h.state.modal, '');
+  assert.equal(h.state.locationPicker, null);
+});
+
+test('a field or record that has gone is not picked for', () => {
+  const goneField = harness({}, {
+    onRecordPage: true,
+    app: { fields: [{ id: 'other', type: 'location' }], items: [{ id: 'item-1', values: {} }] },
+  });
+  goneField.wbOpenLocationPicker('loc');
+  assert.equal(goneField.state.modal, '', 'the field is no longer on the app');
+
+  const goneItem = harness({}, {
+    onRecordPage: true,
+    app: { fields: [{ id: 'loc', type: 'location' }], items: [] },
+  });
+  goneItem.wbOpenLocationPicker('loc');
+  assert.equal(goneItem.state.modal, '');
+});
+
+test('the modal path is untouched by the page path', () => {
+  // Both branches live in one function now, so this is the guard that adding the second did
+  // not quietly change the first.
+  const h = harness({ loc: 'Cebu' });
+  h.wbOpenLocationPicker('loc');
+  assert.equal(h.state.builderModal.kind, 'wb-location');
+  assert.equal(h.state.locationPicker.kind, 'wb-field');
+  assert.equal(h.state.modal, '', 'the modal path never touches the modal slot');
+  assert.equal(h.calls.collected, 1);
 });

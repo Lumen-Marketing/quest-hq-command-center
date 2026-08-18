@@ -50,7 +50,318 @@ export function createRecordPage(ctx) {
   const {
     appHref, can, companyPath, emptyState, formatDate, h, wbFieldIsEditable, wbFmtVal,
     wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state,
+    // The inline editor, moved here from main.js: it is only ever reachable from this page, and
+    // 12.8 KB of it was riding in the entry chunk for every session that never opens a record.
+    actorName, isValidEmail, render, showToast, wbBindRelationshipPickers, wbBindUrlControls,
+    wbFind, wbFieldUiReady, wbLoadFieldUi, wbLogActivity, wbMountChecklistFields,
+    wbMountDurationFields, wbMountFileFields, wbMountProgressFields, wbNotifyItem, wbPlainVal,
+    wbReadFieldInput, wbRenderFieldInput, wbRunAutomations, wbSave, wbSyncLinkedProgress,
   } = ctx;
+
+  // Quick Create binds itself, here, rather than through main.js's action dispatcher: this
+  // module is already fetched whenever a record is on screen, and the entry bundle has no room
+  // for another case. One delegated listener for the module's life, so re-rendering the card --
+  // which every press does -- never leaves a dead handler behind.
+  let quickBound = false;
+  function bindQuickCreate() {
+    if (quickBound || typeof document === 'undefined') return;
+    quickBound = true;
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest?.('[data-wb-quick]');
+      if (!button) return;
+      event.preventDefault();
+      if (button.disabled) return;
+      const [companyId, workspaceId, appId, itemId] = String(
+        button.closest('[data-wb-quick-seat]')?.dataset.wbQuickSeat || '',
+      ).split('|');
+      if (!itemId) return;
+      // Held while it works: making a field then opening an editor is two awaits, and a second
+      // press in between would make a second field.
+      button.disabled = true;
+      import('./quick-create.js')
+        .then((mod) => mod.press(button.dataset.wbQuick, {
+          companyId, workspaceId, appId, itemId,
+        }, ctx))
+        .catch((error) => ctx.showToast?.(error.message || 'That could not be created.', 'error', 'Workspaces'))
+        .finally(() => { button.disabled = false; });
+    });
+  }
+  bindQuickCreate();
+
+  /**
+   * Click a value, edit it in place, click away to save.
+   *
+   * The record page used to be read-only with an Edit button that opened the whole record in
+   * a modal: four interactions to change one field, and the record you were reading was
+   * replaced by a form. Here the value cell IS the control.
+   *
+   * The input is the SAME markup the modal used -- wbRenderFieldInput out, wbReadFieldInput
+   * back -- so every field type is editable inline with no per-type code, and a type added
+   * later works here without being taught to. wbReadFieldInput finds its element by
+   * [data-f="<field id>"] anywhere in the document, which is why rendering one input on its
+   * own is enough.
+   *
+   * Committing on focusout rather than on a Save button is the whole point of the request,
+   * but "focus left" and "focus moved inside my own control" look identical at the moment the
+   * event fires -- a <select>'s dropdown, the relationship picker's results list, a file
+   * dialog. So the decision is deferred a tick and then asks where focus actually landed.
+   */
+  // Where the record's cards actually start, measured from the top of the viewport.
+  //
+  // This replaces a hand-tallied sum. The panels used to be capped at
+  // `100vh - chrome - strip - header`, three numbers that had to add up to whatever was above
+  // them -- and the moment the header collapsed from two rows to one, the tally was 56px too
+  // big and every card stopped short of the bottom with nothing to say why. Fixing the header
+  // half of it left the other half still guessed.
+  //
+  // One measurement of the grid's own top is exact by construction: it already contains the
+  // window chrome, the topbar, the app strip and the record header, whatever any of them
+  // happen to be doing today. Nothing left to keep in step.
+  let gridSizer = null;
+  function measureRecordGrid(scope) {
+    const grid = scope.querySelector?.('[data-wb-rec-grid]');
+    const shell = grid?.closest?.('.quest-app');
+    if (!grid || !shell) return;
+    const measure = () => {
+      const top = Math.round(grid.getBoundingClientRect().top);
+      // Read while the surface is scrolled, `top` is smaller than the resting offset and the cap
+      // would grow past the screen. The header is sticky, so the resting value is the true one;
+      // a scrolled read is discarded rather than written.
+      if (top > 0 && !scrolledAway(grid)) shell.style.setProperty('--wb-record-grid-top', `${top}px`);
+    };
+    measure();
+    if (typeof ResizeObserver !== 'function') return;
+    // The node is rebuilt by every render, so the old observer watches an element that has gone.
+    gridSizer?.disconnect();
+    gridSizer = new ResizeObserver(measure);
+    gridSizer.observe(grid);
+  }
+
+  /** Whether the surface this grid sits in has been scrolled off its top. */
+  function scrolledAway(grid) {
+    return (grid.closest('.work-surface')?.scrollTop || 0) > 0;
+  }
+
+  function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
+    const scope = root || document;
+    measureRecordGrid(scope === document ? document : (scope.ownerDocument || document));
+    scope.querySelectorAll('[data-wb-inline]').forEach((cell) => {
+      if (cell.dataset.bound) return;
+      cell.dataset.bound = '1';
+
+      const open = (retried = false) => {
+        if (cell.dataset.editing) return;
+        const { app } = wbFind(companyId, workspaceId, appId);
+        const field = app?.fields.find((f) => f.id === cell.dataset.wbInline);
+        const item = app?.items.find((i) => i.id === itemId);
+        if (!field || !item) return;
+
+        // wbRenderFieldInput returns an EMPTY STRING until its module has been fetched, and
+        // that module is only pulled in by the builder modal. Opening an editor cold blanked
+        // the cell, and then focusout read no input, got '' back, and wrote it over the real
+        // value. So the fetch is awaited before anything is replaced.
+        if (!wbFieldUiReady()) {
+          // Exactly one retry. A load that resolves without leaving the module usable would
+          // otherwise re-enter here forever and hang on the click.
+          if (retried) { showToast('The editor could not be loaded. Reload and try again.', 'error', 'Workspaces'); return; }
+          wbLoadFieldUi()
+            .then(() => open(true))
+            .catch(() => showToast('The editor could not be loaded. Reload and try again.', 'error', 'Workspaces'));
+          return;
+        }
+
+        cell.dataset.editing = '1';
+        // Kept so Escape, and any refused save, can put back exactly what was there.
+        cell.dataset.was = cell.innerHTML;
+        cell.classList.add('is-editing');
+        cell.removeAttribute('tabindex');
+        cell.removeAttribute('role');
+        cell.innerHTML = `<span class="wb-inline-edit">${wbRenderFieldInput(companyId, workspaceId, field, item.values[field.id])}</span>`;
+        // The same binders the modal runs, because it is the same markup. All are idempotent
+        // and root-scoped, so running them on one cell is safe.
+        // Every binder the modal runs over this same markup. Missing one leaves that field
+        // type rendered but dead: the checklist drew its tick boxes, delete buttons and
+        // "add a step" row and none of them did anything, because nothing had wired them.
+        wbMountFileFields(cell);
+        wbMountDurationFields(cell);
+        wbMountProgressFields(cell);
+        wbMountChecklistFields(cell);
+        wbBindUrlControls(cell);
+        wbBindRelationshipPickers(cell);
+
+        const input = cell.querySelector('[data-f]');
+        if (input) {
+          input.focus();
+          if (typeof input.select === 'function' && ['text', 'textarea', 'number', 'email', 'phone', 'money'].includes(field.type)) input.select();
+          // A Yes/No is a one-click control, and the click that opened the editor IS the click
+          // that meant to flip it. Without this the first press only swaps a static "No" for a
+          // switch that also reads No -- nothing appears to happen, and clicking away commits
+          // no -> no, which is what the history recorded. Flipping it here makes one press mean
+          // one change; pressing the switch again before leaving still changes it back.
+          if (field.type === 'checkbox') input.checked = !input.checked;
+        }
+
+        let done = false;
+        const close = (commit) => {
+          if (done) return;
+          done = true;
+          document.removeEventListener('pointerdown', onOutside, true);
+          if (commit) wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell);
+          else { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); }
+        };
+
+        // "When I click outside the card or data, close the field and save it" -- taken
+        // literally, because the focus-based version could not be made to behave.
+        //
+        // It used to commit on focusout once focus was no longer inside the cell. Controls
+        // that redraw themselves break that: the checklist rebuilds its body on every tick,
+        // which destroys the button you just clicked, so activeElement fell back to <body>
+        // and every tick read as "they left" and closed the editor. A file picker did the
+        // same by taking focus out of the document entirely.
+        //
+        // A pointerdown outside the cell is unambiguous: it cannot be caused by anything the
+        // editor does to itself, so ticking, uploading and picking from a dropdown all leave
+        // it open, and one click anywhere else saves.
+        function onOutside(event) {
+          if (done || !cell.isConnected) return;
+          if (cell.contains(event.target)) return;
+          close(true);
+        }
+        // Capture phase: a handler that stops propagation on its own control must not also
+        // stop this from noticing the click happened elsewhere.
+        document.addEventListener('pointerdown', onOutside, true);
+
+        // Tabbing away is leaving too, and relatedTarget says where focus went -- unlike
+        // activeElement, it is not disturbed by a redraw.
+        cell.addEventListener('focusout', (event) => {
+          const to = event.relatedTarget;
+          if (to && !cell.contains(to)) close(true);
+        });
+
+        cell.addEventListener('keydown', (event) => {
+          // The "+ Other" box on a choice-chip field owns both keys: Enter adds the option and
+          // Escape backs out of the box. Committing the cell instead would save the record
+          // without the option the person was halfway through naming.
+          if (event.target.closest?.('[data-wb-chip-new-input]')) return;
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(false); return; }
+          // Enter saves, except where a newline is a legitimate part of the value.
+          if (event.key === 'Enter' && !event.shiftKey && field.type !== 'textarea' && field.type !== 'checklist') {
+            event.preventDefault();
+            close(true);
+          }
+        });
+      };
+
+      cell.addEventListener('click', (event) => {
+        // Anything already interactive inside the value keeps its own behaviour. The same
+        // exclusion the row click uses, and for the same reason: a checklist renders its own
+        // tick boxes, delete buttons and "add a step" input, and swapping the whole cell for a
+        // field editor the moment one is clicked makes the checklist impossible to use.
+        if (event.target.closest('a, button, input, select, textarea, label, .wb-check-toggle')) return;
+        open();
+      });
+      cell.addEventListener('keydown', (event) => {
+        if (cell.dataset.editing) return;
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+      });
+    });
+  }
+
+  function wbResetInlineCell(cell) {
+    delete cell.dataset.editing;
+    delete cell.dataset.was;
+    cell.classList.remove('is-editing');
+  }
+
+  /**
+   * Save one field of one record.
+   *
+   * Deliberately the same tail as the modal's item branch -- stamp, log, notify, run
+   * automations with the previous values, persist -- because a change made here is not a
+   * lesser kind of change. An inline edit that skipped automations would be a second, quieter
+   * way to edit a record, and the two would drift.
+   */
+  function wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell) {
+    const { app } = wbFind(companyId, workspaceId, appId);
+    const item = app?.items.find((i) => i.id === itemId);
+    if (!item) return;
+
+    const restore = () => { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); };
+    // No input in this cell means nothing was ever editable here -- a renderer that returned
+    // nothing, or markup that failed to mount. wbReadFieldInput cannot tell that apart from a
+    // field somebody deliberately cleared: both come back as ''. Checked before reading, so a
+    // missing editor can never be mistaken for an instruction to erase the value.
+    if (!cell.querySelector('[data-f]')) { restore(); return; }
+
+    const value = wbReadFieldInput(field);
+    // Generated fields read back as undefined; they are not offered for editing, so this only
+    // catches a field that vanished from the app while its editor was open.
+    if (value === undefined) { restore(); return; }
+
+    const outcome = wbCommitFieldValue(companyId, workspaceId, appId, itemId, field, value);
+    if (outcome.refusal) { showToast(outcome.refusal, 'local', 'Workspaces'); restore(); return; }
+    // Unchanged, or the record went away underneath: put the cell back and say nothing.
+    if (!outcome.saved) { restore(); return; }
+    wbResetInlineCell(cell);
+    showToast(`${field.label} saved.`, 'local', 'Workspaces');
+    render();
+  }
+
+  /**
+   * Write one field on one record, with everything an edit is supposed to do.
+   *
+   * Split out of wbSaveInlineValue so the map pin can write through exactly the same path. An
+   * address dropped on the map has to land in the record's history and fire the same automations
+   * as one typed into the box; a second copy of that logic is a second thing to keep in step, and
+   * the one that is not being looked at is the one that goes stale.
+   *
+   * Returns { saved, refusal }. `refusal` is a message to show; an unchanged value and a record
+   * that has since gone are both "not saved" with nothing to say about it.
+   */
+  function wbCommitFieldValue(companyId, workspaceId, appId, itemId, field, value) {
+    const { workspace, app } = wbFind(companyId, workspaceId, appId);
+    const item = app?.items.find((i) => i.id === itemId);
+    if (!item) return { saved: false, refusal: '' };
+
+    const emptied = value === '' || value == null || (Array.isArray(value) && !value.length);
+    if (field.required && emptied) return { saved: false, refusal: `"${field.label}" is required.` };
+    if (field.type === 'email' && String(value || '').trim() && !isValidEmail(String(value).trim())) {
+      return { saved: false, refusal: `"${field.label}" must be a valid email address, e.g. name@company.com.` };
+    }
+
+    // Clicking a value and clicking away without touching it is a normal thing to do, and it
+    // must not stamp the record as edited or fire automations at everyone.
+    const before = item.values[field.id];
+    if (JSON.stringify(before ?? '') === JSON.stringify(value ?? '')) return { saved: false, refusal: '' };
+
+    const prev = { ...item.values };
+    const stamp = new Date().toISOString();
+    item.values = { ...item.values, [field.id]: value };
+    // Derived fields first, automations second -- the order the card path already uses. A
+    // progress field linked to a checklist is what an automation like "when progress hits
+    // 100%" actually watches, so running the rules before recomputing it means the rule reads
+    // the old number and never fires. Ticking the last step on a card worked and ticking it
+    // here did not, for exactly this.
+    wbSyncLinkedProgress(app, item, field.id);
+    item.updatedAt = stamp;
+    item.lastActivityAt = stamp;
+    wbLogActivity(workspace, {
+      kind: 'updated', icon: 'ti-pencil', color: '#2563eb', appId: app.id, itemId: item.id,
+      text: `Changed <b>${h(field.label)}</b>`,
+      changes: [{
+        fieldId: field.id,
+        label: String(field.label || 'Field'),
+        type: field.type,
+        from: wbPlainVal(companyId, workspace, app, field, before, item.values),
+        to: wbPlainVal(companyId, workspace, app, field, value, item.values),
+      }],
+    });
+    wbNotifyItem(companyId, workspace, app, item, `Updated: ${wbItemTitle(app, item)}`, `${actorName()} updated ${field.label} on ${wbItemTitle(app, item)} in ${app.name}`);
+    wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
+    wbSave(companyId);
+    return { saved: true, refusal: '' };
+  }
+
 
   /**
    * One sub-item, as a small card of labelled lines.
@@ -234,6 +545,26 @@ export function createRecordPage(ctx) {
       ? `<ul class="wb-child-list">${rows.map((child) => childRow(companyId, app, collection, cols, child, one, canManage)).join('')}</ul>`
       : emptyState(`No ${h(collection.name.toLowerCase())} yet.`)}`;
       }
+      if (block.type === 'quick') {
+        // Only a manager sees it: every entry either adds a field to the app or opens an editor
+        // that writes to the record, and neither is a reader's to do. The press is checked again
+        // in quick-create.js -- this is the paint, not the gate.
+        if (!canManage) return '';
+        const buttons = recordLayout.QUICK_CREATE
+          // Proposal is declared in the model but has nothing behind it yet, so it is not drawn.
+          // A button that does nothing is worse than one that is not there.
+          .filter((entry) => entry.field)
+          .map((entry) => `
+            <button type="button" class="wb-quick-btn" data-wb-quick="${h(entry.key)}"
+              title="${h(entry.desc)}">
+              <span class="wb-quick-ic" style="color:${h(entry.tone)}"><i class="ti ${h(entry.icon)}"></i></span>
+              <span class="wb-quick-label"><b>${h(entry.label)}</b><small>${h(entry.desc)}</small></span>
+            </button>`).join('');
+        // The seat rides on the card rather than being closed over: the listener below is bound
+        // once for the module's life, so it has to read which record it is on at press time.
+        return `<h3 class="wb-w-title">Quick Create</h3>
+          <div class="wb-quick-grid" data-wb-quick-seat="${h([companyId, workspace.id, app.id, item.id].join('|'))}">${buttons}</div>`;
+      }
       const title = String(block.config?.title || '').trim();
       const fields = recordLayout.blockFields(app, block);
       return `${title ? `<h3 class="wb-w-title">${h(title)}</h3>` : ''}<div class="wb-view-fields">${fieldRows(fields)}</div>`;
@@ -267,21 +598,27 @@ export function createRecordPage(ctx) {
     return `
       <div class="wb-record" data-item="${h(item.id)}">
         <div class="wb-record-top">
-        <div class="wb-record-bar">
-          <a class="wb-record-back" href="${backHref}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>
+        <!-- One row, three zones: who this record is on the left, where it sits in the deck in
+             the middle, what you can do to it on the right. It was two stacked rows, which spent
+             a second line of a sticky header on a back link and a page count. -->
+        <header class="wb-record-bar">
+          <div class="wb-record-lead">
+            <!-- Icon only. The app's name still travels as the accessible name and the tooltip,
+                 so "where does this go" is answered on hover and read out by a screen reader --
+                 it is the visual label that goes, not the information. -->
+            <a class="wb-record-back" href="${backHref}" data-router
+               title="All ${h(app.name)}" aria-label="All ${h(app.name)}"><i class="ti ti-arrow-left"></i></a>
+            <div class="wb-record-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div>
+            <div class="wb-record-title">
+              <h1>${h(wbItemTitle(app, item)) || 'Item'}</h1>
+              <p class="wb-record-meta">${item.createdAt ? `Created ${h(formatDate(item.createdAt))}` : ''}${item.updatedAt && item.updatedAt !== item.createdAt ? ` · edited ${h(wbTimeAgo(item.updatedAt))}` : ''}${count ? ` · ${count} comment${count === 1 ? '' : 's'}` : ''}</p>
+            </div>
+          </div>
           ${stepper}
           ${canManage ? `<div class="wb-dash-controls">
             <button class="btn btn-sm ${editing ? 'btn-primary' : ''}" type="button" data-wb-rec-manage>${editing ? '<i class="ti ti-check"></i>Done' : '<i class="ti ti-adjustments"></i>Customize'}</button>
             ${editing ? '<button class="btn btn-sm" type="button" data-wb-rec-add><i class="ti ti-plus"></i>Add card</button><button class="btn btn-sm" type="button" data-wb-rec-reset><i class="ti ti-rotate"></i>Reset</button>' : ''}
           </div>` : ''}
-        </div>
-        <header class="wb-record-head">
-          <div class="wb-record-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div>
-          <div class="wb-record-title">
-            <h1>${h(wbItemTitle(app, item)) || 'Item'}</h1>
-            <p class="wb-record-meta">${item.createdAt ? `Created ${h(formatDate(item.createdAt))}` : ''}${item.updatedAt && item.updatedAt !== item.createdAt ? ` · edited ${h(wbTimeAgo(item.updatedAt))}` : ''}${count ? ` · ${count} comment${count === 1 ? '' : 's'}` : ''}</p>
-          </div>
-          ${canManage ? '<p class="wb-record-hint"><i class="ti ti-pencil" aria-hidden="true"></i>Click any value to edit it</p>' : ''}
         </header>
         ${editing ? '<p class="wb-rec-note">This layout applies to every record in this app.</p>' : ''}
         </div>
@@ -290,5 +627,5 @@ export function createRecordPage(ctx) {
       </div>`;
   }
 
-  return { wbViewItemPage };
+  return { wbViewItemPage, bindInlineEdits: wbBindInlineEdits, commitFieldValue: wbCommitFieldValue };
 }

@@ -12,12 +12,16 @@ import { fileURLToPath } from 'node:url';
 // to bid — no → no". One press has to mean one change.
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// The inline editor moved out of main.js into the record page's own module, which is where it
+// was only ever reachable from. wbReadFieldInput did NOT move -- the modal reads its markup with
+// the same function -- so the two halves of this are read from two files.
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+const recordPage = readFileSync(join(root, 'src', 'workspace', 'record-page.js'), 'utf8').replace(/\r\n/g, '\n');
 
 const openBody = () => {
-  const at = main.indexOf('const open = (retried = false) => {');
+  const at = recordPage.indexOf('const open = (retried = false) => {');
   assert.notEqual(at, -1, 'the inline editor has moved');
-  return main.slice(at, main.indexOf('\n    };', at));
+  return recordPage.slice(at, recordPage.indexOf('\n      };', at));
 };
 
 test('opening the editor on a Yes/No flips it', () => {

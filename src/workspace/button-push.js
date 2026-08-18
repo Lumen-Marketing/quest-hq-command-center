@@ -16,6 +16,8 @@ export function createButtonPush(ctx) {
     h, can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
     state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle, wbRunAutomations,
     contactSeat, contactsApp, contactIntake,
+    // A move takes the record out of this app; these are how the reader goes with it.
+    navigate, companyPath,
   } = ctx;
 
   /**
@@ -401,6 +403,24 @@ export function createButtonPush(ctx) {
     }
 
     showToast(`${moved ? 'Moved' : 'Sent'} to ${target.app.name}.${grew}`, 'local', 'Workspaces');
+    // Reading the record when it left: go with it.
+    //
+    // A move takes the record out of this app, so somebody sitting on its page was left looking
+    // at "This record is gone" -- an accurate message about a record they had just sent
+    // themselves, with the copy that DOES exist one app away and nothing pointing at it.
+    //
+    // Only when the page being read is this record's own. Pressed from a list row, or from the
+    // modal, the reader is not on it and taking them somewhere else would be the button doing
+    // something it was not asked to.
+    const follow = moved && !target.contacts && target.workspace
+      && state.route?.params?.get('item_id') === item.id
+      && state.route?.params?.get('app_id') === sourceApp.id;
+    if (follow) {
+      navigate(companyPath('workspaces', {
+        workspace: target.workspace.id, app_id: target.app.id, tab: 'items', item_id: arrivedId,
+      }, target.companyId));
+      return true;
+    }
     render();
     return true;
   }
@@ -495,6 +515,15 @@ export function createButtonPush(ctx) {
     showToast(result.reused
       ? `${payload.name} is already in Company Contacts — ${result.landed} field${result.landed === 1 ? '' : 's'} updated${where}.`
       : `${payload.name} added to Company Contacts with ${result.landed} field${result.landed === 1 ? '' : 's'}${where}.`, 'local', 'Company Contacts');
+    // Same rule as the app-to-app move: if the page being read IS this record, follow it to the
+    // card it just became. Filed without moving, the record is still here and worth staying on.
+    if (moving && result.contact?.id
+      && state?.route?.params?.get('item_id') === item.id
+      && state?.route?.params?.get('app_id') === sourceApp.id) {
+      navigate(companyPath('company-contacts', { contact_id: result.contact.id },
+        canonicalCompanyId(result.contact.company_id || sourceCompanyId)));
+      return true;
+    }
     render();
     return true;
   }

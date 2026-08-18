@@ -33,7 +33,12 @@ test('a log line links to the record it describes', () => {
   // Seven now: the five original writes, the inline single-field save on the record page, and
   // setting a category from its chips on a card — a stage moved from a card is the same event
   // as one moved from the record, and has to be as findable.
-  assert.equal((main.match(/appId: app\.id, itemId: item\.id/g) || []).length, 7);
+  // Counted across both files: the inline single-field save moved into the record page's own
+  // module with the rest of the inline editor, and it still has to stamp the record it wrote.
+  const recordPage = readFileSync(join(root, 'src', 'workspace', 'record-page.js'), 'utf8');
+  const stamped = (text) => (text.match(/appId: app\.id, itemId: item\.id/g) || []).length;
+  assert.equal(stamped(main) + stamped(recordPage), 7);
+  assert.ok(stamped(recordPage) >= 1, 'the inline save is one of them, wherever it lives');
 });
 
 test('entries written before this stay plain text', () => {

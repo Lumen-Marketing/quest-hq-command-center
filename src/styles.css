@@ -21,11 +21,19 @@
      because anything else that sticks inside that surface has to clear it -- get the two out
      of step and the second one pins underneath the first, which reads as a rendering bug. */
   --wb-tab-strip: 70px;
-  /* Everything above a record's panels: the window chrome, the topbar, and the record header
-     that stays put while the record is read. What is left of the viewport is how tall a panel
-     can be before it scrolls itself. Erring large only makes the panels shorter than they
-     could be; erring small hides their last row below the fold. */
-  --wb-record-chrome: 260px;
+  /* How far down the viewport a record’s cards begin, and how much to leave under them.
+
+     The first is MEASURED and published by src/workspace/record-page.js -- it is the grid’s own
+     getBoundingClientRect().top, so it already contains the window chrome, the topbar, the app
+     strip and the record header, whatever any of them happen to be doing. It replaced a tally of
+     those four as separate numbers, which is a sum that has to be corrected every time any one
+     of them moves: collapsing the record header to one row left it 56px out, and every card
+     stopped short of the bottom with nothing on screen to say why.
+
+     The value here is only what is used before the measurement first runs. The foot is the work
+     surface’s own bottom padding -- the one thing genuinely below the cards. */
+  --wb-record-grid-top: 300px;
+  --wb-record-foot: 14px;
   --amber: #f4b234;
   --amber-2: #f8d995;
   --orange: #e66a1f;
@@ -22951,12 +22959,107 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 .wb-act-change b { font-weight: 700; color: var(--text, #17130f); }
 .wb-act-cleared { color: var(--text-muted, #72695d); font-style: italic; }
 .wb-act-line.is-comment .wb-act-said { padding: 8px 12px; border-radius: 10px; background: var(--surface-2, #f6efe4); margin-top: 4px; }
-/* The composer keeps its own space and lines its button up with the box rather than the middle
-   of it, which is what made the two look wedged together. */
-.wb-rec-panel .wb-comment-add { display: flex; gap: 10px; align-items: flex-start; margin-top: 2px; }
-.wb-rec-panel .wb-comment-add .wb-mention-wrap { flex: 1 1 auto; min-width: 0; }
-.wb-rec-panel .wb-comment-add textarea { width: 100%; resize: vertical; }
+/* The composer is a column: the tray of files waiting to be sent, then the box across the FULL
+   width, then the buttons under it. They used to sit beside the box and took about two hundred
+   pixels out of a panel that is already the narrow half of a record, which left a comment box
+   too small to see a sentence in. */
+.wb-rec-panel .wb-comment-add { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+.wb-rec-panel .wb-comment-add .wb-mention-wrap { width: 100%; min-width: 0; }
+/* The box is sized by the script from what is typed in it, so the drag handle is taken off: a
+   height set by hand would be overwritten by the next keystroke. min-height is the empty size,
+   max-height is where it stops growing and starts scrolling -- without that, a long comment
+   pushes the thread it is replying to off the top of the panel. */
+.wb-rec-panel .wb-comment-add textarea {
+  width: 100%; resize: none; min-height: 62px; max-height: 220px; overflow-y: hidden;
+}
 .wb-rec-panel .wb-comment-add .btn { flex: none; }
+/* Attach on the left, Comment on the right, which is where a send button belongs. */
+.wb-comment-tools { display: flex; align-items: center; gap: 6px; }
+.wb-comment-tools .btn { margin-left: auto; }
+/* The + that opens the attach menu. Quiet until wanted: it sits beside the box all the time and
+   a coloured button there would compete with Comment, which is the one being aimed at. */
+.wb-comment-clip {
+  width: 32px; height: 32px; flex: none;
+  display: grid; place-items: center;
+  border: 1px solid var(--border, #e2d5bf); border-radius: 9px;
+  background: var(--surface, #fffaf0); color: var(--text-muted, #72695d);
+  cursor: pointer; font-size: 16px;
+}
+.wb-comment-clip:hover, .wb-comment-clip.on { border-color: var(--accent, #e0552d); color: var(--accent, #e0552d); }
+
+/* ---- what can be attached, by name ----------------------------------------------------------
+   Two bare icons could not say which took the contract and which took the photo. The menu opens
+   UPWARD: the composer is the last thing in the panel, so anything below the button is off the
+   bottom of it. */
+.wb-attach { position: relative; display: inline-flex; }
+/* Anchored to the button's RIGHT edge, so it grows back across the card it belongs to instead
+   of off the side of the window -- the composer sits at the right of the right-hand card, and
+   left: 0 sent a 258px sheet straight past the viewport. The max-width is the backstop for a
+   narrow window, where even growing leftward runs out of room. */
+.wb-attach-menu {
+  position: absolute; bottom: calc(100% + 10px); right: 0; left: auto; z-index: 30;
+  min-width: 232px; max-width: min(288px, calc(100vw - 28px)); padding: 6px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 18px 44px rgba(15, 12, 10, .22);
+}
+.wb-attach-menu button {
+  display: flex; align-items: center; gap: 15px; width: 100%;
+  padding: 11px 12px; border: 0; border-radius: 11px;
+  background: transparent; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.wb-attach-menu button:hover { background: var(--surface-2); }
+.wb-attach-menu button:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+/* The glyph keeps its own colour, which is the part of the reference worth taking: three rows
+   that read apart at a glance. The SHEET follows the page, like every other menu in the product
+   -- a surface that stays dark while the app is light is a second theme to maintain, and what
+   was asked for was the idea, not the screenshot's palette. */
+.wb-attach-ic {
+  width: 24px; height: 24px; flex: none; display: grid; place-items: center;
+  font-size: 21px;
+}
+.wb-attach-label { font-size: 15px; font-weight: 500; min-width: 0; }
+/* While an upload is in flight. The whole composer, because sending mid-upload would post a
+   comment without the file that is still climbing. */
+.wb-comment-add.busy { opacity: .6; pointer-events: none; }
+
+/* ---- what is attached to a comment ----------------------------------------------------------
+   Two shapes, because two kinds of thing. Something you look at is shown; something you open in
+   another program is a row with its name on it. Both open the same preview dialog the file
+   field uses, which is where Open in a new tab and Download already live. */
+.wb-atts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.wb-atts.pending { margin: 0 0 2px; }
+.wb-att { position: relative; max-width: 100%; }
+.wb-att-open {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border, #e2d5bf); border-radius: 10px;
+  background: var(--surface, #fffaf0); color: var(--text-2, #473f34);
+  padding: 0; cursor: pointer; overflow: hidden; text-align: left;
+  max-width: 100%;
+}
+.wb-att-open:hover { border-color: var(--accent, #e0552d); }
+.wb-att-open:disabled { opacity: .5; cursor: default; }
+.wb-att-row .wb-att-open { padding: 7px 11px 7px 9px; font-size: .8rem; max-width: 260px; }
+.wb-att-row .ti { font-size: 17px; color: var(--accent, #e0552d); flex: none; }
+.wb-att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.wb-att-size { font-size: .7rem; color: var(--text-muted, #72695d); flex: none; }
+.wb-att-visual .wb-att-open { width: 116px; height: 84px; position: relative; }
+.wb-att-visual img, .wb-att-visual video { width: 100%; height: 100%; object-fit: cover; display: block; background: #0c0a09; }
+/* The play badge says it is a clip without loading a player for it. */
+.wb-att-play {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: #fff; font-size: 22px; text-shadow: 0 1px 6px rgba(0, 0, 0, .55);
+  background: linear-gradient(180deg, rgba(0, 0, 0, .05), rgba(0, 0, 0, .35));
+}
+.wb-att-drop {
+  position: absolute; top: -6px; right: -6px;
+  width: 20px; height: 20px; display: grid; place-items: center;
+  border: 1px solid var(--border-strong, #cdb595); border-radius: 50%;
+  background: var(--surface, #fffaf0); color: var(--danger, #dc2626);
+  cursor: pointer; font-size: 12px; line-height: 1; padding: 0;
+}
+.wb-att-drop:hover { background: #fee2e2; }
 /* A mention, wherever it is read. */
 .wb-at { color: var(--info, #2563eb); font-weight: 700; }
 
@@ -30714,56 +30817,139 @@ a.wb-cal-more:hover { color: var(--orange); }
 /* ---- App Builder record page -----------------------------------------------------------
    A record is a place, not a popup: it has a URL, browser-back works, and a long field list
    next to a comment thread has room to breathe. */
-.wb-record { display: grid; gap: 14px; }
+/* A column, not a grid, and the difference matters: a grid item's containing block is its own
+   grid area, which for a row sized to its contents is exactly the item -- so `position: sticky`
+   on the header below had no room to move and never stuck at all. A flex item's containing
+   block is the whole flex container, which is the length of the record. */
+.wb-record { display: flex; flex-direction: column; gap: 10px; }
 /* The record's name, the way back and the layout control stay put while the record is read.
    Opaque and full-bleed to the surface's padding, or the cards would show through it as they
-   pass underneath. The work surface is the scrollport here, not the window. */
+   pass underneath. The work surface is the scrollport here, not the window.
+
+   It stops BELOW the app strip, which sticks above it -- the same arrangement the app tab row
+   uses, and for the same reason: at a negative offset both rows claim the top and this one, on
+   the lower z-index, slides under the strip and disappears as you scroll. */
 .wb-record-top {
   position: sticky;
-  top: -18px;
+  top: var(--wb-strip-h, 0px);
   z-index: 8;
   display: grid;
   gap: 14px;
-  margin: -18px -24px 0;
-  padding: 18px 24px 12px;
+  margin: 0 -24px;
+  padding: 6px 24px 10px;
   background: var(--surface-2, #f6efe4);
 }
 /* The way back and the layout control share a row: two full-width rows for two small buttons
    was most of the height the header was taking, and this header now stays on screen. */
-.wb-record-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.wb-record-bar .wb-dash-controls { margin-left: auto; padding: 0; }
+/* Three zones on one line. A grid rather than a flex row with auto margins, because the middle
+   zone has to be centred against the HEADER, not against whatever is left over after the name
+   -- a long record name would otherwise shove the counter to the right. Each child is placed by
+   column so a missing one (no stepper on a single record, no Customize without permission)
+   leaves the others where they are instead of sliding along. */
+.wb-record-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.wb-record-lead {
+  grid-column: 1; min-width: 0;
+  display: flex; align-items: center; gap: 11px;
+}
+.wb-record-bar .wb-record-step { grid-column: 2; justify-self: center; }
+.wb-record-bar .wb-dash-controls { grid-column: 3; justify-self: end; margin: 0; padding: 0; }
+
+/* Narrow: the counter has nowhere to be centred against, so the row becomes two lines with the
+   name on the first and the controls on the second, rather than three squeezed columns. */
+@media (max-width: 720px) {
+  .wb-record-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .wb-record-lead { grid-column: 1 / -1; }
+  .wb-record-bar .wb-record-step { grid-column: 1; justify-self: start; }
+  .wb-record-bar .wb-dash-controls { grid-column: 2; }
+}
+/* Icon only, so it reads as one control beside the stepper rather than a sentence competing
+   with the record's own name. Square-ish and sized like the stepper's arrows it sits next to. */
 .wb-record-back {
-  display: inline-flex; align-items: center; gap: 7px; justify-self: start;
-  font-size: .82rem; font-weight: 700; color: var(--ink-2);
-  border: 1px solid var(--border); border-radius: 99px; padding: 5px 14px 5px 11px;
+  display: inline-flex; align-items: center; justify-content: center; justify-self: start;
+  width: 30px; height: 30px; flex: none;
+  font-size: .95rem; color: var(--ink-2);
+  border: 1px solid var(--border); border-radius: 99px;
   background: var(--surface);
 }
 .wb-record-back:hover { border-color: var(--orange); color: var(--orange); }
-.wb-record-head { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
+/* Sized for a header that is now one line rather than two: the icon matches the back button and
+   the stepper beside it, and the name is a heading rather than a banner. */
 .wb-record-ic {
-  width: 42px; height: 42px; border-radius: 11px; flex: none;
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 1.1rem;
+  color: #fff; font-size: .95rem;
 }
-.wb-record-title { flex: 1; min-width: 180px; }
-.wb-record-title h1 { margin: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: -.02em; text-wrap: balance; }
-.wb-record-meta { margin: 2px 0 0; font-size: .78rem; color: var(--muted); }
+.wb-record-title { min-width: 0; }
+.wb-record-title h1 {
+  margin: 0; font-size: 1.05rem; font-weight: 800; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wb-record-meta {
+  margin: 1px 0 0; font-size: .74rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .wb-record-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .wb-record-fields, .wb-record-comments { padding: 14px 18px; }
 @media (max-width: 900px) { .wb-record-body { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- the cards reach the bottom of the surface ----------------------------------------------
+   A short record left the page ending halfway down, with the dotted ground showing under two
+   cards that had stopped wherever their content did. The page is made at least as tall as the
+   scrollport and the grid takes what is left over, so the cards fill it.
+
+   The height is handed down the WHOLE chain: a record renders as
+   .work-surface > section.tool-page.wb-page > .wb-record > [data-wb-rec-grid], and a rule that
+   skips the .wb-page wrapper matches nothing while reading as perfectly correct -- which is
+   exactly how the dashboard's split-scroll shipped dead once already.
+
+   The surface keeps its overflow, unlike that split: this page's header is sticky AGAINST the
+   surface, and taking the scroll away from it would strand a long record with nowhere to go. */
+/* gap: 0 because .tool-page sets gap: 14px, which a block wrapper ignored and a flex one does
+   not -- turning this into a column silently added a 14px band above the record that had never
+   been there. The strip's own margin is the spacing between them. */
+.work-surface:has(> .wb-page > .wb-record) > .wb-page { display: flex; flex-direction: column; gap: 0; min-height: 100%; }
+/* The record page uses the width and height it has. 24px is not a taste: it is what the sticky
+   header's own `margin: 0 -24px` bleeds by, so the header now spans the surface exactly rather
+   than stopping 4px short of each edge. The bottom drops from 42px to 14px, which is the white
+   band that was left under the cards even after they stretched. */
+.work-surface:has(> .wb-page > .wb-record) { padding: 18px 24px 14px; }
+.work-surface:has(> .wb-page > .wb-record) > .wb-page > .wb-topbar { margin-bottom: 10px; padding-bottom: 8px; }
+.wb-page > .wb-record { flex: 1 1 auto; min-height: 0; }
+/* align-items: start is what kept each card at its content height; stretch is what fills the
+   row. Scoped by the attribute, because .wb-dash-grid is the company dashboard's grid too. */
+.wb-record > [data-wb-rec-grid] { flex: 1 1 auto; align-items: stretch; padding-top: 0; }
+
+/* The comments card fills the height it is given rather than floating its composer in the
+   middle of it: tabs at the top, the box at the bottom, the feed taking the slack.
+
+   The cap moves from the feed to the CARD. On the feed it was the thing stopping a busy thread
+   from making the page enormous, and letting the feed stretch would have taken that away; on
+   the card it does the same job and lets the feed use every pixel the card actually has. */
+.wb-w-comments { display: flex; flex-direction: column; max-height: min(74vh, 720px); }
+.wb-w-comments > .wb-rec-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.wb-w-comments .wb-rec-body { flex: 1 1 auto; min-height: 0; max-height: none; }
 
 /* ---- a record's panels each scroll themselves ----------------------------------------------
    Reading a long history used to drag the record's own fields off the screen, and filling in a
    long field list pushed the conversation away. They sit side by side, so they should move
    independently -- what you are reading on one side has nothing to do with the other.
 
-   Capped rather than stretched: the grid is align-items:start, so a short panel keeps its own
-   height and only one that would run past the bottom of the screen gets a scrollbar. Scoped to
-   .wb-record because .wb-dash-grid is also the app Dashboard, where the panels are tiles on a
-   page that is meant to scroll as one. */
+   Capped AND stretched, which is not the contradiction it reads as. The grid is
+   align-items:stretch, so both cards reach the bottom of the surface; this cap is what stops a
+   card growing past the screen once its CONTENT is longer than one, at which point it scrolls
+   inside the height it already has. Scoped to .wb-record because .wb-dash-grid is also the app
+   Dashboard, where the panels are tiles on a page that is meant to scroll as one. */
 @media (min-width: 901px) {
   .wb-record .wb-dash-grid > .wb-w:not(.editing) {
-    max-height: calc(100vh - var(--wb-record-chrome));
+    /* The app strip is counted separately because it is MEASURED -- icon size, a wrapped app
+       name and the browser's own font all move it, so folding it into the constant would be
+       wrong by however much it moved and would hide a panel's last row below the fold. */
+    max-height: calc(100dvh - var(--wb-record-grid-top, 300px) - var(--wb-record-foot));
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
@@ -32070,14 +32256,8 @@ a.wb-cal-more:hover { color: var(--orange); }
 }
 
 /* ---- Inline record editing: the value is the control ------------------------------------- */
-.wb-record-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
-}
+/* .wb-record-hint ("Click any value to edit it") was removed with the second header row. The
+   record page is still click-to-edit; nothing on the header says so any more. */
 
 /* Editable, but quietly. A page of boxes reads as a form; this should read as a record you
    happen to be able to change. The affordance arrives on hover, where it is needed. */
@@ -35037,6 +35217,11 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 .fd-title-input:focus { border-color: var(--accent); background: var(--surface); outline: none; }
 .fd-head-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fd-close { margin-left: auto; }
+/* Undo and redo, kept together and next to Save because that is the group that CHANGES the
+   document. A disabled one stays in place rather than disappearing, so the pair never moves
+   under the cursor. */
+.fd-hist { display: inline-flex; gap: 2px; }
+.fd-hist > .wb-icon-btn:disabled { opacity: .38; cursor: default; }
 /* The one button in the row that CHANGES the document, so it does not look like the four beside
    it that only read it. */
 .fd-save { border-color: var(--accent); color: var(--accent); font-weight: 650; }
@@ -35224,10 +35409,15 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 }
 .fd-upload-fallback > .ti { font-size: 40px; color: #b91c1c; }
 
-.fd-el { position: absolute; cursor: move; }
+/* Not selectable, so dragging a box across the page moves it instead of highlighting the words
+   in it. This is here rather than in a preventDefault on pointerdown because preventing the
+   default there also swallows the double-click that starts typing. */
+.fd-el { position: absolute; cursor: move; -webkit-user-select: none; user-select: none; }
 .fd-el:hover { outline: 1px solid rgba(37, 99, 235, .45); }
 .fd-el.sel { outline: 1.5px solid #2563eb; }
 .fd-text { width: 100%; height: 100%; overflow: hidden; white-space: pre-wrap; word-break: break-word; outline: none; }
+/* Except the one being typed into, where selecting a word is the whole point. */
+.fd-text[contenteditable] { -webkit-user-select: text; user-select: text; }
 .fd-text.ghost { font-style: italic; }
 .fd-text[contenteditable]:focus { cursor: text; box-shadow: inset 0 0 0 1px #2563eb; }
 .fd-shape { display: block; width: 100%; height: 100%; box-sizing: border-box; }
@@ -35354,4 +35544,78 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 @media (max-width: 640px) {
   .intake-link-row, .intake-sub-row { flex-direction: column; align-items: stretch; }
   .intake-link-actions { justify-content: flex-end; }
+}
+
+/* ---- Contact calendar: what is on a day -----------------------------------------------------
+   A month cell shows a count, and a count is not something you can read. Pressing it opens the
+   records behind it, each a link to the record itself. */
+
+.cc-cal-cell.open {
+  /* It is a <button> so it is keyboard-reachable for free; none of the button look is wanted.
+     Longhands, NOT the `font` shorthand: this rule outranks `.cc-cal-cell`, and `font: inherit`
+     would take its 11px with it -- leaving every cell that has something on it typeset a size
+     larger than its empty neighbours. */
+  font-family: inherit; font-weight: inherit; font-style: inherit; line-height: inherit;
+  color: inherit; text-align: inherit; appearance: none;
+  cursor: pointer; width: 100%;
+}
+.cc-cal-cell.open:hover { border-color: var(--orange); }
+.cc-cal-cell.open:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+
+.cc-cal-panel { position: relative; }
+.cc-cal-modal {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: color-mix(in srgb, var(--bg, #000) 55%, transparent);
+  backdrop-filter: blur(2px); border-radius: inherit;
+}
+.cc-cal-dialog {
+  width: min(420px, 100%); max-height: 100%; overflow: auto;
+  background: var(--card, #fff); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .22);
+}
+.cc-cal-dialog:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+.cc-cal-dialog > header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 12px 10px; border-bottom: 1px solid var(--border);
+}
+.cc-cal-dialog > header h4 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 6px; flex: 1; }
+.cc-cal-rows { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.cc-cal-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border: 1px solid var(--border); border-radius: 10px;
+  color: inherit; text-decoration: none;
+}
+.cc-cal-row:not(.is-flat):hover { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 7%, transparent); }
+.cc-cal-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.cc-cal-row-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-cal-row-main small { display: flex; gap: 6px; opacity: .75; font-size: 12px; }
+.cc-cal-row-main em { font-style: normal; font-weight: 600; }
+.cc-cal-row-day { font-size: 12px; opacity: .7; flex-shrink: 0; }
+.cc-cal-row.is-flat { opacity: .8; }
+
+/* ---- Quick Create ---------------------------------------------------------------------------
+   A card of things you can make that land on the record you are looking at. Two to a row so the
+   names sit beside their icons rather than under them, and the card stays the height of a panel
+   rather than a column of buttons. */
+.wb-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.wb-quick-btn {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 11px;
+  background: var(--surface); color: inherit; font: inherit; cursor: pointer;
+}
+.wb-quick-btn:hover { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 6%, transparent); }
+.wb-quick-btn:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.wb-quick-btn[disabled] { opacity: .55; cursor: progress; }
+/* The colour is the entry's own, so the four read apart before the words are read. */
+.wb-quick-ic {
+  width: 30px; height: 30px; flex: none; display: grid; place-items: center;
+  border-radius: 9px; font-size: 16px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.wb-quick-label { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.wb-quick-label b { font-size: 13px; font-weight: 700; }
+.wb-quick-label small {
+  font-size: 11.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }

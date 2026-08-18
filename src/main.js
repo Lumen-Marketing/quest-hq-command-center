@@ -2822,6 +2822,8 @@ let addressSuggestionRequestSeq = 0;
 let pipeDrag = null;
 let locationPickerMap = null;
 let locationPickerMarker = null;
+// The record whose page is open, set by wbBindInlineEdits. See the note there.
+let wbInlineRecord = null;
 let formDraftManager = null;
 let recordHistoryModule = null;
 let recordHistoryModulePromise = null;
@@ -6321,7 +6323,18 @@ function loadWbViewItemPage() {
   if (!wbViewItemPagePending) {
     wbViewItemPagePending = import('./workspace/record-page.js').then((mod) => {
       wbViewItemPageModule = mod.createRecordPage({
-        appHref, can, companyPath, emptyState, formatDate, h, wbFieldIsEditable, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state
+        appHref, can, companyPath, emptyState, formatDate, h, wbFieldIsEditable, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state,
+        // Quick Create: it makes a field, saves the app, and opens the sheet or document editor
+        // for this record. memberName is the document editor's own requirement.
+        memberName, render, showToast, wbDoc, wbSave, wbUid,
+        // The inline editor. `wbFieldUiReady` is a getter rather than the module itself: the
+        // flag is a module-level `let` here, so a value read once at construction would be the
+        // `null` it held before anything had been fetched, for ever.
+        actorName, isValidEmail, wbBindRelationshipPickers, wbBindUrlControls, wbFind,
+        wbFieldUiReady: () => !!wbFieldUiModule,
+        wbLoadFieldUi, wbLogActivity, wbMountChecklistFields, wbMountDurationFields,
+        wbMountFileFields, wbMountProgressFields, wbNotifyItem, wbPlainVal, wbReadFieldInput,
+        wbRenderFieldInput, wbRunAutomations, wbSyncLinkedProgress
       });
       return wbViewItemPageModule;
     }).catch((error) => {
@@ -13884,7 +13897,11 @@ function renderWorkspaceBuilderPage(route, companyId) {
   const itemId = route.params.get('item_id') || '';
   if (app && itemId) {
     const item = app.items.find((entry) => entry.id === itemId);
-    return `<section class="tool-page wb-page">${item
+    // The app strip stays on a record too, and stays STUCK to the top of it -- see the sticky
+    // rule on .wb-topbar. A record is a page inside an app, not somewhere else: dropping the
+    // switcher the moment one is opened means going back to the list purely to reach the next
+    // app, and it makes the record look like it belongs to nothing.
+    return `<section class="tool-page wb-page">${wbWorkspaceHeader(companyId, workspace, app.id)}${item
       ? wbViewItemPage(route, companyId, workspace, app, item)
       : wbRecordMissing(companyId, app)}</section>`;
   }
@@ -15260,33 +15277,27 @@ async function guardUpload(file, policyKey, title = 'Upload') {
   return true;
 }
 
-// Upload feed attachments to the shared file bucket (live) or embed a small data
-// URL (local/demo), mirroring the workspace file-field upload contract.
-async function wbUploadFeedFiles(companyId, files) {
-  const client = createSupabaseClient();
-  const live = isLiveSupabaseSession();
-  const out = [];
-  for (const file of files) {
-    if (!(await guardUpload(file, 'document', 'Workspaces'))) continue;
-    let url = '';
-    let objectPath = '';
-    if (client) {
-      try {
-        const path = `${canonicalCompanyId(companyId)}/workspace-feed/${crypto.randomUUID()}-${slugify(file.name)}`;
-        const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: contentTypeFor(file) });
-        if (!up.error) {
-          objectPath = path;
-          const signed = await client.storage.from('quest-job-files').createSignedUrl(path, 604800);
-          if (signed.data?.signedUrl) url = signed.data.signedUrl;
-        }
-      } catch (error) { console.warn('Feed file upload failed', error); }
-    }
-    if (live && !objectPath) { showToast(`"${file.name}" could not be uploaded.`, 'error', 'Workspaces'); continue; }
-    if (!url && !live && file.size <= 2 * 1024 * 1024) url = await wbReadFileAsDataUrl(file);
-    if (!url && !objectPath) { showToast(`"${file.name}" is too large to attach — link it by URL instead.`, 'error', 'Workspaces'); continue; }
-    out.push({ name: file.name, url, objectPath, bucket: 'quest-job-files', size: file.size, mime: contentTypeFor(file) });
+// Upload feed attachments to the shared file bucket (live) or embed a small data URL
+// (local/demo). The body moved into ./workspace/attachments.js, which a comment's own two
+// pickers use as well: one contract for "attached", and one place it can go wrong.
+let wbAttachmentsModule = null;
+async function loadAttachments() {
+  if (!wbAttachmentsModule) {
+    wbAttachmentsModule = (await import('./workspace/attachments.js')).createAttachments(wbAttachCtx());
   }
-  return out;
+  return wbAttachmentsModule;
+}
+const wbAttachCtx = () => ({
+  guardUpload,
+  supabase: createSupabaseClient,
+  isLive: isLiveSupabaseSession,
+  canonicalCompanyId,
+  slugify,
+  readDataUrl: wbReadFileAsDataUrl,
+  showToast,
+});
+async function wbUploadFeedFiles(companyId, files) {
+  return (await loadAttachments()).uploadAll(companyId, files);
 }
 
 // File a workspace activity-feed attachment into Company Drive under a folder
@@ -16059,225 +16070,6 @@ function wbFieldIsEditable(field) {
   return !!field && !WB_AUTO_FIELD_TYPES.has(field.type);
 }
 
-/**
- * Click a value, edit it in place, click away to save.
- *
- * The record page used to be read-only with an Edit button that opened the whole record in
- * a modal: four interactions to change one field, and the record you were reading was
- * replaced by a form. Here the value cell IS the control.
- *
- * The input is the SAME markup the modal used -- wbRenderFieldInput out, wbReadFieldInput
- * back -- so every field type is editable inline with no per-type code, and a type added
- * later works here without being taught to. wbReadFieldInput finds its element by
- * [data-f="<field id>"] anywhere in the document, which is why rendering one input on its
- * own is enough.
- *
- * Committing on focusout rather than on a Save button is the whole point of the request,
- * but "focus left" and "focus moved inside my own control" look identical at the moment the
- * event fires -- a <select>'s dropdown, the relationship picker's results list, a file
- * dialog. So the decision is deferred a tick and then asks where focus actually landed.
- */
-function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
-  const scope = root || document;
-  scope.querySelectorAll('[data-wb-inline]').forEach((cell) => {
-    if (cell.dataset.bound) return;
-    cell.dataset.bound = '1';
-
-    const open = (retried = false) => {
-      if (cell.dataset.editing) return;
-      const { app } = wbFind(companyId, workspaceId, appId);
-      const field = app?.fields.find((f) => f.id === cell.dataset.wbInline);
-      const item = app?.items.find((i) => i.id === itemId);
-      if (!field || !item) return;
-
-      // wbRenderFieldInput returns an EMPTY STRING until its module has been fetched, and
-      // that module is only pulled in by the builder modal. Opening an editor cold blanked
-      // the cell, and then focusout read no input, got '' back, and wrote it over the real
-      // value. So the fetch is awaited before anything is replaced.
-      if (!wbFieldUiModule) {
-        // Exactly one retry. A load that resolves without leaving the module usable would
-        // otherwise re-enter here forever and hang on the click.
-        if (retried) { showToast('The editor could not be loaded. Reload and try again.', 'error', 'Workspaces'); return; }
-        wbLoadFieldUi()
-          .then(() => open(true))
-          .catch(() => showToast('The editor could not be loaded. Reload and try again.', 'error', 'Workspaces'));
-        return;
-      }
-
-      cell.dataset.editing = '1';
-      // Kept so Escape, and any refused save, can put back exactly what was there.
-      cell.dataset.was = cell.innerHTML;
-      cell.classList.add('is-editing');
-      cell.removeAttribute('tabindex');
-      cell.removeAttribute('role');
-      cell.innerHTML = `<span class="wb-inline-edit">${wbRenderFieldInput(companyId, workspaceId, field, item.values[field.id])}</span>`;
-      // The same binders the modal runs, because it is the same markup. All are idempotent
-      // and root-scoped, so running them on one cell is safe.
-      // Every binder the modal runs over this same markup. Missing one leaves that field
-      // type rendered but dead: the checklist drew its tick boxes, delete buttons and
-      // "add a step" row and none of them did anything, because nothing had wired them.
-      wbMountFileFields(cell);
-      wbMountDurationFields(cell);
-      wbMountProgressFields(cell);
-      wbMountChecklistFields(cell);
-      wbBindUrlControls(cell);
-      wbBindRelationshipPickers(cell);
-
-      const input = cell.querySelector('[data-f]');
-      if (input) {
-        input.focus();
-        if (typeof input.select === 'function' && ['text', 'textarea', 'number', 'email', 'phone', 'money'].includes(field.type)) input.select();
-        // A Yes/No is a one-click control, and the click that opened the editor IS the click
-        // that meant to flip it. Without this the first press only swaps a static "No" for a
-        // switch that also reads No -- nothing appears to happen, and clicking away commits
-        // no -> no, which is what the history recorded. Flipping it here makes one press mean
-        // one change; pressing the switch again before leaving still changes it back.
-        if (field.type === 'checkbox') input.checked = !input.checked;
-      }
-
-      let done = false;
-      const close = (commit) => {
-        if (done) return;
-        done = true;
-        document.removeEventListener('pointerdown', onOutside, true);
-        if (commit) wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell);
-        else { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); }
-      };
-
-      // "When I click outside the card or data, close the field and save it" -- taken
-      // literally, because the focus-based version could not be made to behave.
-      //
-      // It used to commit on focusout once focus was no longer inside the cell. Controls
-      // that redraw themselves break that: the checklist rebuilds its body on every tick,
-      // which destroys the button you just clicked, so activeElement fell back to <body>
-      // and every tick read as "they left" and closed the editor. A file picker did the
-      // same by taking focus out of the document entirely.
-      //
-      // A pointerdown outside the cell is unambiguous: it cannot be caused by anything the
-      // editor does to itself, so ticking, uploading and picking from a dropdown all leave
-      // it open, and one click anywhere else saves.
-      function onOutside(event) {
-        if (done || !cell.isConnected) return;
-        if (cell.contains(event.target)) return;
-        close(true);
-      }
-      // Capture phase: a handler that stops propagation on its own control must not also
-      // stop this from noticing the click happened elsewhere.
-      document.addEventListener('pointerdown', onOutside, true);
-
-      // Tabbing away is leaving too, and relatedTarget says where focus went -- unlike
-      // activeElement, it is not disturbed by a redraw.
-      cell.addEventListener('focusout', (event) => {
-        const to = event.relatedTarget;
-        if (to && !cell.contains(to)) close(true);
-      });
-
-      cell.addEventListener('keydown', (event) => {
-        // The "+ Other" box on a choice-chip field owns both keys: Enter adds the option and
-        // Escape backs out of the box. Committing the cell instead would save the record
-        // without the option the person was halfway through naming.
-        if (event.target.closest?.('[data-wb-chip-new-input]')) return;
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(false); return; }
-        // Enter saves, except where a newline is a legitimate part of the value.
-        if (event.key === 'Enter' && !event.shiftKey && field.type !== 'textarea' && field.type !== 'checklist') {
-          event.preventDefault();
-          close(true);
-        }
-      });
-    };
-
-    cell.addEventListener('click', (event) => {
-      // Anything already interactive inside the value keeps its own behaviour. The same
-      // exclusion the row click uses, and for the same reason: a checklist renders its own
-      // tick boxes, delete buttons and "add a step" input, and swapping the whole cell for a
-      // field editor the moment one is clicked makes the checklist impossible to use.
-      if (event.target.closest('a, button, input, select, textarea, label, .wb-check-toggle')) return;
-      open();
-    });
-    cell.addEventListener('keydown', (event) => {
-      if (cell.dataset.editing) return;
-      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
-    });
-  });
-}
-
-function wbResetInlineCell(cell) {
-  delete cell.dataset.editing;
-  delete cell.dataset.was;
-  cell.classList.remove('is-editing');
-}
-
-/**
- * Save one field of one record.
- *
- * Deliberately the same tail as the modal's item branch -- stamp, log, notify, run
- * automations with the previous values, persist -- because a change made here is not a
- * lesser kind of change. An inline edit that skipped automations would be a second, quieter
- * way to edit a record, and the two would drift.
- */
-function wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell) {
-  const { workspace, app } = wbFind(companyId, workspaceId, appId);
-  const item = app?.items.find((i) => i.id === itemId);
-  if (!item) return;
-
-  const restore = () => { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); };
-  // No input in this cell means nothing was ever editable here -- a renderer that returned
-  // nothing, or markup that failed to mount. wbReadFieldInput cannot tell that apart from a
-  // field somebody deliberately cleared: both come back as ''. Checked before reading, so a
-  // missing editor can never be mistaken for an instruction to erase the value.
-  if (!cell.querySelector('[data-f]')) { restore(); return; }
-
-  const value = wbReadFieldInput(field);
-  // Generated fields read back as undefined; they are not offered for editing, so this only
-  // catches a field that vanished from the app while its editor was open.
-  if (value === undefined) { restore(); return; }
-
-  const emptied = value === '' || value == null || (Array.isArray(value) && !value.length);
-  if (field.required && emptied) {
-    showToast(`"${field.label}" is required.`, 'local', 'Workspaces');
-    restore();
-    return;
-  }
-  if (field.type === 'email' && String(value || '').trim() && !isValidEmail(String(value).trim())) {
-    showToast(`"${field.label}" must be a valid email address, e.g. name@company.com.`, 'local', 'Workspaces');
-    restore();
-    return;
-  }
-
-  // Clicking a value and clicking away without touching it is a normal thing to do, and it
-  // must not stamp the record as edited or fire automations at everyone.
-  const before = item.values[field.id];
-  if (JSON.stringify(before ?? '') === JSON.stringify(value ?? '')) { restore(); return; }
-
-  const prev = { ...item.values };
-  const stamp = new Date().toISOString();
-  item.values = { ...item.values, [field.id]: value };
-  // Derived fields first, automations second -- the order the card path already uses. A
-  // progress field linked to a checklist is what an automation like "when progress hits
-  // 100%" actually watches, so running the rules before recomputing it means the rule reads
-  // the old number and never fires. Ticking the last step on a card worked and ticking it
-  // here did not, for exactly this.
-  wbSyncLinkedProgress(app, item, field.id);
-  item.updatedAt = stamp;
-  item.lastActivityAt = stamp;
-  wbResetInlineCell(cell);
-  wbLogActivity(workspace, {
-    kind: 'updated', icon: 'ti-pencil', color: '#2563eb', appId: app.id, itemId: item.id,
-    text: `Changed <b>${h(field.label)}</b>`,
-    changes: [{
-      fieldId: field.id,
-      label: String(field.label || 'Field'),
-      type: field.type,
-      from: wbPlainVal(companyId, workspace, app, field, before, item.values),
-      to: wbPlainVal(companyId, workspace, app, field, value, item.values),
-    }],
-  });
-  wbNotifyItem(companyId, workspace, app, item, `Updated: ${wbItemTitle(app, item)}`, `${actorName()} updated ${field.label} on ${wbItemTitle(app, item)} in ${app.name}`);
-  wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
-  wbSave(companyId);
-  showToast(`${field.label} saved.`, 'local', 'Workspaces');
-  render();
-}
 
 function wbBindUrlControls(root) {
   if (!root) return;
@@ -17172,6 +16964,9 @@ function loadRecordPanel() {
     wbRecordPanelModule = mod.createRecordPanel({
       h, state, wbAvatar, wbDoc, wbMemberById, wbMembers, wbTimeAgo,
       activeProfileId: () => activeSession().profile?.id || '',
+      // The composer's two pickers upload through the same module the feed does, and Enter
+      // sends through the same writer the button does.
+      ...wbAttachCtx(), activeCompanyId, render, showToast, addComment: wbAddItemComment,
     });
     render();
   }).catch(() => { wbRecordPanelPending = null; });
@@ -17183,17 +16978,46 @@ function wbItemCommentsHtml(companyId, item) {
     companyId, item, canWrite: can('workspaces.manage', companyId),
   });
 }
+/**
+ * Every button on the comment thread, from wherever it was pressed.
+ *
+ * There used to be two copies of these five bindings -- one on the record page, one on the
+ * record modal -- differing only in whether they remembered the modal's scroll. Since every
+ * handler resolves which record it is on through wbCommentContext anyway, the split bought
+ * nothing and cost a place for the next one to be forgotten. Remembering the scroll is a no-op
+ * when there is no modal, so the page can afford the call.
+ */
+function wbCommentAction(el) {
+  const fail = (error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces');
+  const { wbCommentEdit, wbCommentSave, wbCommentDel, wbCommentCancel } = el.dataset;
+  if (wbCommentSave != null) { wbSaveEditedComment(wbCommentSave).catch(fail); return; }
+  if (wbCommentDel != null) { wbDeleteItemComment(wbCommentDel).catch(fail); return; }
+  if (wbCommentEdit != null) state.wbEditingCommentId = wbCommentEdit;
+  else if (wbCommentCancel != null) state.wbEditingCommentId = null;
+  else { wbAddItemComment().catch(fail); return; }
+  wbKeepModalScroll();
+  render();
+}
+
 async function wbAddItemComment() {
   const m = wbCommentContext();
   if (!m) return;
   const input = document.getElementById('wbCommentInput');
   const text = (input?.value || '').trim();
-  if (!text) { showToast('Write a comment first.', 'local', 'Workspaces'); return; }
+  // A photo IS a comment. Requiring words beside it means captioning every screenshot with
+  // "see attached", which nobody does and nobody reads.
+  const files = Array.isArray(state.wbCommentFiles) ? state.wbCommentFiles : [];
+  if (!text && !files.length) { showToast('Write a comment or attach something first.', 'local', 'Workspaces'); return; }
   const { workspace, app } = wbFind(m.companyId, m.workspaceId, m.appId);
   const item = app.items.find((i) => i.id === m.editId);
   if (!item) return;
   const prof = activeSession().profile || {};
-  const comment = { id: wbUid(), author: prof.full_name || prof.email || 'User', authorId: prof.id || '', text, ts: new Date().toISOString() };
+  const comment = {
+    id: wbUid(), author: prof.full_name || prof.email || 'User', authorId: prof.id || '', text, ts: new Date().toISOString(), files: files.slice(),
+  };
+  // Cleared before the save, not after: a failed save puts the comment back through its own
+  // rollback, and leaving the tray full would attach the same files again on the next try.
+  state.wbCommentFiles = [];
   item.comments = Array.isArray(item.comments) ? item.comments : [];
   const previousComments = item.comments.slice();
   item.comments.push(comment);
@@ -17209,6 +17033,9 @@ async function wbAddItemComment() {
     if (result.error) {
       item.comments = item.comments.filter((entry) => entry.id !== comment.id);
       if (!item.comments.length && previousComments.length) item.comments = previousComments;
+      // Back into the tray with them: they are already uploaded, and making somebody pick the
+      // same four photos again because the save failed is the wrong half to throw away.
+      state.wbCommentFiles = files;
       console.warn('Comment save failed', result.error);
       showToast('Could not save your comment. Try again.', 'error', 'Workspaces');
       render();
@@ -17218,7 +17045,14 @@ async function wbAddItemComment() {
     wbLogCommentActivity(workspace, app, item);
     wbSave(m.companyId);
   }
-  wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`);
+  // Sent, so the draft is spent. Cleared here rather than beside the tray above because a failed
+  // save puts the files back and must put the words back with them -- losing the sentence while
+  // keeping the photos is the wrong half to keep.
+  state.wbCommentDraft = '';
+  // A comment that is only files still has to say something in the notification, or it arrives
+  // as somebody's name and a colon.
+  const said = text || `${files.length} file${files.length === 1 ? '' : 's'} attached`;
+  wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${said.length > 90 ? `${said.slice(0, 90)}…` : said}`);
   wbNotifyMentions(m.companyId, workspace, app, item, text);
   wbKeepModalScroll();
   render();
@@ -17945,6 +17779,9 @@ function wbOpenForm(fieldId) {
   import('./form/doc-editor.js')
     .then((mod) => mod.openFor(fieldId, {
       state, wbFind, render, formatDate, memberName, wbItemTitle,
+      // What Save means over an open panel -- write the field back to the app, or say which
+      // button finishes the job -- lives in the chunk, not here.
+      wbSave, wbCollectModalDraft, fieldTypeLabel: (type) => WB_FIELD_TYPES[type]?.label || type,
     }))
     .catch((error) => showToast(error.message || 'The document could not be opened.', 'local', 'Workspaces'));
 }
@@ -20355,14 +20192,19 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-clear-sort]', () => { wbItemsUI(appId).sort = null; render(); });
     bind('[data-wb-set-view]', (el) => { wbItemsUI(appId).view = el.dataset.wbSetView; wbRememberItemsUI(appId); render(); });
     bind('[data-wb-sort-preset]', (el) => { const ui = wbItemsUI(appId); if (el.value) { ui.order = el.value; ui.sort = null; } render(); }, 'onchange');
-    // Record page. The same comment thread as the modal, bound to the page instead of an
-    // overlay; the handlers resolve their target through wbCommentContext either way.
-    const commentFail = (error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces');
     // No Edit button any more: the value cells are the editors. Bound with the record's
     // identity, because a single-field save has to know which record it is saving to.
     const openItemId = state.route?.params?.get('item_id') || '';
     if (openItemId) {
-      wbBindInlineEdits(document, companyId, workspaceId, appId, openItemId);
+      // Which record's page is open. Set here rather than by the binder, because the map pin
+      // reads it and the pin stays in this file: the ids are resolved by this mount and are
+      // not written into the DOM anywhere the pin's handler could find them.
+      wbInlineRecord = { companyId, workspaceId, appId, itemId: openItemId };
+      // The binder moved into the record page's own module. It is already being fetched to
+      // draw this page, so by the time a cell can be clicked it is in hand.
+      loadWbViewItemPage()
+        .then((mod) => mod.bindInlineEdits(document, companyId, workspaceId, appId, openItemId))
+        .catch(() => showToast('The record editor could not be loaded. Reload and try again.', 'error', 'Workspaces'));
       // The history reads downwards, so the newest line is at the BOTTOM -- and that is the
       // one you opened the record to read. Land on it; scroll up for the past. Only when the
       // record CHANGES: every render rebuilds this node at scrollTop 0, and re-pinning each
@@ -20446,11 +20288,6 @@ function mountWorkspaceBuilder() {
       });
     });
     mountWbRecordDrag(companyId, workspaceId, appId);
-    bind('[data-wb-add-comment]', () => { wbAddItemComment().catch(commentFail); });
-    bind('[data-wb-comment-edit]', (el) => { state.wbEditingCommentId = el.dataset.wbCommentEdit; render(); });
-    bind('[data-wb-comment-cancel]', () => { state.wbEditingCommentId = null; render(); });
-    bind('[data-wb-comment-save]', (el) => { wbSaveEditedComment(el.dataset.wbCommentSave).catch(commentFail); });
-    bind('[data-wb-comment-del]', (el) => { wbDeleteItemComment(el.dataset.wbCommentDel).catch(commentFail); });
     bind('[data-wb-trash-restore]', (el) => {
       const { app } = wbFind(companyId, workspaceId, appId);
       const back = recycleBinModule?.restoreFromTrash(app, el.dataset.wbTrashRestore);
@@ -21131,17 +20968,10 @@ function wbMountModal() {
     if (editBtn) editBtn.onclick = () => { state.builderModal.mode = 'edit'; render(); };
     const viewBtn = overlay.querySelector('[data-wb-item-view]');
     if (viewBtn) viewBtn.onclick = () => { const mm = state.builderModal; const found = wbFind(mm.companyId, mm.workspaceId, mm.appId); const it = found.app?.items.find((i) => i.id === mm.editId); mm.draft = { values: it ? { ...it.values } : {} }; mm.mode = 'view'; render(); };
-    overlay.querySelectorAll('[data-wb-view-file]').forEach((b) => { b.onclick = () => openWbFilePreview(b.dataset.fileUrl, b.dataset.fileName); });
     // Link/URL field controls: copy to clipboard, and toggle the QR code.
     wbBindUrlControls(overlay);
     wbBindRelationshipPickers(overlay);
     wbSyncButtons(overlay);
-    const addComment = overlay.querySelector('[data-wb-add-comment]');
-    if (addComment) addComment.onclick = () => { wbAddItemComment().catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); };
-    overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.wbEditingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });
-    overlay.querySelectorAll('[data-wb-comment-cancel]').forEach((b) => { b.onclick = () => { state.wbEditingCommentId = null; wbKeepModalScroll(); render(); }; });
-    overlay.querySelectorAll('[data-wb-comment-save]').forEach((b) => { b.onclick = () => { wbSaveEditedComment(b.dataset.wbCommentSave).catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); }; });
-    overlay.querySelectorAll('[data-wb-comment-del]').forEach((b) => { b.onclick = () => { wbDeleteItemComment(b.dataset.wbCommentDel).catch((error) => showToast(error.message || 'Comment delete failed.', 'error', 'Workspaces')); }; });
     if (m.focusComment) { const ci = overlay.querySelector('#wbCommentInput'); if (ci) { ci.focus(); ci.scrollIntoView({ block: 'center' }); } m.focusComment = false; }
     if (m.mode !== 'view') {
       const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
@@ -26838,6 +26668,12 @@ function onDocumentKeydown(event) {
     return;
   }
 
+  // A comment box sends on Enter and breaks the line on Alt+Enter. Body in record-panel.js,
+  // beside the box it belongs to; gated on the key here so a module call is not made on every
+  // keystroke in the app. Checked before the modal handling below, because the record modal has
+  // one of these boxes in it.
+  if (event.key === 'Enter' && wbRecordPanelModule?.commentKey(event)) return;
+
   // Modal keyboard support: Esc dismisses, Tab is trapped within the modal.
   if ((state.builderModal || state.modal) && activeModalOverlay()) {
     if (event.key === 'Escape') { if (dismissTopModal()) event.preventDefault(); return; }
@@ -27524,6 +27360,15 @@ function onDocumentClick(event) {
   if (!event.target.closest('.address-lookup-control, .sf-inline-address-editor')) closeAddressSuggestionMenus();
   if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
   if (event.target.closest('[data-takeoff-action]') && takeoffEvent(event, 'click')) return;
+  // An attachment, wherever it is drawn. Delegated once here rather than bound per render: the
+  // comment card appears on a record page, in the record modal and in the feed, and three
+  // copies of the same binding is three places for it to be forgotten.
+  const viewFile = event.target.closest('[data-wb-view-file]');
+  if (viewFile) { event.preventDefault(); openWbFilePreview(viewFile.dataset.fileUrl, viewFile.dataset.fileName); return; }
+  const attAct = event.target.closest('[data-wb-att]');
+  if (attAct) { event.preventDefault(); wbRecordPanelModule?.attachAction(attAct.dataset.wbAtt); return; }
+  const cmtAct = event.target.closest('[data-wb-add-comment],[data-wb-comment-edit],[data-wb-comment-cancel],[data-wb-comment-save],[data-wb-comment-del]');
+  if (cmtAct) { event.preventDefault(); wbCommentAction(cmtAct); return; }
   const formOpen = event.target.closest('[data-wb-form-open]');
   if (formOpen) { event.preventDefault(); wbOpenForm(formOpen.dataset.wbFormOpen); return; }
   const formRow = event.target.closest('[data-wb-form-row]');
@@ -34750,6 +34595,8 @@ function loadButtonPush() {
       buttonPushModule = mod.createButtonPush({
         h, can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
         state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle, wbRunAutomations,
+        // A move takes the record out of this app. Somebody reading its page goes with it.
+        navigate, companyPath,
         // A thunk, not the resolved seat: the contacts page is loaded on its own schedule, and
         // this keeps every storage-shape difference a contact has on that side of the boundary.
         contactSeat: (seat) => companyContactsPageModule?.contactButtonSeat(seat) || null,
@@ -41860,15 +41707,38 @@ function locationPickerDefaultPin(address = '') {
 // address, drag the pin, or take the browser's position. Only the address comes back: a
 // workspace field stores one string, and the coordinates have nowhere to live on it yet.
 function wbOpenLocationPicker(fieldId) {
+  if (!fieldId) return;
   const m = state.builderModal;
-  if (!m || !fieldId) return;
-  // Capture what is typed in the other fields first. Swapping the modal replaces the DOM,
-  // so anything not in the draft by now is gone.
-  wbCollectModalDraft();
-  const address = String(m.draft?.values?.[fieldId] ?? '').trim();
+  if (m) {
+    // Capture what is typed in the other fields first. Swapping the modal replaces the DOM,
+    // so anything not in the draft by now is gone.
+    wbCollectModalDraft();
+    const address = String(m.draft?.values?.[fieldId] ?? '').trim();
+    const pin = locationPickerDefaultPin(address);
+    state.locationPicker = { kind: 'wb-field', field: fieldId, address, lat: pin.lat, lng: pin.lng, inputName: '' };
+    state.builderModal = { ...m, kind: 'wb-location', fieldId, returnTo: { ...m } };
+    render();
+    return;
+  }
+
+  // No modal: the pin was pressed inside an inline editor on the record PAGE, where the same
+  // markup is reused. There is nothing to swap and nothing to return to -- the page is the
+  // page -- so the picker opens over it and Save writes to the record itself. That is what a
+  // single-field edit already means here: every other field on this page commits on its own.
+  const rec = wbInlineRecord;
+  if (!rec) return;
+  const { app } = wbFind(rec.companyId, rec.workspaceId, rec.appId);
+  const item = app?.items.find((i) => i.id === rec.itemId);
+  if (!item || !app.fields.some((f) => f.id === fieldId)) return;
+  // Whatever is in the open box wins over what was last saved, so a half-typed street seeds
+  // the map search instead of being thrown away by pressing the pin beside it.
+  const typed = document.querySelector(`[data-f="${CSS.escape(fieldId)}"]`)?.value;
+  const address = String(typed ?? item.values?.[fieldId] ?? '').trim();
   const pin = locationPickerDefaultPin(address);
-  state.locationPicker = { kind: 'wb-field', field: fieldId, address, lat: pin.lat, lng: pin.lng, inputName: '' };
-  state.builderModal = { ...m, kind: 'wb-location', fieldId, returnTo: { ...m } };
+  state.locationPicker = {
+    kind: 'wb-record', ...rec, field: fieldId, address, lat: pin.lat, lng: pin.lng, inputName: '',
+  };
+  state.modal = 'location-picker';
   render();
 }
 
@@ -42016,6 +41886,26 @@ async function saveLocationPicker() {
     locationPickerMap = null;
     locationPickerMarker = null;
     showToast('Location set — save the record to keep it.', 'local', 'Workspaces');
+    render();
+    return true;
+  }
+  if (picker.kind === 'wb-record') {
+    // Straight to the record, unlike the modal's pin: there is no draft here and no Save button
+    // waiting behind it. It goes through wbCommitFieldValue, so this lands in the record's
+    // history and fires its automations exactly as typing the address and clicking away does.
+    const { app } = wbFind(picker.companyId, picker.workspaceId, picker.appId);
+    const field = app?.fields.find((f) => f.id === picker.field);
+    if (!field) return false;
+    // The one writer lives with the inline editor now. This branch only runs for a pin opened
+    // from a record page, so that module is already loaded; awaiting it is belt and braces.
+    const recordPage = await loadWbViewItemPage();
+    const outcome = recordPage.commitFieldValue(picker.companyId, picker.workspaceId, picker.appId, picker.itemId, field, address);
+    if (outcome.refusal) { showToast(outcome.refusal, 'local', 'Workspaces'); return false; }
+    state.modal = '';
+    state.locationPicker = null;
+    locationPickerMap = null;
+    locationPickerMarker = null;
+    showToast(outcome.saved ? `${field.label} saved.` : 'That is already the address.', 'local', 'Workspaces');
     render();
     return true;
   }

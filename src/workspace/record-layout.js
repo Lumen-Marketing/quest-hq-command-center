@@ -27,7 +27,74 @@ export const BLOCK_TYPES = [
   { type: 'meta', label: 'Details', icon: 'ti-info-circle', desc: 'Created and last edited', size: 1, config: false },
   { type: 'note', label: 'Note', icon: 'ti-note', desc: 'A line of text on every record', size: 2, config: true },
   { type: 'collection', label: 'Sub-items', icon: 'ti-list-check', desc: 'Records inside this record — dailies, line items, visits', size: 4, config: true },
+  { type: 'quick', label: 'Quick Create', icon: 'ti-bolt', desc: 'Make a spreadsheet, form, file or proposal on this record', size: 2, config: false },
 ];
+
+/**
+ * What Quick Create can make.
+ *
+ * The first four are FIELD TYPES. The App Builder stores a record's values keyed by field id and
+ * has no per-record attachment slot, so "attached to this record" can only mean: the app gains a
+ * field of that type, and this record's value of it is opened. The field is made once and reused
+ * -- pressing Spreadsheet on a second record opens the same column, not a second one -- which is
+ * why `name` is a plain noun rather than something per-record.
+ *
+ * The consequence is worth stating rather than discovering: the column exists on every record in
+ * the app from then on, blank until used. That is the same thing a Button push already does to
+ * the app it pushes into.
+ *
+ * `proposal` is not a field at all. It is a row in public.proposal_documents, which already has
+ * the generic `related_type` / `related_id` pair, so it can point at a record here with nothing
+ * added to the schema. Task and Estimate are deliberately absent: public.tasks and public.deals
+ * link only to a contact, deal, job or project, so attaching one needs a migration of its own.
+ */
+export const QUICK_CREATE = [
+  { key: 'sheet', field: 'sheet', name: 'Spreadsheet', label: 'Spreadsheet', desc: 'A grid with formulas', icon: 'ti-table', tone: '#0f766e' },
+  { key: 'form', field: 'form', name: 'Form', label: 'Form', desc: 'A document you fill in and print', icon: 'ti-file-text', tone: '#4f46e5' },
+  { key: 'image', field: 'image', name: 'Image', label: 'Image', desc: 'A picture on this record', icon: 'ti-photo', tone: '#0891b2' },
+  { key: 'file', field: 'file', name: 'File', label: 'File', desc: 'Attach a document', icon: 'ti-paperclip', tone: '#6b7280' },
+  { key: 'proposal', module: 'proposal', label: 'Proposal', desc: 'A proposal linked to this record', icon: 'ti-file-description', tone: '#7c3aed' },
+];
+
+export const quickEntry = (key) => QUICK_CREATE.find((entry) => entry.key === key) || null;
+
+/**
+ * The field a Quick Create button writes into, and whether it has to be made first.
+ *
+ * Matched on TYPE rather than on a name: somebody who renames "Spreadsheet" to "Takeoff" has not
+ * asked for a second spreadsheet column, and matching by name would give them one.
+ */
+export function quickCreateField(app, entry, makeId = nextId) {
+  if (!entry?.field) return null;
+  const existing = (app?.fields || []).find((f) => f?.type === entry.field && !f.hidden);
+  if (existing) return { field: existing, created: false };
+  return {
+    field: { id: makeId(), label: entry.name, type: entry.field, required: false, hidden: false, config: {} },
+    created: true,
+  };
+}
+
+/**
+ * Put a newly made field somewhere it will actually be seen.
+ *
+ * A `fields` block with an explicit `fieldIds` list is honoured EXACTLY, so a field in none of
+ * them is invisible on the record page with nothing on screen to say why -- which would make
+ * Quick Create look broken the first time it was used on a customised layout. Appended to the
+ * last field group, because an arrival belongs after what was already there.
+ *
+ * A layout whose groups say "every field" (`fieldIds: null`) already shows it, and is returned
+ * untouched rather than being pinned to a list it never had.
+ */
+export function placeFieldInLayout(blocks, fieldId) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  const groups = list.filter((block) => block?.type === 'fields');
+  if (!groups.length || groups.some((block) => block.config?.fieldIds == null)) return list;
+  if (groups.some((block) => (block.config.fieldIds || []).includes(fieldId))) return list;
+  const last = groups[groups.length - 1];
+  return list.map((block) => (block === last
+    ? { ...block, config: { ...block.config, fieldIds: [...(block.config.fieldIds || []), fieldId] } }
+    : block));
+}
 
 const TYPE_BY_NAME = new Map(BLOCK_TYPES.map((t) => [t.type, t]));
 export const blockMeta = (type) => TYPE_BY_NAME.get(type) || null;

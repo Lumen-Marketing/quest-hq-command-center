@@ -12,8 +12,8 @@ import {
   appsWithContactFields, companyContactFieldsOf, contactUsage, usageBalance, usageSummary,
 } from './model.js';
 import {
-  CALENDAR_VIEWS, calendarSpan, contactActivity, contactDates, datesByDay, dayKey, entriesIn,
-  shiftAnchor,
+  CALENDAR_VIEWS, calendarSpan, cellKey as calCellKey, contactActivity, contactDates, datesByDay,
+  dayKey, entriesForKey, entriesIn, keyTitle, shiftAnchor,
 } from './timeline.js';
 import { renderSearchCombobox } from '../ui/combobox-menu.js';
 // The card's layout model. Pure, and imported directly rather than threaded through ctx: it
@@ -964,9 +964,18 @@ export function createCompanyContactsPage(ctx) {
           return href ? `<a class="cc-cal-item" href="${h(href)}" data-router>${body}</a>` : `<span class="cc-cal-item">${body}</span>`;
         }).join('')
         : entries.length ? `<span class="cc-cal-dot">${entries.length}</span>` : '';
-      return `<div class="${classes}" title="${h(entries.map((entry) => `${entry.title} — ${entry.label}`).join('\n'))}">
-        <span class="cc-cal-num">${h(label)}</span>${detail}
-      </div>`;
+      const tip = h(entries.map((entry) => `${entry.title} — ${entry.label}`).join('\n'));
+      const body = `<span class="cc-cal-num">${h(label)}</span>${detail}`;
+      // A count is not something you can read. Where the cell shows only a number -- month and
+      // year -- pressing it opens what that number stands for. Day and week already list the
+      // entries as links, so the cell is not made pressable there: a link inside a button is
+      // both a nested control and two different things to hit in the same place.
+      if (entries.length && !['day', 'week'].includes(view)) {
+        return `<button type="button" class="${classes} open" data-cc-cal-open="${h(calCellKey(item))}"
+          data-cc-cal-for="${h(contact.id)}"
+          title="${tip}" aria-label="${h(`${entries.length} on ${keyTitle(calCellKey(item))}`)}">${body}</button>`;
+      }
+      return `<div class="${classes}" title="${tip}">${body}</div>`;
     };
 
     const weekdays = view === 'month' || view === 'week'
@@ -988,6 +997,59 @@ export function createCompanyContactsPage(ctx) {
         ${weekdays}
         <div class="cc-cal-grid cc-cal-${h(view)}">${span.cells.map(cell).join('')}</div>
         ${byDay.size ? '' : '<p class="cc-empty">No dates yet. A date field on any record that names them shows up here.</p>'}
+        ${calDayModal(companyId, byDay, contact)}
+      </div>`;
+  }
+
+  /**
+   * What is on the day somebody pressed.
+   *
+   * Rendered inside the card rather than through `state.modal`, because this belongs to the
+   * calendar and the card is already a lazily-fetched chunk -- routing it through the shell
+   * would put it in the entry bundle, which has no room, for a panel most sessions never open.
+   *
+   * It reads from the SAME byDay map the grid was drawn from, so the modal can never disagree
+   * with the count on the cell that opened it.
+   */
+  // Which day the open dialog was focused for. mountCard runs on EVERY render, so without this
+  // the dialog grabs focus back each time -- including from the row somebody is tabbing towards.
+  let calFocusedKey = '';
+
+  function calDayModal(companyId, byDay, contact) {
+    // Whose day it was. Without this, opening a day on one contact and then walking to another
+    // carries the dialog across, where the same key finds nothing and it reads as "nothing on
+    // this day" about a day nobody asked to see.
+    const key = state.ccCalDayFor === contact.id ? String(state.ccCalDay || '') : '';
+    if (!key) return '';
+    const entries = entriesForKey(byDay, key);
+    // The day emptied under them -- a record was deleted, or its date moved -- so say that
+    // rather than drawing an empty dialog.
+    const list = entries.length
+      ? entries.map((entry) => {
+        const href = entryHref(companyId, entry);
+        const body = `
+          <span class="cc-cal-row-main">
+            <b>${h(entry.title)}</b>
+            <small><em>${h(entry.label)}</em>${h(entry.appName)}</small>
+          </span>
+          <span class="cc-cal-row-day">${h(formatDate(entry.at))}</span>`;
+        // Without a route there is nowhere to send them; a dead link that looks live is worse
+        // than a row that plainly is not one.
+        return href
+          ? `<a class="cc-cal-row" href="${h(href)}" data-router data-cc-cal-go>${body}<i class="ti ti-chevron-right"></i></a>`
+          : `<span class="cc-cal-row is-flat">${body}</span>`;
+      }).join('')
+      : '<p class="cc-empty">Nothing on this day any more.</p>';
+
+    return `
+      <div class="cc-cal-modal" data-cc-cal-backdrop>
+        <div class="cc-cal-dialog" role="dialog" aria-modal="true" aria-labelledby="ccCalDayTitle">
+          <header>
+            <h4 id="ccCalDayTitle"><i class="ti ti-calendar-event"></i>${h(keyTitle(key))}</h4>
+            <button class="wb-icon-btn" type="button" data-cc-cal-close aria-label="Close"><i class="ti ti-x"></i></button>
+          </header>
+          <div class="cc-cal-rows">${list}</div>
+        </div>
       </div>`;
   }
 
@@ -2624,6 +2686,47 @@ export function createCompanyContactsPage(ctx) {
       render();
     });
     bind('[data-cc-cal-today]', () => { state.ccCalAt = ''; render(); });
+
+    // Opening and closing what is on a day. The KEY is stored, not the entries: they are read
+    // back out of the same records on the next draw, so the dialog cannot show a list the grid
+    // behind it has stopped agreeing with.
+    bind('[data-cc-cal-open]', (el) => {
+      state.ccCalDay = el.dataset.ccCalOpen || '';
+      state.ccCalDayFor = el.dataset.ccCalFor || '';
+      render();
+    });
+    bind('[data-cc-cal-close]', () => { state.ccCalDay = ''; render(); });
+    // Only a press on the backdrop ITSELF closes. Without the identity check every press inside
+    // the dialog closes it on the way up, which makes the thing impossible to read.
+    bind('[data-cc-cal-backdrop]', (el, event) => {
+      if (event.target !== el) return;
+      state.ccCalDay = '';
+      render();
+    });
+    // NOT through `bind`: it calls preventDefault on everything it binds, which on a real link
+    // is the difference between navigating and doing nothing at all. This only has to bank the
+    // closed state on the way past, so the dialog is not still open on the way back.
+    card.querySelectorAll('[data-cc-cal-go]').forEach((el) => {
+      el.addEventListener('click', () => { state.ccCalDay = ''; });
+    });
+
+    // Escape closes it, and the dialog takes focus once so a screen reader reads the day rather
+    // than leaving the caret on the cell that has just been covered over.
+    const dialog = card.querySelector('.cc-cal-dialog');
+    if (!state.ccCalDay) calFocusedKey = '';
+    if (dialog) {
+      dialog.tabIndex = -1;
+      dialog.onkeydown = (event) => {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        state.ccCalDay = '';
+        render();
+      };
+      if (calFocusedKey !== state.ccCalDay) {
+        calFocusedKey = state.ccCalDay;
+        dialog.focus({ preventScroll: true });
+      }
+    }
 
     if (!state.ccCardArrange) return;
     bindCardButtonInputs();
