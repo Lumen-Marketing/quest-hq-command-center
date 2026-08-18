@@ -1191,6 +1191,13 @@ line."
 - **A move into Company Contacts follows too**, to the card it just became. Filed without moving, the record is still there to read and the reader stays put.
 - `tests/button-push-follow.test.mjs` presses the button and follows where the reader lands — six cases, four of which assert it must NOT move them. **Confirmed by mutation**: deleting the "am I reading this record" guard fails two of them. The first attempt at that mutation silently did not apply, because the file is CRLF and the patch was written with `
 ` — a green run that proved nothing, which is worth knowing before trusting the next one.
+## 2026-08-18 Live QA regression hardening
+
+- A Button on a brand-new, unsaved App Builder form can no longer create an orphaned `Untitled` record in another app. Send and move actions ask for one source save first; a Change-fields button still works inside the draft because it does not create a second record.
+- Record deletion now waits for the recycle-bin write to finish before closing the confirmation or reporting success. A refused save restores the browser's in-memory record list instead of leaving the screen ahead of storage.
+- Company Contact card-button edits made in Settings remain in the shared draft until Save, so later fields no longer overwrite the chosen label, icon, action, or destination with the generic Button defaults.
+- Taking Location or another Company Contact field off the card remembers its prior card region. Adding it back restores that region instead of forcing it into Details.
+- Cross-app destination lists now exclude apps stranded in deleted, inactive, or inaccessible operational workspaces. The Apps navigation badge counts the resolved apps visible in the selected workspace rather than the number of builder workspace containers.
 
 ## Remaining controlled launch configuration
 

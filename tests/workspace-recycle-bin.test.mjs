@@ -15,6 +15,7 @@ import {
   restoreFromTrash,
   sendFieldsToTrash,
   sendToTrash,
+  sendToTrashAndSave,
   trashTotals,
   trashedFieldValueCount,
 } from '../src/workspace/recycle-bin.js';
@@ -60,6 +61,24 @@ test('deleting nothing reports nothing, rather than claiming a delete', () => {
   assert.equal(sendToTrash(a, []), 0);
   assert.equal(sendToTrash(a, ['nope']), 0);
   assert.equal(a.items.length, 3);
+});
+
+test('a delete does not finish until the updated recycle bin is durably saved', async () => {
+  const a = app();
+  let release;
+  let finished = false;
+  const save = () => new Promise((resolve) => { release = resolve; });
+
+  const deleting = sendToTrashAndSave(a, ['i2'], 'me', save).then((moved) => {
+    finished = true;
+    return moved;
+  });
+
+  await Promise.resolve();
+  assert.equal(finished, false, 'the UI must not report success while the save is still in flight');
+  assert.deepEqual(a.items.map((item) => item.id), ['i1', 'i3']);
+  release();
+  assert.equal(await deleting, 1);
 });
 
 test('the newest deletion is at the top, which is where somebody looks first', () => {
@@ -137,6 +156,16 @@ test('deleting a record routes into the bin, and no longer promises to destroy i
   assert.match(main, /wbTrashItems\(companyId, workspace, app, \[\.\.\.kill\]\)/);
   assert.ok(!main.includes('This record will be permanently removed.'), 'the old wording is gone');
   assert.match(main, /moves to the app’s recycle bin, where it can be restored/);
+});
+
+test('the confirmation waits for the recycle-bin write before closing and rendering', () => {
+  assert.match(main, /const moved = await wbTrashItems\(companyId, workspace, app, \[c\.itemId\]\)/);
+  assert.match(main, /await wbTrashItems\(companyId, workspace, app, \[\.\.\.kill\]\)/);
+});
+
+test('bulk-delete activity is included in the same durable save as the deleted records', () => {
+  const bulkDelete = main.match(/else if \(c\.op === 'del-items'\) \{([\s\S]*?)\n  \} else if \(c\.op === 'del-auto'\)/)?.[1] || '';
+  assert.ok(bulkDelete.indexOf('wbLogActivity(workspace') < bulkDelete.indexOf('await wbTrashItems('));
 });
 
 test('the bin survives a save and a reload', () => {

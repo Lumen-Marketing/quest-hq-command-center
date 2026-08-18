@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { resolveAppEntry, tileTargetApp, workspaceApps, workspaceHasApp } from '../src/workspace/builder-core.js';
+import {
+  resolveAppEntry, targetableCompanyApps, tileTargetApp, workspaceApps, workspaceHasApp,
+} from '../src/workspace/builder-core.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
@@ -150,4 +152,23 @@ test('workspaceHasApp sees an app whether owned or linked', () => {
   assert.equal(workspaceHasApp(doc.workspaces[0], 'app-1'), true, 'owned');
   assert.equal(workspaceHasApp(doc.workspaces[1], 'app-1'), true, 'linked');
   assert.equal(workspaceHasApp(doc.workspaces[1], 'other'), false);
+});
+
+test('button destinations exclude apps stranded in deleted or inaccessible workspaces', () => {
+  const doc = {
+    workspaces: [
+      { id: 'ws-main', name: 'Main', apps: [{ id: 'active-app', name: 'Task Manager' }] },
+      { id: 'ws-new', name: 'New', apps: [{ id: 'stale-app', name: 'Roof Qoute & Job Tracker' }] },
+      { id: 'ws-private', name: 'Private', apps: [{ id: 'private-app', name: 'Private Notes' }] },
+    ],
+  };
+  const operational = [
+    { id: 'main', company_id: 'co1', status: 'active', is_default: true },
+    { id: 'private', company_id: 'co1', status: 'active' },
+    // There is deliberately no operational workspace for ws-new any more.
+  ];
+  const allowed = [operational[0]];
+
+  const shown = targetableCompanyApps(doc, 'co1', operational, allowed);
+  assert.deepEqual(shown.map(({ workspace, app }) => `${workspace.name} › ${app.name}`), ['Main › Task Manager']);
 });

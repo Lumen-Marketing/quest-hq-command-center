@@ -325,6 +325,13 @@ export function normalizeCardButton(input, index = 0) {
   };
 }
 
+/** Merge one control change into the current button list without dropping earlier edits. */
+export function patchCardButtons(buttons, buttonId, patch) {
+  return (Array.isArray(buttons) ? buttons : []).map((button, index) => (button?.id === buttonId
+    ? normalizeCardButton({ ...button, ...(patch || {}) }, index)
+    : button));
+}
+
 /**
  * Is this button configured enough to press?
  *
@@ -441,6 +448,13 @@ export function cardRegionOf(field) {
   if (REGION_IDS.includes(place)) return place;
   if (field?.kind === 'button') return 'header';
   return field?.type === 'textarea' ? 'detail' : 'summary';
+}
+
+/** The shelf an off-card field should return to when it is added back. */
+export function restoreCardRegion(element) {
+  const remembered = String(element?.restoreRegion || element?.field?.config?.cardRestore || '');
+  if (REGION_IDS.includes(remembered) && !['pin', 'off'].includes(remembered)) return remembered;
+  return element?.field?.type === 'textarea' ? 'detail' : 'summary';
 }
 
 /**
@@ -884,8 +898,10 @@ export function splitStores(elements) {
     }
     if (!element.field?.id) return;
     const region = REGION_IDS.includes(element.region) && element.region !== 'pin' ? element.region : 'summary';
+    const cardRestore = region === 'off' ? restoreCardRegion(element) : region;
     fields[element.field.id] = {
       card: region,
+      cardRestore,
       cardSpan: SPAN_IDS.includes(element.span) ? element.span : 'sm',
       cardOrder: clampOrder(element.order, 1),
     };

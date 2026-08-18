@@ -33,6 +33,32 @@ export function sendToTrash(app, itemIds, by = '') {
 }
 
 /**
+ * Move records to the bin and do not report completion until their new state is durable.
+ *
+ * The App Builder loads this module lazily. A caller used to start that load, save the old
+ * document immediately, and close the confirmation while the real recycle-bin write was still
+ * in flight. A fast reload could therefore bring the record back. Keeping mutation and
+ * persistence in one awaitable operation makes the ordering explicit and rolls the in-memory
+ * change back if storage refuses it.
+ */
+export async function sendToTrashAndSave(app, itemIds, by = '', save = async () => {}) {
+  const previousItems = [...(app.items || [])];
+  const hadTrash = Array.isArray(app.trash);
+  const previousTrash = [...(app.trash || [])];
+  const moved = sendToTrash(app, itemIds, by);
+  if (!moved) return 0;
+  try {
+    await save();
+    return moved;
+  } catch (error) {
+    app.items = previousItems;
+    if (hadTrash) app.trash = previousTrash;
+    else delete app.trash;
+    throw error;
+  }
+}
+
+/**
  * Put one back where it came from.
  *
  * It returns to the top of the list rather than to its old position: the position it had is
