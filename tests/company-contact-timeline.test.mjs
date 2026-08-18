@@ -7,11 +7,14 @@ import { fileURLToPath } from 'node:url';
 import {
   CALENDAR_VIEWS,
   calendarSpan,
+  cellKey,
   contactActivity,
   contactDates,
   datesByDay,
   dayKey,
+  entriesForKey,
   entriesIn,
+  keyTitle,
   shiftAnchor,
   startOfWeek,
 } from '../src/company-contacts/timeline.js';
@@ -230,7 +233,121 @@ test('both panels say so when there is nothing yet', () => {
 test('every class the two panels use is styled', () => {
   ['cc-feed', 'cc-feed-row', 'cc-feed-ic', 'cc-feed-main', 'cc-cal-bar', 'cc-cal-title',
     'cc-cal-views', 'cc-cal-view', 'cc-cal-days', 'cc-cal-grid', 'cc-cal-cell', 'cc-cal-num',
-    'cc-cal-dot', 'cc-cal-item'].forEach((name) => {
+    'cc-cal-dot', 'cc-cal-item', 'cc-cal-modal', 'cc-cal-dialog', 'cc-cal-rows', 'cc-cal-row',
+    'cc-cal-row-main', 'cc-cal-row-day'].forEach((name) => {
     assert.ok(styles.includes(`.${name}`), `.${name} has no rule`);
   });
+});
+
+// ---- pressing a day ---------------------------------------------------------------------------
+
+test('a cell carries the key its entries can be found by again', () => {
+  // A Date does not survive being parked in state and read back, and a year cell is a whole
+  // month rather than a day -- so the two cells key differently, on purpose.
+  const month = calendarSpan('month', new Date(2026, 8, 11));
+  const dayCell = month.cells.find((cell) => dayKey(cell.date) === '2026-09-11');
+  assert.equal(cellKey(dayCell), '2026-09-11');
+
+  const year = calendarSpan('year', new Date(2026, 8, 11));
+  assert.equal(cellKey(year.cells[8]), '2026-09');
+  assert.equal(cellKey(year.cells[0]), '2026-01', 'a month is zero-padded');
+  assert.equal(cellKey(null), '');
+});
+
+test('a key finds exactly what its cell was counting', () => {
+  const byDay = datesByDay(contactDates(doc(), 'c1'));
+  // Two records share 20 Aug, and the count on the cell is what the dialog must list.
+  assert.equal(entriesIn({ date: new Date(2026, 7, 20) }, byDay).length, 2);
+  assert.equal(entriesForKey(byDay, '2026-08-20').length, 2);
+  assert.deepEqual(entriesForKey(byDay, '2026-08-20').map((entry) => entry.title), ['Wew', 'Wew2']);
+  assert.deepEqual(entriesForKey(byDay, '2026-09-02').map((entry) => entry.label), ['Follow up']);
+  assert.deepEqual(entriesForKey(byDay, '2026-08-19'), [], 'a day with nothing on it');
+});
+
+test('a month key takes the whole month, and cannot spill into a neighbour', () => {
+  const byDay = datesByDay(contactDates(doc(), 'c1'));
+  assert.equal(entriesForKey(byDay, '2026-08').length, 2);
+  assert.equal(entriesForKey(byDay, '2026-09').length, 1);
+
+  // The trailing dash is the whole point: '2026-1' must not swallow October, November and
+  // December. Day keys are zero-padded, so a prefix without it would match all three.
+  const wide = new Map([['2026-01-05', [{ day: '2026-01-05', label: 'a' }]], ['2026-10-05', [{ day: '2026-10-05', label: 'b' }]]]);
+  assert.equal(entriesForKey(wide, '2026-01').length, 1);
+  assert.equal(entriesForKey(wide, '2026-1').length, 0, 'an unpadded month is not a key');
+});
+
+test('a malformed or empty key asks for nothing rather than everything', () => {
+  const byDay = datesByDay(contactDates(doc(), 'c1'));
+  ['', null, undefined, '2026', 'nonsense', '2026-08-20T10:00:00Z'].forEach((key) => {
+    assert.deepEqual(entriesForKey(byDay, key), [], `${key} should match nothing`);
+  });
+});
+
+test('the dialog is titled by the day, or the month when a year cell opened it', () => {
+  assert.match(keyTitle('2026-09-11'), /11/);
+  assert.match(keyTitle('2026-09-11'), /September/);
+  assert.equal(keyTitle('2026-09'), new Date(2026, 8, 1).toLocaleDateString([], { month: 'long', year: 'numeric' }));
+  assert.equal(keyTitle(''), '');
+  assert.equal(keyTitle('rubbish'), '');
+});
+
+test('only a cell that shows a bare count is pressable', () => {
+  // Day and week already list their entries as links. Making the cell a button there would put
+  // a link inside a button and two different things to hit in the same place.
+  assert.match(page, /entries\.length && !\['day', 'week'\]\.includes\(view\)/);
+  assert.match(page, /data-cc-cal-open="\$\{h\(calCellKey\(item\)\)\}"/);
+  assert.match(page, /<button type="button" class="\$\{classes\} open"/, 'a real button, so it is keyboard-reachable');
+});
+
+test('the dialog reads from the same map the grid was drawn from', () => {
+  // Storing the entries instead would let the dialog disagree with the count that opened it.
+  assert.match(page, /function calDayModal\(companyId, byDay, contact\)/);
+  assert.match(page, /entriesForKey\(byDay, key\)/);
+  assert.match(page, /state\.ccCalDay/);
+});
+
+test('an open day belongs to the contact it was opened on', () => {
+  // Otherwise walking from one contact to another carries the dialog across, where the same key
+  // finds nothing and it reads as "nothing on this day" about a day nobody asked to see.
+  assert.match(page, /state\.ccCalDayFor === contact\.id/);
+  assert.match(page, /data-cc-cal-for="\$\{h\(contact\.id\)\}"/);
+  assert.match(page, /state\.ccCalDayFor = el\.dataset\.ccCalFor/);
+});
+
+test('the dialog is announced, closeable, and its rows lead to the record', () => {
+  assert.match(page, /role="dialog" aria-modal="true" aria-labelledby="ccCalDayTitle"/);
+  assert.match(page, /id="ccCalDayTitle"/);
+  assert.match(page, /data-cc-cal-close/);
+  assert.match(page, /data-cc-cal-backdrop/);
+  assert.match(page, /event\.target !== el/, 'a press inside the dialog must not close it');
+  assert.match(page, /event\.key !== 'Escape'/);
+  assert.match(page, /data-cc-cal-go/);
+  // `bind` calls preventDefault on everything, which on a real link is the difference between
+  // navigating and doing nothing. The row listener must not go through it.
+  const go = page.slice(page.indexOf("querySelectorAll('[data-cc-cal-go]')"));
+  assert.match(go.slice(0, 200), /addEventListener\('click'/);
+  assert.doesNotMatch(page, /bind\('\[data-cc-cal-go\]'/, 'that would preventDefault the navigation');
+});
+
+test('a day that emptied under the reader says so', () => {
+  assert.match(page, /Nothing on this day any more\./);
+});
+
+test('a pressable cell is typeset like the cell beside it', () => {
+  // `.cc-cal-cell.open` outranks `.cc-cal-cell`, so a `font:` shorthand there carries font-size
+  // with it and the cells that HAVE something on them come out a size larger than their empty
+  // neighbours -- in the same grid, side by side.
+  const rule = (selector) => {
+    const at = styles.indexOf(`${selector} {`);
+    assert.notEqual(at, -1, `${selector} has no rule`);
+    return styles.slice(at, styles.indexOf('}', at));
+  };
+  const base = rule('.cc-cal-cell');
+  assert.match(base, /font-size:\s*11px/, 'the cell size this test is protecting');
+
+  const open = rule('.cc-cal-cell.open');
+  assert.doesNotMatch(open, /(^|[;{\s])font\s*:/, 'the font shorthand would take font-size with it');
+  assert.doesNotMatch(open, /font-size\s*:/, 'the button must keep the cell size, not set its own');
+  // It still has to shed the UA button font, or it renders in Arial beside its neighbours.
+  assert.match(open, /font-family:\s*inherit/);
 });

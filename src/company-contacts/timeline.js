@@ -194,6 +194,40 @@ export function entriesIn(cell, byDay) {
   return out;
 }
 
+/**
+ * The key a cell carries so a click can find its entries again.
+ *
+ * A day cell keys by its day; a year view's cell is a whole MONTH, so it keys by the month. Two
+ * shapes rather than one because that is what the two cells actually mean -- and the key has to
+ * survive a re-render in state, which a Date does not.
+ */
+export function cellKey(cell) {
+  if (!cell?.date) return '';
+  if (cell.month === undefined) return dayKey(cell.date);
+  return `${cell.date.getFullYear()}-${String(cell.month + 1).padStart(2, '0')}`;
+}
+
+/** Everything under a stored key: 'YYYY-MM-DD' for a day, 'YYYY-MM' for a month. */
+export function entriesForKey(byDay, key) {
+  const text = String(key || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return (byDay?.get(text) || []).slice();
+  if (!/^\d{4}-\d{2}$/.test(text)) return [];
+  const out = [];
+  // The trailing dash matters: without it '2026-1' would also swallow '2026-10'. Day keys are
+  // zero-padded, so the prefix is exact.
+  byDay?.forEach((entries, day) => { if (day.startsWith(`${text}-`)) out.push(...entries); });
+  return out.sort((a, b) => a.day.localeCompare(b.day) || a.label.localeCompare(b.label));
+}
+
+/** How a stored key reads as a heading. */
+export function keyTitle(key) {
+  const text = String(key || '');
+  const [year, month, day] = text.split('-').map(Number);
+  if (!year || !month) return '';
+  if (day) return fullDate(new Date(year, month - 1, day));
+  return new Date(year, month - 1, 1).toLocaleDateString([], { month: 'long', year: 'numeric' });
+}
+
 function addDays(date, count) {
   const next = new Date(date);
   next.setDate(next.getDate() + count);
