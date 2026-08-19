@@ -166,3 +166,51 @@ test('the type picker opens and chooses through the record page listener', async
   assert.match(html, /name="position" value="before:f-name"/);
   assert.match(html, /Which field/);
 });
+
+test('a name typed into the box survives a press on the pickers', async () => {
+  // The whole round trip, because the fix lives in two places: the record page has to READ the
+  // form before the redraw, and the module has to put the values back. Either half alone still
+  // loses the name.
+  const dom = fakeDom();
+  const state = {};
+  const ctx = makeCtx(state);
+  const { createRecordPage } = await import('../src/workspace/record-page.js');
+  const page = createRecordPage(ctx);
+
+  const seat = { dataset: { wbQuickSeat: 'co1|ws-1|app-1|item-1' } };
+  const tile = { dataset: { wbQuick: 'field' }, disabled: false };
+  tile.closest = (sel) => (sel === '[data-wb-quick]' ? tile
+    : (sel === '[data-wb-quick-seat]' ? seat : null));
+  dom.fire('click', {
+    target: { closest: (sel) => (sel === '[data-wb-quick]' ? tile : null) },
+    preventDefault: () => {},
+  });
+  for (let i = 0; i < 4; i += 1) await new Promise((done) => { setTimeout(done, 0); });
+
+  // The dialog as the browser would hand it over: what is IN the boxes right now.
+  const form = { values: { label: 'Roof age', type: 'text', position: 'after:f-name' } };
+  const realFormData = globalThis.FormData;
+  globalThis.FormData = class { constructor(f) { this.f = f; } entries() { return Object.entries(this.f.values); } };
+  try {
+    const press = (pair) => {
+      const node = { dataset: { wbQuickSet: pair } };
+      node.closest = (sel) => (sel === '[data-wb-quick-set]' ? node
+        : (sel === '[data-wb-quick-form]' ? form : null));
+      dom.fire('click', {
+        target: { closest: (sel) => (sel === '[data-wb-quick-set]' ? node : null) },
+        preventDefault: () => {},
+      });
+    };
+    press('open|type');
+    assert.equal(state.wbQuick.label, 'Roof age', 'opening the list cleared the box');
+    press('type|money');
+    assert.equal(state.wbQuick.label, 'Roof age', 'choosing a type cleared the box');
+    assert.equal(state.wbQuick.type, 'money', 'the form put the old type back over the press');
+  } finally {
+    globalThis.FormData = realFormData;
+  }
+
+  const route = { params: { get: () => '' } };
+  const html = page.wbViewItemPage(route, 'co1', { id: 'ws-1', name: 'Sales' }, app, app.items[0]);
+  assert.match(html, /name="label" value="Roof age"/, 'the name was not drawn back into the box');
+});

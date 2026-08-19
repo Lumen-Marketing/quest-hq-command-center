@@ -333,11 +333,28 @@ export function closeQuick(ctx) {
   ctx.render();
 }
 
+/**
+ * The plain inputs the dialogs own.
+ *
+ * Everything here is typed into a box and does not reach `state.wbQuick` until Save -- so a
+ * redraw, which draws from state, wipes it. Pressing a picker causes a redraw. That is the whole
+ * bug: a name typed in, then a type chosen, and the name is gone.
+ *
+ * A list rather than the whole form because the form also carries `type`, `target` and the
+ * composed `position`, and those must lose to the press being handled rather than put back the
+ * value that was just changed.
+ */
+const TYPED = ['label', 'options', 'currency', 'unit', 'title', 'body', 'to', 'date', 'time'];
+
+const keepTyped = (typed) => (typed
+  ? Object.fromEntries(TYPED.filter((key) => key in typed).map((key) => [key, typed[key]]))
+  : {});
+
 /** Change the type mid-dialog, keeping everything already typed. */
-export function setQuickType(type, ctx) {
+export function setQuickType(type, ctx, typed) {
   const v = view(ctx);
   if (!v || v.kind !== 'field') return;
-  ctx.state.wbQuick = { ...v, type, open: '', error: '' };
+  ctx.state.wbQuick = { ...v, ...keepTyped(typed), type, open: '', error: '' };
   ctx.render();
 }
 
@@ -348,15 +365,18 @@ export function setQuickType(type, ctx) {
  * control: the record page binds these once for the module's life, and each new pair would be
  * another branch there that can only be reached from markup written here.
  */
-export function setQuickValue(pair, ctx) {
-  const v = view(ctx);
+export function setQuickValue(pair, ctx, typed) {
+  const now = view(ctx);
   const cut = String(pair || '').indexOf('|');
-  if (!v || cut < 0) return '';
+  if (!now || cut < 0) return '';
   const key = pair.slice(0, cut);
   const value = pair.slice(cut + 1);
+  // Whatever is in the boxes goes back on before anything is changed, because the redraw this
+  // press causes would otherwise wipe it.
+  const v = { ...now, ...keepTyped(typed) };
   // `open` carries which list is showing, and an empty value shuts the one that is.
   if (key === 'open') { ctx.state.wbQuick = { ...v, open: value }; ctx.render(); return 'open'; }
-  if (key === 'type') { setQuickType(value, ctx); return 'type'; }
+  if (key === 'type') { setQuickType(value, ctx, typed); return 'type'; }
   if (key !== 'dir' && key !== 'target') return '';
   // Choosing shuts the list: leaving it open hides the rest of the form behind what was just
   // answered, and the answer is already on the button.

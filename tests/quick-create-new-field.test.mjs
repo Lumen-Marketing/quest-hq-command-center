@@ -174,12 +174,51 @@ test('money asks for a currency and a number for a unit', async () => {
 });
 
 test('changing the type keeps the name already typed', async () => {
+  // This test USED to put the name into state itself and then change the type -- so it passed
+  // while the product was broken, because the real path never wrote the box into state at all.
+  // It now hands over what the form holds, which is what the record page does.
   const bench = harness();
   await bench.open();
-  bench.ctx.state.wbQuick = { ...bench.ctx.state.wbQuick, label: 'Trade' };
-  setQuickType('category', bench.ctx);
+  setQuickType('category', bench.ctx, { label: 'Trade' });
   assert.equal(bench.ctx.state.wbQuick.label, 'Trade', 'retyping it is not part of changing the type');
   assert.equal(bench.ctx.state.wbQuick.type, 'category');
+});
+
+test('nothing typed is lost to any of the presses that redraw', async () => {
+  // Every control in this dialog redraws it, and the dialog draws from state. A box that has not
+  // been saved anywhere is wiped by that redraw unless it is carried across.
+  const bench = harness();
+  await bench.open();
+  const box = { label: 'Roof age', options: 'Old\nNew', currency: '£', unit: 'SQ' };
+
+  setQuickValue('open|type', bench.ctx, box);
+  assert.equal(bench.ctx.state.wbQuick.label, 'Roof age', 'opening the list wiped the name');
+  setQuickValue('type|category', bench.ctx, box);
+  assert.equal(bench.ctx.state.wbQuick.label, 'Roof age', 'choosing a type wiped the name');
+  assert.equal(bench.ctx.state.wbQuick.options, 'Old\nNew', 'the options went with it');
+  setQuickValue('dir|before', bench.ctx, box);
+  assert.equal(bench.ctx.state.wbQuick.label, 'Roof age', 'Before/After wiped the name');
+  setQuickValue('target|f-name', bench.ctx, box);
+  assert.equal(bench.ctx.state.wbQuick.label, 'Roof age', 'picking the field wiped the name');
+  assert.equal(bench.ctx.state.wbQuick.currency, '£');
+  assert.equal(bench.ctx.state.wbQuick.unit, 'SQ');
+  // ...and it is drawn back into the box, not just held.
+  assert.match(renderQuickModal(bench.ctx), /name="label" value="Roof age"/);
+});
+
+test('the press wins over the form it was read from', async () => {
+  // The form also carries type, target and the composed position -- the values the press is
+  // CHANGING. Putting those back would undo the press it was meant to survive.
+  const bench = harness();
+  await bench.open();
+  const stale = {
+    label: 'Roof age', type: 'text', target: 'f-name', position: 'after:f-name',
+  };
+  setQuickValue('type|money', bench.ctx, stale);
+  assert.equal(bench.ctx.state.wbQuick.type, 'money', 'the form put the old type back');
+  setQuickValue('dir|before', bench.ctx, stale);
+  assert.equal(bench.ctx.state.wbQuick.dir, 'before');
+  assert.equal(bench.ctx.state.wbQuick.label, 'Roof age');
 });
 
 // ---- options -----------------------------------------------------------------------------------

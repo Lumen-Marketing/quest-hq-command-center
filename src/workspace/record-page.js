@@ -124,7 +124,12 @@ export function createRecordPage(ctx) {
       const set = event.target.closest?.('[data-wb-quick-set]');
       if (quickModule && set) {
         event.preventDefault();
-        quickModule.setQuickValue(set.dataset.wbQuickSet, ctx);
+        // Read the boxes BEFORE the redraw this causes. A plain input does not reach state
+        // until Save, and the dialog is drawn from state, so a name typed in and then a type
+        // chosen would be a name wiped by choosing the type.
+        const open = set.closest?.('[data-wb-quick-form]');
+        quickModule.setQuickValue(set.dataset.wbQuickSet, ctx,
+          open ? Object.fromEntries(new FormData(open).entries()) : null);
         return;
       }
       const button = event.target.closest?.('[data-wb-quick]');

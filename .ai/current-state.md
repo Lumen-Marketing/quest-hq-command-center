@@ -1354,6 +1354,18 @@ this — first select after or before, then select which field, then the name of
   stored and read by nothing, which is the same "looks configured and is not" this dialog already
   refuses for a dropdown with no options. One input, called Field name.
 
+- **The dialog then ate what you typed.** "I typed a name in the name field, but when I make
+  changes in the other option it clears the text box." Every picker press redraws, the dialog is
+  drawn from `state.wbQuick`, and a plain input does not reach that state until Save — so the
+  redraw put back the empty string it started with. The record page now reads the form BEFORE the
+  redraw and hands the values over; `keepTyped` puts back only the boxes (`label`, `options`,
+  `currency`, `unit`, and the call/SMS text), never `type`, `target` or the composed `position` —
+  those are what the press is changing, and putting them back would undo it.
+- **The old test for this passed the whole time.** It wrote the name into state itself and then
+  changed the type, so it proved the redraw kept a value the product never put there. It goes
+  through the real path now, and the end-to-end one stubs `FormData` to hand over what is in the
+  boxes — both halves were removed in turn to watch them fail.
+
 ## 2026-08-19 An image field on a document is a picture, not a filename
 
 "When the user wants to use the image field on the form builder, do not import or display it as
