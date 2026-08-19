@@ -1416,6 +1416,39 @@ this — first select after or before, then select which field, then the name of
   `openRecordTaskModal` has fetched the module, so the `questLoader` fallback is for the render
   that races the import, not for a modal nobody opened.
 
+## 2026-08-19 A scheduled call on both calendars, and an alarm when its time comes
+
+"Make the call reminder added on Quick Create also appear on the app calendar and on the contact
+card calendar. It also alarms when the date and time comes."
+
+- **One fetch, three readers.** `src/workspace/record-events.js` owns the rows: everything still
+  scheduled for a company, which is a small set by definition. Per-surface fetches would be three
+  queries saying nearly the same thing and three caches to disagree with each other.
+- **The calendars read `state`, they do not fetch.** They draw during a render and cannot wait, so
+  `heldEvents(state, companyId)` returns what has arrived and the heartbeat fills it. That is also
+  what the entry budget could afford — see below.
+- **The contact's calendar matches by RECORD, not by contact.** `wb_record_events` has no contact
+  column and does not need one: the document already knows which records name a person, so a call
+  on one of their records is one of theirs. A call on somebody else's record is not.
+- **The alarm is a claim, not a read.** There is no server job, so whichever open session notices
+  the moment has passed raises it — which means two tabs both notice. So noticing is an UPDATE
+  setting `notified_at` only where it is still null; Postgres settles the race, and only the rows
+  handed back are announced. Migration `20260819120000_wb_record_events_notified.sql`, applied.
+- **It goes to whoever arranged it** (`created_by`), not the company. Everyone else being alarmed
+  about a call they did not make is noise — and since noticing is a claim, the first of them to
+  notice would have silenced it for the one person it was for.
+- **Missed reminders are announced late rather than not at all.** Due means the moment has passed,
+  so one that came and went while the app was shut goes off when it opens. Silence is not the
+  honest answer to "you were supposed to ring them yesterday".
+- **What it does NOT do: ring when nobody has the app open.** The heartbeat is a minute-resolution
+  `setInterval` in a browser tab. A real background alarm needs a scheduled job on the server —
+  pg_cron writing the notification rows — and that is the next step, not this one.
+- **Entry budget, again, and this is the third time in one session.** Two ctx keys to pass a reader
+  down to the two calendars cost more than the whole feature was worth: **−39**, then **−50**.
+  Reading `state` directly instead (one `state,` on the app-views ctx, which the contacts page
+  already had) brought it to **+18**. Measure the entry off `.vite/manifest.json`, never by
+  globbing `index-*.js`.
+
 ## 2026-08-19 An image field on a document is a picture, not a filename
 
 "When the user wants to use the image field on the form builder, do not import or display it as

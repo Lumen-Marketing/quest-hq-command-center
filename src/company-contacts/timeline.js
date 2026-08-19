@@ -11,6 +11,7 @@
 // test can check a leap year without a browser.
 
 import { contactUsage } from './model.js';
+import { eventDay, eventTime, eventTitle } from '../workspace/record-events.js';
 
 const DATE_FIELDS = ['date', 'created_time', 'updated_time'];
 
@@ -80,7 +81,7 @@ export function contactActivity(doc, contactId, { nameValue = null, limit = 12 }
  * writes, and a diary full of "this record was edited" is a diary nobody opens -- they are in
  * the feed above, where they belong.
  */
-export function contactDates(doc, contactId, { nameValue = null } = {}) {
+export function contactDates(doc, contactId, { nameValue = null, events = [] } = {}) {
   const uses = contactUsage(doc, contactId, { nameValue });
   const out = [];
   for (const { workspace, app } of appsOf(doc)) {
@@ -106,6 +107,29 @@ export function contactDates(doc, contactId, { nameValue = null } = {}) {
       });
     });
   }
+  // A scheduled call belongs on this contact's calendar too, and it is not a date FIELD -- it is
+  // a row on one of their records. Matched by record rather than by contact: the event table has
+  // no contact on it, and the doc already knows which records name this person.
+  const theirs = new Set(out.map((entry) => entry.itemId));
+  (events || []).forEach((row) => {
+    if (!theirs.has(row?.item_id)) return;
+    const day = eventDay(row);
+    if (!day) return;
+    const use = uses.find((entry) => entry.appId === row.app_id);
+    const time = eventTime(row);
+    out.push({
+      day,
+      at: row.scheduled_for,
+      label: row.kind === 'sms' ? 'Message' : 'Call',
+      title: `${eventTitle(row)}${time ? ` · ${time}` : ''}`,
+      appName: use?.appName || '',
+      workspaceRouteId: use?.workspaceRouteId || '',
+      appId: row.app_id,
+      itemId: row.item_id,
+      // What the card keys its icon off: a call is not a date somebody typed into a field.
+      kind: row.kind,
+    });
+  });
   return out.sort((a, b) => a.day.localeCompare(b.day) || a.label.localeCompare(b.label));
 }
 

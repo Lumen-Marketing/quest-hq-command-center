@@ -563,6 +563,9 @@ export async function saveQuick(values, ctx) {
     + ` for ${ctx.h(ctx.formatDate?.(values.date) || values.date)} at ${ctx.h(values.time || '09:00')}`);
   // Saved whether or not the card was added: the line above is in the document too.
   await ctx.wbSave(companyId);
+  // Drop the cached rows for this record so the card re-reads them, and the company-wide set
+  // the calendars draw from -- a reminder that does not appear until a reload reads as lost.
+  if (ctx.state.wbEvents) delete ctx.state.wbEvents[companyId];
   // Drop the cached rows for this record so the card re-reads them.
   const key = [companyId, workspaceId, appId, itemId].join('|');
   if (ctx.state.wbEventRows) delete ctx.state.wbEventRows[key];

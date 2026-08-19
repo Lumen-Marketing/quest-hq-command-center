@@ -9,6 +9,7 @@
 
 import { boardColumns } from './pipeline-core.js';
 import { memosByDay } from './calendar-memos.js';
+import { eventTime, eventTitle, eventsByDay, heldEvents } from './record-events.js';
 import { addDays, iso, monthGrid, mondayIndex, startOfWeek } from '../jobs/job-calendar.js';
 import {
   COLLECTION_FIELD_PREFIX, dashboardFor, metricValue, numberFields, optionFields, widgetMeta,
@@ -107,6 +108,9 @@ export function recordsByDay(app, field) {
 export function createAppViews(ctx) {
   const {
     h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo, wbModalShell,
+    // Scheduled calls and messages are read straight off state: the calendar draws during a
+    // render and cannot wait for a fetch, and the reminder heartbeat is what fills it.
+    state,
   } = ctx;
 
   const itemHref = (companyId, app, item) => appHref(companyPath('workspaces', {
@@ -264,6 +268,9 @@ export function createAppViews(ctx) {
     const anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(anchorIso || '')) ? new Date(`${anchorIso}T12:00:00`) : new Date();
     const { byDay, undated } = recordsByDates(app, active);
     const memoDays = memosByDay(app);
+    // A call scheduled from Quick Create belongs here as much as a dated record does: it is a
+    // thing with a time on it that somebody has to do.
+    const evDays = eventsByDay(heldEvents(state, companyId).filter((row) => row.app_id === app.id));
     const todayIso = iso(new Date());
     const link = (params) => appHref(companyPath('workspaces', {
       app_id: app.id, tab: 'calendar', ...(field ? { field: field.id } : {}), ...params,
@@ -294,15 +301,26 @@ export function createAppViews(ctx) {
     const memoPill = (memo) => `<button type="button" class="wb-cal-memo ${memo.done ? 'done' : ''}" data-wb-memo-open="${h(memo.id)}" title="${h(memo.note || memo.title)}">
       <i class="ti ti-${memo.remindMinutes == null ? 'note' : 'bell'}"></i>${memo.time ? `<b>${h(memo.time)}</b>` : ''}${h(memo.title)}
     </button>`;
+    // Opens the record it was scheduled on, which is where it can be acted on or cancelled.
+    const evPill = (row) => {
+      const item = (app.items || []).find((one) => one.id === row.item_id);
+      const on = item ? wbItemTitle(app, item) : '';
+      return `<a class="wb-cal-ev wb-cal-ev-${h(row.kind)}" href="${item ? itemHref(companyId, app, item) : '#'}" data-router
+        title="${h(`${eventTitle(row)}${on ? ` — ${on}` : ''}${row.to_number ? ` · ${row.to_number}` : ''}`)}">
+        <i class="ti ${row.kind === 'sms' ? 'ti-message-2' : 'ti-phone'}"></i><b>${h(eventTime(row))}</b>${h(eventTitle(row))}
+      </a>`;
+    };
     const dayCell = (day, { dim = false, cap = 0 } = {}) => {
       const key = iso(day);
       const items = byDay.get(key) || [];
       const memos = memoDays.get(key) || [];
+      const evs = evDays.get(key) || [];
       const shown = cap ? items.slice(0, cap) : items;
       return `<div class="wb-cal-day ${dim ? 'dim' : ''} ${key === todayIso ? 'today' : ''}">
         <span class="wb-cal-num">${day.getDate()}</span>
         ${canManage ? `<button type="button" class="wb-cal-add" data-wb-memo-new="${h(key)}" title="Add a memo on ${h(key)}" aria-label="Add a memo on ${h(key)}"><i class="ti ti-plus"></i></button>` : ''}
         ${memos.map(memoPill).join('')}
+        ${evs.map(evPill).join('')}
         ${shown.map(pill).join('')}
         ${cap && items.length > cap ? `<a class="wb-cal-more" href="${link({ view: 'day', on: key })}" data-router>+${items.length - cap} more</a>` : ''}
       </div>`;
@@ -339,13 +357,15 @@ export function createAppViews(ctx) {
       const key = iso(anchor);
       const items = byDay.get(key) || [];
       const memos = memoDays.get(key) || [];
+      const evs = evDays.get(key) || [];
       label = anchor.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
       grid = `<div class="wb-cal-single ${key === todayIso ? 'today' : ''}">
         ${canManage ? `<button class="btn btn-sm" type="button" data-wb-memo-new="${h(key)}"><i class="ti ti-plus"></i>Add memo</button>` : ''}
         ${memos.length ? `<ul class="wb-cal-daylist">${memos.map((m) => `<li>${memoPill(m)}</li>`).join('')}</ul>` : ''}
+        ${evs.length ? `<ul class="wb-cal-daylist">${evs.map((row) => `<li>${evPill(row)}</li>`).join('')}</ul>` : ''}
         ${items.length
     ? `<ul class="wb-cal-daylist">${items.map((entry) => `<li>${pill(entry)}</li>`).join('')}</ul>`
-    : memos.length ? '' : emptyState(field ? `Nothing is set to ${h(field.label.toLowerCase())} on this day.` : 'Nothing on this day yet.')}
+    : (memos.length || evs.length) ? '' : emptyState(field ? `Nothing is set to ${h(field.label.toLowerCase())} on this day.` : 'Nothing on this day yet.')}
       </div>`;
     }
 

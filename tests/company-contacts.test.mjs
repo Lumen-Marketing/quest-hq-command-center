@@ -283,7 +283,16 @@ test('the page is fetched on demand and its ctx is complete', () => {
   assert.match(main, /import\('\.\/company-contacts\/page\.js'\)/);
   assert.ok(!/^import .*company-contacts/m.test(main), 'a static import would put it in the entry bundle');
   const ctx = main.slice(main.indexOf('mod.createCompanyContactsPage({'), main.indexOf('});', main.indexOf('mod.createCompanyContactsPage({')));
-  const destructured = page.slice(page.indexOf('const {') + 7, page.indexOf('} = ctx;')).split(',').map((n) => n.trim()).filter(Boolean);
+  // Comments are stripped first. These destructures carry them -- it is the house style, and
+  // the factory-module checker already reads them that way -- and a comment split on its
+  // commas reads as a list of ctx keys that were never asked for.
+  const destructured = page.slice(page.indexOf('const {') + 7, page.indexOf('} = ctx;'))
+    .split(String.fromCharCode(10))
+    .filter((line) => !line.trim().startsWith('//'))
+    .join(' ')
+    .split(',')
+    .map((n) => n.trim())
+    .filter(Boolean);
   for (const name of destructured) assert.ok(ctx.includes(name), `page.js needs ${name}`);
 });
 

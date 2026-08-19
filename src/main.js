@@ -2850,6 +2850,11 @@ function init() {
     render();
   });
   ensureIconSprite();
+  // A scheduled call has to go off wherever you are, so the heartbeat is here rather than on the
+  // page that made it. A minute is the resolution a reminder typed to the minute deserves.
+  // Once now, so a calendar opened straight away has its reminders on it, then on the minute.
+  wbEventsPoll();
+  setInterval(wbEventsPoll, 60000);
   trackScrollTargets();
   document.addEventListener('click', (event) => {
     // Capture the trigger before the handler runs: if this click opens a modal, this
@@ -3873,6 +3878,24 @@ function openIntakeManage(companyId, workspaceId, appId) {
     });
   });
 }
+
+// ---- scheduled call and message reminders ----------------------------------------------------
+// The module owns the fetch, the claim and the alarm; this is the heartbeat that gets it going,
+// because a reminder has to go off wherever you are rather than only on a record page.
+let wbEventsModule = null;
+function wbEventsPoll() {
+  const companyId = activeCompanyId();
+  if (!companyId || !isLiveSupabaseSession()) return;
+  import('./workspace/record-events.js').then((mod) => {
+    wbEventsModule = wbEventsModule || mod.createRecordEvents({
+      activeProfileId: () => activeSession().profile?.id || '',
+      appHref, companyPath, createSupabaseClient, isLiveSupabaseSession, notifyLocalEvent, render, state,
+    });
+    return wbEventsModule.checkReminders(companyId);
+  }).catch(() => {});
+}
+
+
 
 function render() {
   const keptScroll = captureScrollForRender();
@@ -15059,7 +15082,7 @@ function loadAppViews() {
   if (!appViewsPending) {
     appViewsPending = import('./workspace/app-views.js').then((mod) => {
       appViewsModule = mod.createAppViews({
-        h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo, wbModalShell,
+        h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo, wbModalShell, state,
       });
       return appViewsModule;
     }).catch((error) => {

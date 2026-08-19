@@ -7,6 +7,7 @@
 // owns the record; the only things editable here are the contact's own details. The moment
 // records can be worked from this page it becomes a fifth workspace with no owner.
 
+import { heldEvents } from '../workspace/record-events.js';
 import { optionRow } from '../workspace/option-row.js';
 import {
   appsWithContactFields, companyContactFieldsOf, contactUsage, usageBalance, usageSummary,
@@ -933,6 +934,11 @@ export function createCompanyContactsPage(ctx) {
    * writes, and a calendar full of "this was edited" is a calendar nobody opens -- those are in
    * Recent updates, where they belong.
    */
+  /** A scheduled call or message wears its own mark; a dated record needs none. */
+  const entryIcon = (entry) => (entry?.kind
+    ? `<i class="ti ${entry.kind === 'sms' ? 'ti-message-2' : 'ti-phone'} cc-cal-kind"></i>`
+    : '');
+
   function calendarPanel(companyId, doc, contact, cols = 2, show = {}) {
     // The company's chosen starting view, until somebody picks another on this visit. A team
     // that works a week at a time should not have to press Week every time they open a contact.
@@ -940,7 +946,11 @@ export function createCompanyContactsPage(ctx) {
     const view = CALENDAR_VIEWS.includes(state.ccCalView) ? state.ccCalView : opensOn;
     const anchor = state.ccCalAt ? new Date(state.ccCalAt) : new Date();
     const span = calendarSpan(view, anchor);
-    const byDay = datesByDay(contactDates(doc, contact.id, { nameValue: wbNameValue }));
+    // Scheduled calls and messages sit on this calendar beside the dated records, because
+    // "when is anything happening with this person" is the question the card is asked.
+    const byDay = datesByDay(contactDates(doc, contact.id, {
+      nameValue: wbNameValue, events: heldEvents(state, companyId),
+    }));
     const today = dayKey(new Date());
 
     const cell = (item) => {
@@ -960,7 +970,7 @@ export function createCompanyContactsPage(ctx) {
       const detail = ['day', 'week'].includes(view)
         ? entries.map((entry) => {
           const href = entryHref(companyId, entry);
-          const body = `<b>${h(entry.title)}</b><small>${h(entry.label)} · ${h(entry.appName)}</small>`;
+          const body = `<b>${entryIcon(entry)}${h(entry.title)}</b><small>${h(entry.label)} · ${h(entry.appName)}</small>`;
           return href ? `<a class="cc-cal-item" href="${h(href)}" data-router>${body}</a>` : `<span class="cc-cal-item">${body}</span>`;
         }).join('')
         : entries.length ? `<span class="cc-cal-dot">${entries.length}</span>` : '';
@@ -1029,7 +1039,7 @@ export function createCompanyContactsPage(ctx) {
         const href = entryHref(companyId, entry);
         const body = `
           <span class="cc-cal-row-main">
-            <b>${h(entry.title)}</b>
+            <b>${entryIcon(entry)}${h(entry.title)}</b>
             <small><em>${h(entry.label)}</em>${h(entry.appName)}</small>
           </span>
           <span class="cc-cal-row-day">${h(formatDate(entry.at))}</span>`;
