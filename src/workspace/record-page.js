@@ -5,6 +5,7 @@
 // pure leaf module, so there is no cycle back to main.js, and a static import cannot be
 // null the way a fetched one can.
 
+import { opsWorkspaceId } from './builder-core.js';
 import * as recordLayout from './record-layout.js';
 import * as children from './child-collections.js';
 // Pure leaf modules, like the two above: the stage field so stepping stays inside the deck you
@@ -80,7 +81,10 @@ export function createRecordPage(ctx) {
     }
     supabase.from('wb_record_events')
       .select('id, kind, title, body, to_number, scheduled_for, status')
-      .eq('company_id', companyId).eq('workspace_id', workspaceId)
+      // The stored workspace_id is the uuid, not the `ws-` builder key it was read off --
+      // asking for the builder key here matches nothing, and the column being a uuid means
+      // it does not even get as far as matching nothing.
+      .eq('company_id', companyId).eq('workspace_id', opsWorkspaceId(workspaceId))
       .eq('app_id', appId).eq('item_id', itemId)
       .eq('status', 'scheduled')
       .order('scheduled_for', { ascending: true })

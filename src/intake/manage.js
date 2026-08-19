@@ -8,6 +8,7 @@
 // the passcode hash is derived here (src/intake/passcode.js) precisely so that no server route
 // has to re-answer that question. See the note in api/_lib/intake.js.
 
+import { opsWorkspaceId } from '../workspace/builder-core.js';
 import { generatePasscode, generateToken, hashPasscode, makePasscodeSalt } from './passcode.js';
 
 let ctx = null;
@@ -55,7 +56,9 @@ async function createLink({ visibility, title, intro, maxSubmissions }) {
   const row = {
     token,
     company_id: view.companyId,
-    workspace_id: view.workspaceId,
+    // The uuid, not the `ws-` builder key: the column is a uuid and the row's permission is
+    // decided from it. See opsWorkspaceId.
+    workspace_id: opsWorkspaceId(view.workspaceId),
     app_id: view.appId,
     title: title || `${view.app.name} — tell us about the job`,
     intro: intro || '',

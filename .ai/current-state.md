@@ -1366,6 +1366,25 @@ this — first select after or before, then select which field, then the name of
   through the real path now, and the end-to-end one stubs `FormData` to hand over what is in the
   boxes — both halves were removed in turn to watch them fail.
 
+- **`invalid input syntax for type uuid: "ws-42959c90-…"`** — saving a scheduled call. The App
+  Builder keys its workspaces as **`ws-<uuid>`**, and that uuid IS the row in `public.workspaces`
+  (`builder-core.js` builds the same key from the other direction). Every write was sending the
+  BUILDER key into a `uuid` column — which is two bugs at once, because that column is also what
+  `app_private.has_workspace_permission` is handed to decide whether the row may be written.
+- **Three sites, one convention.** `opsWorkspaceId()` now lives in `builder-core.js` — a leaf
+  module with no imports, and already the place that knows the `ws-` convention. The scheduled
+  call/SMS insert, the Calls & messages card that reads them back, and **`wb_intake_links`**, which
+  had the identical bug and had therefore never once created a link, all go through it.
+- **The schema was right; the writer was wrong.** No migration. Confirmed against production:
+  `wb_record_events`, `wb_intake_links` and `wb_intake_submissions` all hold **0 rows**, which is
+  the diagnosis — every insert had been failing — and means there is nothing to clean up.
+- **A legacy document keys the company** (`ws-<companyId>`), which has no workspace row behind it.
+  `opsWorkspaceId` returns `''` rather than a company id dressed as a workspace, and the dialog
+  refuses in words instead of handing Postgres a value it can only reject.
+- **The fixtures are why this shipped.** The harness used `ws-1` as a workspace id, so nothing in
+  3,900 tests could notice a uuid column rejecting the key. They use a real `ws-<uuid>` now, and
+  both the write and the read are pinned and were mutation-checked.
+
 ## 2026-08-19 An image field on a document is a picture, not a filename
 
 "When the user wants to use the image field on the form builder, do not import or display it as

@@ -10,6 +10,12 @@ import {
 
 // "Just make sure Task, Call, SMS and New Field are in Quick Create."
 
+// The App Builder keys a workspace as `ws-<uuid>`, and that uuid is the row in
+// public.workspaces. A fixture that says `ws-1` cannot catch a uuid column rejecting the key,
+// which is exactly what shipped: "invalid input syntax for type uuid".
+const WS_UUID = '42959c90-a8e6-4ec4-af78-82036849dba7';
+const WS = `ws-${WS_UUID}`;
+
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const h = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 const f = (id, label, type, extra = {}) => ({
@@ -41,7 +47,7 @@ function harness({ phones = true } = {}) {
     can: () => true,
     render: () => {},
     showToast: () => {},
-    wbDoc: () => ({ workspaces: [{ id: 'ws-1', apps: [app] }] }),
+    wbDoc: () => ({ workspaces: [{ id: WS, apps: [app] }] }),
     wbSave: async () => { saves += 1; },
     wbUid: () => 'new-1',
     wbItemTitle: () => '58th Pl',
@@ -57,7 +63,7 @@ function harness({ phones = true } = {}) {
     isLiveSupabaseSession: () => true,
   };
   const seat = {
-    companyId: 'co1', workspaceId: 'ws-1', appId: 'app-1', itemId: 'item-1',
+    companyId: 'co1', workspaceId: WS, appId: 'app-1', itemId: 'item-1',
   };
   return {
     ctx, state, app, item, inserted, saves: () => saves, run: (key) => press(key, seat, ctx),
@@ -299,10 +305,11 @@ test('scheduling puts the card on the record, once', async () => {
 
 test('the cached rows for that record are dropped so the card re-reads them', async () => {
   const bench = harness();
-  bench.ctx.state.wbEventRows = { 'co1|ws-1|app-1|item-1': [], other: [] };
+  const key = `co1|${WS}|app-1|item-1`;
+  bench.ctx.state.wbEventRows = { [key]: [], other: [] };
   await bench.run('call');
   await saveQuick({ title: 'x', date: '2026-09-01', time: '09:00' }, bench.ctx);
-  assert.equal(bench.ctx.state.wbEventRows['co1|ws-1|app-1|item-1'], undefined, 'stale rows would hide it');
+  assert.equal(bench.ctx.state.wbEventRows[key], undefined, 'stale rows would hide it');
   assert.ok(bench.ctx.state.wbEventRows.other, 'another record is left alone');
 });
 
@@ -328,4 +335,31 @@ test('Call now is a selector main.js actually binds', () => {
     main.slice(gate, main.indexOf(String.fromCharCode(10), gate)).trim(),
     "if (state.route?.section === 'workspaces' && !state.builderModal) {",
   );
+});
+
+test('the row carries the workspace ROW id, not the builder key', () => {
+  // "invalid input syntax for type uuid: ws-42959c90-...". workspace_id is a uuid column, and it
+  // is also the value app_private.has_workspace_permission is given to decide whether the insert
+  // is allowed at all -- so the builder key fails twice over.
+  const bench = harness();
+  return bench.run('call')
+    .then(() => saveQuick({ title: 'Follow up', date: '2026-09-01', time: '09:00' }, bench.ctx))
+    .then(() => {
+      assert.equal(bench.inserted[0].workspace_id, WS_UUID);
+      assert.ok(!String(bench.inserted[0].workspace_id).startsWith('ws-'));
+      // The cache key stays the BUILDER id: it names what is on screen, not what is in the table.
+      assert.equal(bench.ctx.state.wbEventRows?.[`co1|${WS}|app-1|item-1`], undefined);
+    });
+});
+
+test('a workspace with no row behind it is refused in words', async () => {
+  // A legacy document keys the company instead of a workspace. There is nothing to point at, so
+  // it says so rather than handing Postgres a value it can only reject.
+  const bench = harness();
+  bench.ctx.wbDoc = () => ({ workspaces: [{ id: 'ws-questroofing', apps: [bench.app] }] });
+  const seat = { companyId: 'co1', workspaceId: 'ws-questroofing', appId: 'app-1', itemId: 'item-1' };
+  await press('call', seat, bench.ctx);
+  assert.equal(await saveQuick({ title: 'x', date: '2026-09-01', time: '09:00' }, bench.ctx), 'invalid');
+  assert.equal(bench.inserted.length, 0, 'nothing may reach the table');
+  assert.match(bench.ctx.state.wbQuick.error, /cannot hold a scheduled call/);
 });

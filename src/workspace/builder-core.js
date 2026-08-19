@@ -152,3 +152,22 @@ export function companiesToSave(companyId, doc) {
   }
   return out;
 }
+
+/**
+ * The operational workspace a builder id points at, or '' when it points at nothing.
+ *
+ * The App Builder keys its workspaces as `ws-<uuid>`, where that uuid IS the row in
+ * public.workspaces -- see allowedBuilderIds above, which builds the same key from the other
+ * direction. Anything writing a workspace_id to the database wants THAT, both because the column
+ * is a uuid and because `app_private.has_workspace_permission` is given it to decide the row.
+ *
+ * A legacy document that was never adopted keys the COMPANY instead (`ws-<companyId>`), and there
+ * is no workspace row for that. It returns '' rather than a company id dressed as a workspace, so
+ * the caller can say so in words instead of handing Postgres something it will only reject.
+ */
+const OPS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function opsWorkspaceId(builderId) {
+  const id = String(builderId || '').replace(/^ws-/, '');
+  return OPS_UUID.test(id) ? id : '';
+}

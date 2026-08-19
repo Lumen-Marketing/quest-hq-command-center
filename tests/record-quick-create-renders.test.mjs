@@ -24,6 +24,10 @@ function fakeDom() {
   };
 }
 
+// `ws-<uuid>`, the shape the App Builder actually keys a workspace by.
+const WS_UUID = '42959c90-a8e6-4ec4-af78-82036849dba7';
+const WS = `ws-${WS_UUID}`;
+
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const h = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 
@@ -53,7 +57,7 @@ function makeCtx(state) {
     emptyState: () => '',
     wbUid: () => 'id-1',
     // press() looks the record up here before it opens anything.
-    wbDoc: () => ({ workspaces: [{ id: 'ws-1', apps: [app] }] }),
+    wbDoc: () => ({ workspaces: [{ id: WS, apps: [app] }] }),
     wbFieldUiReady: () => false,
   };
   return new Proxy(real, {
@@ -78,7 +82,7 @@ async function pressAndRender(kind) {
   const { createRecordPage } = await import('../src/workspace/record-page.js');
   const page = createRecordPage(ctx);
 
-  const seat = { dataset: { wbQuickSeat: 'co1|ws-1|app-1|item-1' } };
+  const seat = { dataset: { wbQuickSeat: `co1|${WS}|app-1|item-1` } };
   const button = { dataset: { wbQuick: kind }, disabled: false };
   button.closest = (sel) => (sel === '[data-wb-quick]' ? button
     : (sel === '[data-wb-quick-seat]' ? seat : null));
@@ -92,7 +96,7 @@ async function pressAndRender(kind) {
 
   const route = { params: new Map() };
   route.params.get = () => '';
-  const html = page.wbViewItemPage(route, 'co1', { id: 'ws-1', name: 'Sales' }, app, app.items[0]);
+  const html = page.wbViewItemPage(route, 'co1', { id: WS, name: 'Sales' }, app, app.items[0]);
   return { html, state };
 }
 
@@ -118,7 +122,7 @@ test('with nothing open the page draws the tiles and no dialog', async () => {
   const { createRecordPage } = await import('../src/workspace/record-page.js');
   const page = createRecordPage(ctx);
   const route = { params: { get: () => '' } };
-  const html = page.wbViewItemPage(route, 'co1', { id: 'ws-1', name: 'Sales' }, app, app.items[0]);
+  const html = page.wbViewItemPage(route, 'co1', { id: WS, name: 'Sales' }, app, app.items[0]);
   assert.match(html, /data-wb-quick="field"/, 'the tiles are missing');
   assert.ok(!/data-wb-quick-form/.test(html), 'a dialog nobody opened');
   assert.equal(dom.fire('click', { target: { closest: () => null }, preventDefault: () => {} }), undefined);
@@ -133,7 +137,7 @@ test('the type picker opens and chooses through the record page listener', async
   const { createRecordPage } = await import('../src/workspace/record-page.js');
   const page = createRecordPage(ctx);
 
-  const seat = { dataset: { wbQuickSeat: 'co1|ws-1|app-1|item-1' } };
+  const seat = { dataset: { wbQuickSeat: `co1|${WS}|app-1|item-1` } };
   const tile = { dataset: { wbQuick: 'field' }, disabled: false };
   tile.closest = (sel) => (sel === '[data-wb-quick]' ? tile
     : (sel === '[data-wb-quick-seat]' ? seat : null));
@@ -162,7 +166,7 @@ test('the type picker opens and chooses through the record page listener', async
   // Before/After and the field, and the composed value the form actually submits.
   setter('dir|before');
   const route = { params: { get: () => '' } };
-  const html = page.wbViewItemPage(route, 'co1', { id: 'ws-1', name: 'Sales' }, app, app.items[0]);
+  const html = page.wbViewItemPage(route, 'co1', { id: WS, name: 'Sales' }, app, app.items[0]);
   assert.match(html, /name="position" value="before:f-name"/);
   assert.match(html, /Which field/);
 });
@@ -177,7 +181,7 @@ test('a name typed into the box survives a press on the pickers', async () => {
   const { createRecordPage } = await import('../src/workspace/record-page.js');
   const page = createRecordPage(ctx);
 
-  const seat = { dataset: { wbQuickSeat: 'co1|ws-1|app-1|item-1' } };
+  const seat = { dataset: { wbQuickSeat: `co1|${WS}|app-1|item-1` } };
   const tile = { dataset: { wbQuick: 'field' }, disabled: false };
   tile.closest = (sel) => (sel === '[data-wb-quick]' ? tile
     : (sel === '[data-wb-quick-seat]' ? seat : null));
@@ -211,6 +215,37 @@ test('a name typed into the box survives a press on the pickers', async () => {
   }
 
   const route = { params: { get: () => '' } };
-  const html = page.wbViewItemPage(route, 'co1', { id: 'ws-1', name: 'Sales' }, app, app.items[0]);
+  const html = page.wbViewItemPage(route, 'co1', { id: WS, name: 'Sales' }, app, app.items[0]);
   assert.match(html, /name="label" value="Roof age"/, 'the name was not drawn back into the box');
+});
+
+test('the Calls & messages card asks for the workspace ROW, not the builder key', async () => {
+  // The other half of "invalid input syntax for type uuid". The rows are written with the uuid,
+  // so a card that filters on the `ws-` key it read off the document matches nothing -- and being
+  // a uuid column, it does not get as far as matching nothing.
+  fakeDom();
+  const asked = [];
+  const chain = {
+    select: () => chain,
+    eq: (col, val) => { asked.push([col, val]); return chain; },
+    order: () => chain,
+    then: (ok) => { ok({ data: [] }); return { catch: () => {} }; },
+  };
+  const state = {};
+  const ctx = makeCtx(state);
+  ctx.createSupabaseClient = () => ({ from: () => chain });
+  ctx.isLiveSupabaseSession = () => true;
+
+  const { createRecordPage } = await import('../src/workspace/record-page.js');
+  const page = createRecordPage(ctx);
+  const withCard = {
+    ...app,
+    recordLayout: [{ id: 'b2', type: 'events', size: 2, config: {} }],
+  };
+  const route = { params: { get: () => '' } };
+  page.wbViewItemPage(route, 'co1', { id: WS, name: 'Sales' }, withCard, withCard.items[0]);
+
+  const workspace = asked.find(([col]) => col === 'workspace_id');
+  assert.ok(workspace, 'the card never filtered by workspace at all');
+  assert.equal(workspace[1], WS_UUID);
 });

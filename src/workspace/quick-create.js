@@ -17,6 +17,7 @@
 import {
   ensureBlock, placeFieldInLayout, quickCreateField, quickEntry,
 } from './record-layout.js';
+import { opsWorkspaceId } from './builder-core.js';
 
 // ---- the dialogs ---------------------------------------------------------------------------
 
@@ -493,9 +494,18 @@ export async function saveQuick(values, ctx) {
 
   ctx.state.wbQuick = { ...v, busy: true, error: '' };
   ctx.render();
+  // The doc keys its workspaces as `ws-<uuid>`; the column is that uuid, and it is also what
+  // the row's permission is decided from. A legacy document keying the company instead has no
+  // workspace row to point at, so it is refused here rather than at the database.
+  const ws = opsWorkspaceId(workspaceId);
+  if (!ws) {
+    ctx.state.wbQuick = { ...v, ...values, busy: false, error: 'This workspace cannot hold a scheduled call or message yet.' };
+    ctx.render();
+    return 'invalid';
+  }
   const base = {
     company_id: companyId,
-    workspace_id: workspaceId,
+    workspace_id: ws,
     app_id: appId,
     item_id: itemId,
     kind: v.kind,
