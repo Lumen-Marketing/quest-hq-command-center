@@ -35706,6 +35706,49 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 .wb-quick-now .btn small { opacity: .65; font-weight: 400; }
 .wb-quick-acts { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
 
+/* ---- the icon dropdown ------------------------------------------------------------------------
+   A native <select> cannot draw an icon inside an <option>, and a list of twenty-six field types
+   as bare words is a wall to read. So: a button that shows the current choice, a list of buttons
+   under it, and a hidden input carrying the value so the dialog still submits as one form. */
+.wb-pick { position: relative; font-weight: 400; }
+.wb-pick-btn, .wb-pick-opt {
+  width: 100%; display: flex; align-items: center; gap: 9px; text-align: left;
+  padding: 8px 10px; border-radius: 8px; background: var(--surface, #fff);
+  border: 1px solid var(--line, #e3e0d9); cursor: pointer; font: inherit; color: inherit;
+}
+.wb-pick-btn:hover, .wb-pick-opt:hover { border-color: var(--brand, #e0552d); }
+.wb-pick.is-open .wb-pick-btn { border-color: var(--brand, #e0552d); }
+.wb-pick-ic {
+  flex: 0 0 26px; height: 26px; display: grid; place-items: center; border-radius: 7px;
+  background: color-mix(in srgb, currentColor 12%, transparent); font-size: 15px;
+}
+.wb-pick-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.wb-pick-txt b { font-size: 13px; font-weight: 600; }
+/* The description is the half that makes the list readable, so it is allowed to be quiet but not
+   to wrap into a paragraph. */
+.wb-pick-txt small { font-size: 11px; opacity: .65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-pick-arrow { opacity: .5; font-size: 14px; }
+.wb-pick-tick { color: var(--brand, #e0552d); font-size: 15px; }
+/* Over the form rather than pushing it down: the fields below are the context for the choice. */
+.wb-pick-list {
+  position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px);
+  max-height: 268px; overflow-y: auto; padding: 5px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface, #fff); border: 1px solid var(--line, #e3e0d9); border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .16);
+}
+.wb-pick-opt { border-color: transparent; }
+.wb-pick-opt.is-on { background: color-mix(in srgb, var(--brand, #e0552d) 8%, transparent); }
+
+/* Before / After / At the end is one choice of three, which reads as buttons rather than as a
+   dropdown that has to be opened to find out what it holds. */
+.wb-seg { display: flex; gap: 6px; }
+.wb-seg-btn {
+  flex: 1; padding: 8px 6px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 600;
+  background: var(--surface, #fff); border: 1px solid var(--line, #e3e0d9); cursor: pointer; color: inherit;
+}
+.wb-seg-btn:hover { border-color: var(--brand, #e0552d); }
+.wb-seg-btn.is-on { background: var(--brand, #e0552d); border-color: var(--brand, #e0552d); color: #fff; }
+
 /* ---- what is scheduled on a record ----------------------------------------------------------
    Calls and messages made through Quick Create. A card of its own rather than lines in the
    activity feed: that feed records what HAS happened, and these have not happened yet. */

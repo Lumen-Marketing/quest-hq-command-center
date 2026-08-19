@@ -101,14 +101,6 @@ export function createRecordPage(ctx) {
   function bindQuickCreate() {
     if (quickBound || typeof document === 'undefined') return;
     quickBound = true;
-    // Changing the type mid-dialog redraws it, because what a field needs configuring depends on
-    // what it is: a dropdown needs options, money needs a currency, and asking for all of them at
-    // once is a form nobody reads.
-    document.addEventListener('change', (event) => {
-      const select = event.target;
-      if (!quickModule || select?.name !== 'type' || !select.closest?.('[data-wb-quick-form]')) return;
-      quickModule.setQuickType(select.value, ctx);
-    });
     document.addEventListener('submit', (event) => {
       const form = event.target.closest?.('[data-wb-quick-form]');
       if (!form || !quickModule) return;
@@ -123,6 +115,16 @@ export function createRecordPage(ctx) {
       if (quickModule && (shut || (back && event.target === back))) {
         event.preventDefault();
         quickModule.closeQuick(ctx);
+        return;
+      }
+      // The dialog's dropdowns and its Before/After buttons. A type picker that can show an
+      // icon cannot be a <select>, so it is buttons and a hidden input, and this is what makes
+      // them work. Changing the type redraws: what a field needs configuring depends on what it
+      // is, and asking for all of it at once is a form nobody reads.
+      const set = event.target.closest?.('[data-wb-quick-set]');
+      if (quickModule && set) {
+        event.preventDefault();
+        quickModule.setQuickValue(set.dataset.wbQuickSet, ctx);
         return;
       }
       const button = event.target.closest?.('[data-wb-quick]');

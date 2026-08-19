@@ -123,3 +123,46 @@ test('with nothing open the page draws the tiles and no dialog', async () => {
   assert.ok(!/data-wb-quick-form/.test(html), 'a dialog nobody opened');
   assert.equal(dom.fire('click', { target: { closest: () => null }, preventDefault: () => {} }), undefined);
 });
+
+test('the type picker opens and chooses through the record page listener', async () => {
+  // The dropdown is buttons and a hidden input, because a <select> cannot show an icon -- so it
+  // works only if the record page's click listener knows about it. Drawing it is not enough.
+  const dom = fakeDom();
+  const state = {};
+  const ctx = makeCtx(state);
+  const { createRecordPage } = await import('../src/workspace/record-page.js');
+  const page = createRecordPage(ctx);
+
+  const seat = { dataset: { wbQuickSeat: 'co1|ws-1|app-1|item-1' } };
+  const tile = { dataset: { wbQuick: 'field' }, disabled: false };
+  tile.closest = (sel) => (sel === '[data-wb-quick]' ? tile
+    : (sel === '[data-wb-quick-seat]' ? seat : null));
+  dom.fire('click', {
+    target: { closest: (sel) => (sel === '[data-wb-quick]' ? tile : null) },
+    preventDefault: () => {},
+  });
+  for (let i = 0; i < 4; i += 1) await new Promise((done) => { setTimeout(done, 0); });
+
+  /** A press on one of the dialog's own controls. */
+  const setter = (pair) => {
+    const node = { dataset: { wbQuickSet: pair } };
+    node.closest = (sel) => (sel === '[data-wb-quick-set]' ? node : null);
+    dom.fire('click', {
+      target: { closest: (sel) => (sel === '[data-wb-quick-set]' ? node : null) },
+      preventDefault: () => {},
+    });
+  };
+
+  setter('open|type');
+  assert.equal(state.wbQuick.open, 'type', 'the picker never opened');
+  setter('type|money');
+  assert.equal(state.wbQuick.type, 'money');
+  assert.equal(state.wbQuick.open, '', 'choosing left the list covering the form');
+
+  // Before/After and the field, and the composed value the form actually submits.
+  setter('dir|before');
+  const route = { params: { get: () => '' } };
+  const html = page.wbViewItemPage(route, 'co1', { id: 'ws-1', name: 'Sales' }, app, app.items[0]);
+  assert.match(html, /name="position" value="before:f-name"/);
+  assert.match(html, /Which field/);
+});

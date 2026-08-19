@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import {
   NEW_FIELD_TYPES, configFor, fieldRefusal, needsOptions, parseOptions, press, renderQuickModal,
-  saveQuick, setQuickType,
+  saveQuick, setQuickType, setQuickValue,
 } from '../src/workspace/quick-create.js';
 
 // "New Field: select the field type, configure the field, choose where it goes, click Add."
@@ -39,7 +39,9 @@ function harness() {
     companyPath: () => '/',
     WB_FIELD_TYPES: Object.fromEntries(
       ['text', 'number', 'money', 'category', 'status', 'tags', 'checklist', 'date', 'calculation',
-        'rollup', 'relationship', 'button', 'progress'].map((k) => [k, { label: k }]),
+        'rollup', 'relationship', 'button', 'progress'].map((k) => [k, {
+        label: k, icon: `ti-${k}`, color: '#2563eb', desc: `a ${k}`,
+      }]),
     ),
     createSupabaseClient: () => null,
     isLiveSupabaseSession: () => false,
@@ -66,11 +68,78 @@ test('a type that cannot be finished here is not offered', () => {
 test('the dialog lists only those, and only ones the app knows', async () => {
   const bench = harness();
   await bench.open();
+  // The list is drawn only while it is open -- shut, the dialog shows the one current choice.
+  setQuickValue('open|type', bench.ctx);
   const html = renderQuickModal(bench.ctx);
-  assert.match(html, /value="text"/);
-  assert.match(html, /value="category"/);
-  assert.ok(!/value="calculation"/.test(html));
-  assert.ok(!/value="relationship"/.test(html));
+  assert.match(html, /data-wb-quick-set="type\|text"/);
+  assert.match(html, /data-wb-quick-set="type\|category"/);
+  assert.ok(!/data-wb-quick-set="type\|calculation"/.test(html));
+  assert.ok(!/data-wb-quick-set="type\|relationship"/.test(html));
+});
+
+test('every type in the list arrives wearing its own icon', async () => {
+  // The point of the picker: twenty-six types as bare words is a wall to read.
+  const bench = harness();
+  await bench.open();
+  setQuickValue('open|type', bench.ctx);
+  const html = renderQuickModal(bench.ctx);
+  assert.match(html, /ti ti-text/, 'the type has no icon');
+  assert.match(html, /ti ti-money/);
+  assert.match(html, /wb-pick-txt/);
+  // And shut, no list is drawn at all -- the dialog shows the choices, not the catalogue.
+  setQuickValue('open|', bench.ctx);
+  const closed = renderQuickModal(bench.ctx);
+  assert.ok(!closed.includes('wb-pick-list'), 'the list stayed open');
+  assert.match(closed, /ti ti-text/, 'the current choice still shows its icon');
+});
+
+test('opening one list, choosing from it, and shutting it', async () => {
+  const bench = harness();
+  await bench.open();
+  assert.equal(bench.ctx.state.wbQuick.open, '');
+  assert.equal(setQuickValue('open|type', bench.ctx), 'open');
+  assert.equal(bench.ctx.state.wbQuick.open, 'type');
+  // Choosing shuts it: left open it covers the rest of the form, and the answer is on the button.
+  assert.equal(setQuickValue('type|money', bench.ctx), 'type');
+  assert.equal(bench.ctx.state.wbQuick.type, 'money');
+  assert.equal(bench.ctx.state.wbQuick.open, '');
+  // Nothing it does not recognise moves anything.
+  assert.equal(setQuickValue('nonsense|x', bench.ctx), '');
+  assert.equal(setQuickValue('no-separator', bench.ctx), '');
+  assert.equal(bench.ctx.state.wbQuick.type, 'money');
+});
+
+// ---- where it goes, asked as two questions -----------------------------------------------------
+
+test('Before or After is asked first, and only then which field', async () => {
+  // "first select after or before, then select which field, then the name of field."
+  const bench = harness();
+  await bench.open();
+  const html = renderQuickModal(bench.ctx);
+  const order = ['Field type', 'Where it goes', 'Which field', 'Field name'].map((cap) => html.indexOf(cap));
+  assert.ok(order.every((at) => at > -1), `a step is missing: ${JSON.stringify(order)}`);
+  assert.deepEqual([...order].sort((a, b) => a - b), order, 'the steps are out of order');
+});
+
+test('At the end has no field to pick, so it is not asked for', async () => {
+  const bench = harness();
+  await bench.open();
+  setQuickValue('dir|end', bench.ctx);
+  const html = renderQuickModal(bench.ctx);
+  assert.ok(!html.includes('Which field'), 'asking after "at the end" is a question with no answer');
+  assert.match(html, /name="position" value="end"/);
+});
+
+test('the direction and the field are carried to the form as one position', async () => {
+  const bench = harness();
+  await bench.open();
+  setQuickValue('dir|before', bench.ctx);
+  assert.match(renderQuickModal(bench.ctx), /name="position" value="before:f-name"/);
+  // ...and the field picker offers the app's fields, each wearing its own type's icon.
+  setQuickValue('open|target', bench.ctx);
+  const html = renderQuickModal(bench.ctx);
+  assert.match(html, /data-wb-quick-set="target\|f-name"/);
+  assert.match(html, /ti ti-text/);
 });
 
 // ---- what each type is asked for ---------------------------------------------------------------

@@ -1324,6 +1324,36 @@ after (field)."
   there: neither passes the factory ctx OBJECT onward from inside the shadowed scope. That is the
   condition that makes it a bug, not the shadow itself.
 
+## 2026-08-19 New Field asks in a readable order, with a dropdown that can show an icon
+
+"The quick create field: make the dropdown list with icon for easy read, and the insertion is like
+this — first select after or before, then select which field, then the name of field."
+
+- **A native `<select>` cannot draw an icon inside an `<option>`**, and twenty-six field types as
+  bare words is a wall. So the type picker is a button showing the current choice, a list of
+  buttons under it, and a **hidden input carrying the value** — the dialog still submits as one
+  FormData rather than needing a reader of its own. `WB_FIELD_TYPES` already had `icon`, `color`
+  and `desc` per type; none of that was new, it was just never shown here.
+- **Open state is on `state.wbQuick.open`, not in the DOM.** The record page redraws for reasons of
+  its own, and a list that shut on every repaint could not be used.
+- **Where it goes became two questions.** The old control was one list of every combination —
+  "Before Name", "After Name", "Before Trade", "After Trade" — so an app with twenty fields
+  offered forty lines to read to make one choice. Now: Before / After / At the end as three
+  buttons, then which field as a second picker, each row wearing its own type's icon so Address
+  reads apart from Adjuster at a glance. `position` is **composed** from the two rather than
+  chosen, so `insertFieldAt` still takes the one string it always did and its tests did not move.
+- **It opens on After the last field**, which is where a new field goes unless somebody says
+  otherwise — said in the words the dialog asks in rather than a separate "end".
+- **One `data-wb-quick-set="key|value"` attribute for every control**, through one handler. The
+  record page binds these once for the module's life, so each new pair would otherwise be another
+  branch there reachable only from markup written in the module. The dead `change` listener for
+  the old `<select>` was removed with it.
+- **A field here has ONE name.** The request asked for a field name *and* a label; the App Builder
+  field is `{ id, type, label, required, config }` and every surface — the table header, the record
+  page, formulas, the move-mapping that matches by name — reads `label`. A second box would be
+  stored and read by nothing, which is the same "looks configured and is not" this dialog already
+  refuses for a dropdown with no options. One input, called Field name.
+
 ## 2026-08-19 An image field on a document is a picture, not a filename
 
 "When the user wants to use the image field on the form builder, do not import or display it as

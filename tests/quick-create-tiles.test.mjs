@@ -4,8 +4,8 @@ import test from 'node:test';
 
 import { QUICK_CREATE } from '../src/workspace/record-layout.js';
 import {
-  ALL_NUMBERS, closeQuick, fieldPositions, insertFieldAt, phoneChoices, press, renderQuickModal,
-  saveQuick,
+  ALL_NUMBERS, closeQuick, fieldTargets, insertFieldAt, phoneChoices, positionOf, press,
+  renderQuickModal, saveQuick,
 } from '../src/workspace/quick-create.js';
 
 // "Just make sure Task, Call, SMS and New Field are in Quick Create."
@@ -75,13 +75,25 @@ test('all four tiles are on the card', () => {
 
 // ---- where a new field goes ----------------------------------------------------------------
 
-test('a field can go before or after any field, or at the end', () => {
+test('the fields to sit next to are the ones the record already shows, in that order', () => {
+  // One list of fields, not one of every before/after combination -- that was every field twice,
+  // so an app with twenty of them offered forty lines to read to make one choice.
   const bench = harness();
-  const opts = fieldPositions(bench.app).map((one) => one.value);
-  assert.equal(opts[0], 'end', 'a record with no fields still has somewhere to put one');
-  assert.ok(opts.includes('before:f-name'));
-  assert.ok(opts.includes('after:f-name'));
-  assert.match(fieldPositions(bench.app).find((one) => one.value === 'after:f-name').label, /After Name/);
+  const opts = fieldTargets(bench.app);
+  assert.deepEqual(opts.map((one) => one.value), bench.app.fields.map((one) => one.id));
+  assert.equal(opts[0].label, bench.app.fields[0].label);
+  assert.equal(opts[0].type, bench.app.fields[0].type, 'the type is carried so the row can wear its icon');
+  assert.deepEqual(fieldTargets({ fields: [] }), []);
+});
+
+test('the direction and the field compose the one string insertFieldAt takes', () => {
+  assert.equal(positionOf({ dir: 'before', target: 'f-name' }), 'before:f-name');
+  assert.equal(positionOf({ dir: 'after', target: 'f-name' }), 'after:f-name');
+  assert.equal(positionOf({ dir: 'end', target: 'f-name' }), 'end', 'at the end ignores whatever was picked before');
+  // A record with no fields, or a target deleted since the dialog opened: the field is still
+  // wanted, so it goes at the end rather than being refused.
+  assert.equal(positionOf({ dir: 'after', target: '' }), 'end');
+  assert.equal(positionOf(null), 'end');
 });
 
 test('the field lands exactly where it was asked to', () => {
@@ -115,17 +127,22 @@ test('only phone fields this record has a number in are offered', () => {
 
 // ---- what each tile opens ------------------------------------------------------------------
 
-test('New Field opens with the palette and the positions already worked out', async () => {
+test('New Field opens on a sensible default rather than an empty form', async () => {
   const bench = harness();
   assert.equal(await bench.run('field'), 'field');
-  assert.equal(bench.state.wbQuick.kind, 'field');
-  assert.equal(bench.state.wbQuick.type, 'text');
-  assert.ok(bench.state.wbQuick.positions.length > 1);
+  const v = bench.state.wbQuick;
+  assert.equal(v.kind, 'field');
+  assert.equal(v.type, 'text');
+  // After the last field: where a new one goes unless somebody says otherwise, said in the words
+  // the dialog asks in.
+  assert.equal(v.dir, 'after');
+  assert.equal(v.target, bench.app.fields.at(-1).id);
+  assert.equal(v.open, '', 'a list open before it was asked for covers the form');
   const html = renderQuickModal(bench.ctx);
   assert.match(html, /Add a field to every record/);
+  // The value still reaches the form as one hidden input, so saveQuick reads what it always did.
   assert.match(html, /name="type"/);
-  assert.match(html, /name="position"/);
-  assert.match(html, /After Name/);
+  assert.match(html, new RegExp(`name="position" value="after:${bench.app.fields.at(-1).id}"`));
 });
 
 test('Call picks ONE number and rings that one', async () => {

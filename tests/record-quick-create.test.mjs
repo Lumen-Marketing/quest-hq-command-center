@@ -194,7 +194,11 @@ test('every class the card uses is styled', () => {
   ['wb-quick-grid', 'wb-quick-btn', 'wb-quick-ic', 'wb-quick-label',
     // ...and the dialog all four tiles now open.
     'wb-quick-modal', 'wb-quick-dialog', 'wb-quick-field', 'wb-quick-row', 'wb-quick-acts',
-    'wb-quick-sec', 'wb-quick-now'].forEach((name) => {
+    'wb-quick-sec', 'wb-quick-now',
+    // ...and the icon dropdown the field type is chosen from, which replaced a <select>
+    // because a <select> cannot draw an icon inside an <option>.
+    'wb-pick', 'wb-pick-btn', 'wb-pick-list', 'wb-pick-opt', 'wb-pick-ic', 'wb-pick-txt',
+    'wb-seg', 'wb-seg-btn'].forEach((name) => {
     assert.ok(styles.includes(`.${name}`), `.${name} has no rule`);
   });
 });

@@ -37,19 +37,22 @@ export function phoneChoices(app, item) {
 }
 
 /**
- * Where a new field goes.
+ * The fields a new one can sit next to, in the order the record shows them.
  *
- * "Before Name" and "After Name" are the two the request named. The list is built from the app's
- * own field order, so it reads the way the record does; `end` is offered because a record with no
- * fields yet has nothing to be before or after.
+ * Before/After and WHICH field are two questions now, not one list of every combination. That
+ * list was every field twice -- "Before Name", "After Name", "Before Trade", "After Trade" --
+ * so an app with twenty fields offered forty options to read through to make one choice.
  */
-export function fieldPositions(app) {
-  const out = [{ value: 'end', label: 'At the end' }];
-  (app?.fields || []).forEach((field) => {
-    out.push({ value: `before:${field.id}`, label: `Before ${field.label}` });
-    out.push({ value: `after:${field.id}`, label: `After ${field.label}` });
-  });
-  return out;
+export function fieldTargets(app) {
+  return (app?.fields || []).map((field) => ({ value: field.id, label: field.label, type: field.type }));
+}
+
+/** The one string insertFieldAt takes, from the two controls that now choose it. */
+export function positionOf(v) {
+  // No field to sit next to -- an app with none, or a target that has since been deleted -- is
+  // the end rather than a refusal: the field is still wanted, and `end` is where it can go.
+  if (!v || v.dir === 'end' || !v.target) return 'end';
+  return `${v.dir}:${v.target}`;
 }
 
 /** The field list with `made` inserted where `position` says. Pure, so the ordering is testable. */
@@ -156,6 +159,41 @@ const whenRows = (h, v) => `
     <label>Time<input class="wb-input" type="time" name="time" value="${esc(h, v.time)}" required></label>
   </div>`;
 
+/**
+ * A dropdown that can show an icon, which a native <select> cannot.
+ *
+ * Open state lives on `state.wbQuick.open` rather than in the DOM, because the record page
+ * redraws for reasons of its own and a list that shut on every repaint could not be used. The
+ * chosen value rides on a hidden input, so the dialog still submits as one FormData like
+ * everything else here rather than needing a reader of its own.
+ */
+function picker(h, key, name, value, options, open) {
+  const now = options.find((one) => one.value === value) || options[0];
+  if (!now) return '';
+  const face = (one) => `
+    <span class="wb-pick-ic" style="color:${h(one.color || '#64748b')}"><i class="ti ${h(one.icon || 'ti-square')}"></i></span>
+    <span class="wb-pick-txt"><b>${h(one.label)}</b>${one.desc ? `<small>${h(one.desc)}</small>` : ''}</span>`;
+  return `<div class="wb-pick${open ? ' is-open' : ''}">
+    <button type="button" class="wb-pick-btn" data-wb-quick-set="open|${open ? '' : h(key)}"
+      aria-haspopup="listbox" aria-expanded="${open ? 'true' : 'false'}">
+      ${face(now)}<i class="ti ti-chevron-down wb-pick-arrow"></i>
+    </button>
+    ${open ? `<div class="wb-pick-list" role="listbox">${options.map((one) => `
+      <button type="button" class="wb-pick-opt${one.value === now.value ? ' is-on' : ''}" role="option"
+        aria-selected="${one.value === now.value ? 'true' : 'false'}" data-wb-quick-set="${h(key)}|${h(one.value)}">
+        ${face(one)}${one.value === now.value ? '<i class="ti ti-check wb-pick-tick"></i>' : ''}
+      </button>`).join('')}</div>` : ''}
+    <input type="hidden" name="${h(name)}" value="${h(now.value)}">
+  </div>`;
+}
+
+/** Before / After / At the end, as three buttons: it is one choice of three, not a list. */
+const WHERE = [['before', 'Before'], ['after', 'After'], ['end', 'At the end']];
+
+const whereSeg = (h, v) => `<div class="wb-seg" role="group" aria-label="Where it goes">${WHERE.map(([value, label]) => `
+  <button type="button" class="wb-seg-btn${v.dir === value ? ' is-on' : ''}" data-wb-quick-set="dir|${value}"
+    aria-pressed="${v.dir === value ? 'true' : 'false'}">${h(label)}</button>`).join('')}</div>`;
+
 /** The open dialog, or ''. Rendered by the record page at the end of the Quick Create card. */
 export function renderQuickModal(ctx) {
   const v = view(ctx);
@@ -167,7 +205,14 @@ export function renderQuickModal(ctx) {
     const types = ctx.WB_FIELD_TYPES || {};
     // Only the ones this dialog can finish. A calculation with no formula or a relationship with
     // no target renders and can never hold a value, which looks configured and is not.
-    const order = NEW_FIELD_TYPES.filter((key) => types[key]);
+    const typeOpts = NEW_FIELD_TYPES.filter((key) => types[key]).map((key) => ({
+      value: key, label: types[key].label, desc: types[key].desc, icon: types[key].icon, color: types[key].color,
+    }));
+    // The field you are inserting next to, wearing its own type's icon -- the point of a picture
+    // here is telling Address from Adjuster at a glance, which two lines of text do not.
+    const targetOpts = (v.targets || []).map((one) => ({
+      value: one.value, label: one.label, icon: types[one.type]?.icon, color: types[one.type]?.color,
+    }));
     const extra = needsOptions(v.type)
       ? `<label class="wb-quick-field">${v.type === 'checklist' ? 'Steps' : 'Options'}<small class="wb-sub">One per line.</small>
           <textarea class="wb-input" name="options" rows="4" placeholder="${v.type === 'checklist' ? 'Measure the roof' : 'Roofing'}">${esc(h, v.options)}</textarea>
@@ -177,20 +222,21 @@ export function renderQuickModal(ctx) {
         : v.type === 'number'
           ? `<label class="wb-quick-field">Unit <small class="wb-sub">Optional — shown after the number.</small><input class="wb-input" name="unit" value="${esc(h, v.unit)}" placeholder="%"></label>`
           : '';
+    // Asked in the order it was asked for: what the field IS, then where it goes, then what it
+    // is called. `position` is composed rather than chosen, so insertFieldAt still takes the one
+    // string it always has.
     return shell(h, 'Add a field to every record', 'ti-plus', `
       ${err}
-      <label class="wb-quick-field">Field type
-        <select class="wb-input" name="type">
-          ${order.map((key) => `<option value="${h(key)}" ${v.type === key ? 'selected' : ''}>${h(types[key].label)}</option>`).join('')}
-        </select>
-      </label>
-      <label class="wb-quick-field">Name<input class="wb-input" name="label" value="${esc(h, v.label)}" placeholder="Site visit" required></label>
+      <div class="wb-quick-field"><span>Field type</span>
+        ${picker(h, 'type', 'type', v.type, typeOpts, v.open === 'type')}
+      </div>
       ${extra}
-      <label class="wb-quick-field">Where it goes
-        <select class="wb-input" name="position">
-          ${(v.positions || []).map((one) => `<option value="${h(one.value)}" ${v.position === one.value ? 'selected' : ''}>${h(one.label)}</option>`).join('')}
-        </select>
-      </label>
+      <div class="wb-quick-field"><span>Where it goes</span>${whereSeg(h, v)}</div>
+      ${v.dir === 'end' || !targetOpts.length ? '' : `<div class="wb-quick-field"><span>Which field</span>
+        ${picker(h, 'target', 'target', v.target, targetOpts, v.open === 'target')}
+      </div>`}
+      <label class="wb-quick-field">Field name<input class="wb-input" name="label" value="${esc(h, v.label)}" placeholder="Site visit" required></label>
+      <input type="hidden" name="position" value="${h(positionOf(v))}">
       <p class="wb-sub">It is added to this app, so every record gets it — blank until it is filled in. Options, formulas and the rest are set in the field's own editor afterwards.</p>`, v.busy);
   }
 
@@ -262,8 +308,13 @@ function openQuick(kind, seat, app, item, ctx) {
     error: '',
     busy: false,
     ...(kind === 'field' ? {
-      type: 'text', label: '', position: 'end', positions: fieldPositions(app),
-      options: '', currency: '$', unit: '',
+      type: 'text', label: '', options: '', currency: '$', unit: '',
+      // Defaults to AFTER the last field, which is where a new one goes unless somebody says
+      // otherwise -- and says it in the words the dialog asks in rather than a separate 'end'.
+      dir: (app.fields || []).length ? 'after' : 'end',
+      target: (app.fields || []).at(-1)?.id || '',
+      targets: fieldTargets(app),
+      open: '',
     } : {
       phones,
       to: phones[0]?.value || '',
@@ -286,8 +337,32 @@ export function closeQuick(ctx) {
 export function setQuickType(type, ctx) {
   const v = view(ctx);
   if (!v || v.kind !== 'field') return;
-  ctx.state.wbQuick = { ...v, type, error: '' };
+  ctx.state.wbQuick = { ...v, type, open: '', error: '' };
   ctx.render();
+}
+
+/**
+ * Every control in the New Field dialog that is not a plain input, through one handler.
+ *
+ * One `data-wb-quick-set="key|value"` attribute rather than an attribute and a listener per
+ * control: the record page binds these once for the module's life, and each new pair would be
+ * another branch there that can only be reached from markup written here.
+ */
+export function setQuickValue(pair, ctx) {
+  const v = view(ctx);
+  const cut = String(pair || '').indexOf('|');
+  if (!v || cut < 0) return '';
+  const key = pair.slice(0, cut);
+  const value = pair.slice(cut + 1);
+  // `open` carries which list is showing, and an empty value shuts the one that is.
+  if (key === 'open') { ctx.state.wbQuick = { ...v, open: value }; ctx.render(); return 'open'; }
+  if (key === 'type') { setQuickType(value, ctx); return 'type'; }
+  if (key !== 'dir' && key !== 'target') return '';
+  // Choosing shuts the list: leaving it open hides the rest of the form behind what was just
+  // answered, and the answer is already on the button.
+  ctx.state.wbQuick = { ...v, [key]: value, open: '', error: '' };
+  ctx.render();
+  return key;
 }
 
 function find(ctx, seat) {
