@@ -9,6 +9,9 @@ import test from 'node:test';
 // second gallery -- the interesting part is the places that still assumed exactly one photo.
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+// The File / Image field uploader moved out of main.js into its own fetched module, so the
+// assertions about the drop zone and the upload path read it there.
+const fileField = readFileSync(new URL('../src/workspace/file-field.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const ui = readFileSync(new URL('../src/workspace/field-config-ui.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
@@ -50,14 +53,19 @@ test('a photo in the list is shown, not named', () => {
   // No per-row class: the <ul> already carries wb-img-list when the field is an image, so the
   // row repeating it was markup paying for what a descendant selector does for nothing.
   assert.match(styles, /\.wb-img-list \.wb-file-row \{/);
-  assert.match(main, /\$\{isImage && fv\.url\s*\n?\s*\? `<img class="wb-img-thumb"/);
+  assert.match(fileField, /\$\{isImage && fv\.url\s*\n?\s*\? `<img class="wb-img-thumb"/);
   // The shared label wording stayed generic. Rewording it per type was mine to add and cost
   // more entry-bundle bytes than the ceiling had; the thumbnail is what makes it readable.
 });
 
-test('a cell with several photos shows several', () => {
+test('a cell READS every photo, whatever it goes on to draw', () => {
   // This is the one that silently loses data: wbFileValue reads ONE, so a field switched to
   // multiple would render only the first and look like the rest never uploaded.
+  //
+  // What is DRAWN was cut back afterwards -- a table row shows one photo and a "+3" chip, and
+  // only the record itself shows the lot (tests/record-image-viewer.test.mjs). That is a
+  // decision about the row; reading only the first photo would still be a bug, because the
+  // count and the viewer behind the chip are both built from the full list.
   const cell = main.slice(main.indexOf("    case 'image': {"), main.indexOf("    case 'rating'"));
   assert.match(cell, /wbFileValues\(value\)/, 'wbFileValue would show only the first');
   assert.ok(!/wbFileValue\(value\)/.test(cell), 'the single-value reader must not survive here');
@@ -77,6 +85,6 @@ test('every class the gallery uses is styled', () => {
 test('turning it off does not rewrite what is already there', () => {
   // The uploader stores one file as one object and several as an array, so a field switched back
   // to single keeps every photo already attached -- it only stops new ones being added.
-  assert.match(main, /files\.length === 1 && !multi \? files\[0\] : files/);
+  assert.match(fileField, /files\.length === 1 && !multi \? files\[0\] : files/);
   assert.match(ui, /keeps every \S+ already attached/);
 });

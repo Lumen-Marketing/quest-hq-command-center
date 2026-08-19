@@ -1569,3 +1569,41 @@ array, a checkbox is 'yes'/'no' rather than a boolean, and the name is a real co
 a field. The name travels OUT as a synthetic field so `planPush` can label-match it, but the set
 action is handed an app shape WITHOUT it — a button that silently renames a contact is excluded
 structurally rather than by a guard somebody can delete.
+
+## A photo is a doorway, and a row is not a gallery
+
+Two halves of one rule about the Image field.
+
+A stored photo is now always clickable and always opens the same viewer, from every surface it
+is drawn on. A second place for "this cannot be shown" to be worded differently is how two
+answers to "let me see that photo" appear — which is exactly what had happened: the record drew
+a decorative thumbnail with no behaviour at all, while the field editor beside it offered an eye
+button that opened a raw browser tab and left the record. On a phone that is a trip you do not
+come back from.
+
+A record LIST shows ONE photo and counts the rest. A cell is a summary of a value, not the value
+itself — the same reason a Sheet field shows what the grid is CALLED rather than printing it. A
+cell that painted eight photos pushed every other column off the row and still drew each one too
+small to identify, so it was worse at both jobs. The record page shows the whole set, because
+that is the page somebody opened in order to look at them.
+
+The two are told apart by `detail: true` on the context object `wbFmtVal` already receives, set
+by the record page and the record view modal. Not by a second formatter: the last time a surface
+grew its own copy of the value formatter, a User field printed the member's raw UUID.
+
+### The extraction paid for the feature, again
+
+The entry chunk had 18 bytes of headroom, so the viewer could not simply be added. The File /
+Image uploader moved into `src/workspace/file-field.js`, fetched on demand: 180 lines of drop
+zone, thumbnail list, progress bar and upload path that nothing needs until a field EDITOR is on
+screen. Entry JavaScript went 364,526 → 363,613 gzip bytes and the ceiling was left alone.
+
+It is prefetched by `wbLoadFieldUi`, which fetches the module that DRAWS the markup it binds, so
+the two arrive together and the drop zone does not paint blank for a round trip. The mount is
+idempotent — every zone it binds is marked — so arriving a tick late binds exactly once.
+
+The failure mode of this kind of extraction is a name that was reached for and is now missing:
+a ReferenceError nobody sees until they try to attach something. `file-field.js` is registered
+in `tests/extracted-module-references.test.mjs`, which asserts `main.js` passes every key the
+ctx destructures. That guard already existed for fifteen other modules; it is the reason this
+was a safe thing to do in the same change as a feature.

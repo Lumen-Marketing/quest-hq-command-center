@@ -1657,6 +1657,58 @@ colour, and `objectFitFor()` translates. The test asserts every member of `IMAGE
 keyword CSS actually has, so the next value added cannot repeat it. The canvas exports never had
 the bug -- `fitRect` handles the model's own word -- and are now pinned so the two cannot drift.
 
+## 2026-08-19 A photo on a record is something you can look at
+
+- **The Image field opens a viewer.** Tapping any photo — in a table cell, on a card, on the
+  record page, or on a thumbnail inside the field editor — opens a full-size dialog with
+  **Download**, **Open in new tab** and **Close**. Several photos step one at a time with an
+  arrow on each side of the picture (wrapping both ways, with a `3 of 8` counter), or switch to
+  **All photos**, a contact sheet that marks where you are and drops back to a single view on
+  whichever one you pick. Arrow keys and Escape work; on a phone the picture itself advances on
+  tap and the stage takes a horizontal swipe.
+- **A record LIST no longer paints every photo.** A row now draws one thumbnail and a `+3` chip
+  for the rest. Eight photos in a cell pushed the columns beside it off the row and still drew
+  each one too small to identify. The count is the honest summary; the viewer behind it is where
+  the photos are actually read. Only the record page and the record view modal show the whole
+  set — they pass `detail: true` on the context object `wbFmtVal` already receives.
+- The photos travel to the viewer by KEY, through a per-render registry (`WB_IMG_SETS`), not in
+  the markup: a signed URL is 200-odd characters, and writing the whole gallery into every row —
+  so the one photo it draws can still step through the rest — is a table nobody can scroll. The
+  registry is emptied at the top of each render, which is the same moment the markup holding its
+  keys is replaced. Each thumbnail also carries its own url as a fallback, so markup that
+  outlives its render still opens the photo that was clicked.
+- Every thumbnail is a `<button>`. That is what keeps the two clicks around it — the row click
+  that opens the record, the cell click that opens the inline editor — from firing as well:
+  both already skip anything interactive. It also means a filled photo cell had nothing left to
+  click to EDIT it, so the record page adds a **Change** chip beside the photos.
+- `src/workspace/image-lightbox.js` is fetched on the click that opens it and draws onto
+  `<body>`, outside `render()`. Stepping through a gallery is one small change repeated, and
+  routing every arrow press through a full repaint would rebuild the page to move one picture —
+  and throw away a half-typed inline edit sitting behind it. It puts the keydown listener, the
+  scroll lock and the focus back on close.
+- **Paid for by extracting the uploader.** The entry chunk had **18 bytes** of headroom, so the
+  File / Image drop zone, thumbnail list, progress bar and upload path moved out of `main.js`
+  into `src/workspace/file-field.js` (`createFileField(ctx)`, fetched on demand and prefetched
+  alongside `field-config-ui.js`, which draws the markup it binds). Nothing that paints before a
+  field EDITOR is open needs any of it. Entry JavaScript went from 364,526 to **363,613** gzip
+  bytes — 931 under the 364,544 ceiling, which was not raised.
+- `tests/extracted-module-references.test.mjs` covers the new module the same way it covers every
+  other factory: each of the 15 names its ctx destructures must be passed by `main.js`. That is
+  the failure mode of an extraction like this, and it is now checked rather than hoped for.
+- **A tall photo ran through the footer.** The stage centred with `display: grid`, whose auto row
+  is sized BY the image — so the image's own `max-height: 100%` resolved against a height the
+  image was deciding, the browser dropped the circular constraint, and a 900x1600 phone photo
+  rendered at full natural size, 936px past the bottom of the dialog. Landscape shots hid it
+  entirely: `max-width` resolves against a definite width, so they were caught by that instead
+  and looked right. The stage centres with flex now, which has a definite cross size, and clips as
+  a backstop. On a phone the arrows moved back beside the picture — putting them under it had laid
+  both of them across the photo — and the stage's horizontal padding reserves their lane.
+- Browser-verified against the dev server: the viewer opens on the clicked photo, steps and wraps
+  both ways, the grid marks and returns to a chosen photo, keys and both Close buttons work, a
+  single photo gets no arrows and no toggle, and the extracted uploader still binds real field
+  markup, paints its thumbnails, opens the viewer from one, and removes one on its own. No
+  console errors.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

@@ -79,6 +79,17 @@ export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
   //
   // So the refusal above stands for the SEVENTH raise, on the same condition and now with
   // measurements behind it. Headroom after this bump: ~1.6 KB.
+  //
+  // 2026-08-19: NOT a raise. The headroom above had been spent down to 18 bytes, and the record
+  // photo viewer would not fit in 18 bytes, so the refusal was honoured: the File / Image field
+  // uploader moved out of main.js into src/workspace/file-field.js, fetched on demand. 180 lines
+  // of drop zone, thumbnail list, progress bar and upload path that nothing needs until a field
+  // EDITOR is open. 364526 -> 363613 with the feature included; headroom is 931 bytes.
+  //
+  // The lesson from the last extraction held: ~7.4 KB of raw source bought ~1.4 KB gzip, which
+  // is again nowhere near proportional. The outstanding work is unchanged -- the four App
+  // Builder modal functions, 64.9 KB, needing their 66 dependencies injected through a ctx --
+  // and the refusal of a seventh raise stands.
   entryJs: 356 * 1024,
   initialJs: 440 * 1024,
   entryCss: 120 * 1024,

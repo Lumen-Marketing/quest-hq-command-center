@@ -14,6 +14,9 @@ import {
 // assertion waves straight through.
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+// The File / Image field uploader moved out of main.js into its own fetched module, so the
+// assertions about the drop zone and the upload path read it there.
+const fileField = readFileSync(new URL('../src/workspace/file-field.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const policy = readFileSync(new URL('../src/security/upload-policy.js', import.meta.url), 'utf8');
 
 /** A canvas whose encoder shrinks as quality drops, so the rungs can be told apart. */
@@ -129,14 +132,14 @@ test('the cap is 100MB, and it is a decode guard rather than a storage limit', (
 test('a photo is judged as an image whatever field it was dropped on', () => {
   // A File field used the document policy, so a 30MB photo attached to one was refused for
   // being a document. What it is decides, not which field took it.
-  assert.ok(main.includes("(png|jpe?g|webp)$/i.test(rawFile.name"), 'a photo is no longer recognised by its extension');
-  assert.match(main, /guardUpload\(rawFile, photo \|\| isImage \? 'image' : 'document', scope\)/);
+  assert.ok(fileField.includes("(png|jpe?g|webp)$/i.test(rawFile.name"), 'a photo is no longer recognised by its extension');
+  assert.match(fileField, /guardUpload\(rawFile, photo \|\| isImage \? 'image' : 'document', scope\)/);
 });
 
 test('a GIF is never re-encoded', () => {
   // Drawing an animated GIF to a canvas returns its first frame. Better to refuse a huge one
   // than to silently flatten it.
-  const photo = main.match(/const photo = \/([^/]+)\/i/);
+  const photo = fileField.match(/const photo = \/([^/]+)\/i/);
   assert.ok(photo, 'the photo test is gone');
   assert.ok(!photo[1].includes('gif'), 'a gif would be flattened to its first frame');
 });

@@ -209,6 +209,9 @@ const FACTORY_MODULES = [
   ['src/crm/contact-table.js', 'createContactTable'],
   ['src/home/widget-registry.js', 'createWidgetRegistry'],
   ['src/workspace/record-page.js', 'createRecordPage'],
+  // The File / Image field uploader. main.js keeps only the shim that fetches it, so every
+  // name the drop zone and the upload path reach for now arrives through this ctx.
+  ['src/workspace/file-field.js', 'createFileField'],
   ['src/tasks/task-form.js', 'createTaskForm'],
   // Quick Create's dialogs take the RECORD PAGE's ctx, one hop along: the card presses into
   // this module and hands its own context through, so that is the call site to check.

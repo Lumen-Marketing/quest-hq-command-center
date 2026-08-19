@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The File / Image field uploader moved out of main.js into its own fetched module, so the
+// assertions about the drop zone and the upload path read it there.
+const fileField = readFileSync(new URL('../src/workspace/file-field.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fieldUi = readFileSync(new URL('../src/workspace/field-config-ui.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
@@ -75,22 +78,22 @@ test('the input only accepts several when the field says so', () => {
 
 test('uploads append rather than replace', () => {
   // Dropping three files must end with three. Assigning would leave the last one only.
-  assert.match(main, /if \(multi\) writeAll\(\[\.\.\.readAll\(\), attached\]\);/);
+  assert.match(fileField, /if \(multi\) writeAll\(\[\.\.\.readAll\(\), attached\]\);/);
 });
 
 test('several files upload one at a time, not in parallel', () => {
   // They share one progress bar; racing drives it backwards.
-  assert.match(main, /for \(const file of \(multi \? picked : picked\.slice\(0, 1\)\)\) await upload\(file\);/);
+  assert.match(fileField, /for \(const file of \(multi \? picked : picked\.slice\(0, 1\)\)\) await upload\(file\);/);
 });
 
 test('a single file still stores as a single object', () => {
   // So turning multiple on and off again does not rewrite records that only ever had one.
-  assert.match(main, /files\.length === 1 && !multi \? files\[0\] : files/);
+  assert.match(fileField, /files\.length === 1 && !multi \? files\[0\] : files/);
 });
 
 test('each attached file can be removed on its own', () => {
-  assert.match(main, /data-wb-file-drop-one="\$\{i\}"/);
-  assert.match(main, /readAll\(\)\.filter\(\(_, i\) => i !== Number\(btn\.dataset\.wbFileDropOne\)\)/);
+  assert.match(fileField, /data-wb-file-drop-one="\$\{i\}"/);
+  assert.match(fileField, /readAll\(\)\.filter\(\(_, i\) => i !== Number\(btn\.dataset\.wbFileDropOne\)\)/);
 });
 
 test('the cell shows every attached file, not just the first', () => {
@@ -102,5 +105,5 @@ test('the cell shows every attached file, not just the first', () => {
 test('the single-file remove button is optional now', () => {
   // A multiple field renders a list instead of that one row of actions, so the binding has to
   // tolerate its absence or every multi field throws on mount.
-  assert.match(main, /if \(removeBtn\) removeBtn\.onclick = /);
+  assert.match(fileField, /if \(removeBtn\) removeBtn\.onclick = /);
 });

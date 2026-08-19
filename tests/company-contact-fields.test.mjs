@@ -18,6 +18,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // being wrong rather than the file having different line endings.
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 const page = readFileSync(join(root, 'src', 'company-contacts', 'page.js'), 'utf8').replace(/\r\n/g, '\n');
+// The uploader that binds this markup moved out of main.js into its own fetched module.
+const fileField = readFileSync(join(root, 'src', 'workspace', 'file-field.js'), 'utf8').replace(/\r\n/g, '\n');
 
 const fn = (name, source = main) => {
   const at = source.lastIndexOf(`function ${name}(`);
@@ -298,7 +300,7 @@ test('the uploader is bound on the contact form, and only there', () => {
 test('an upload says whose it is, in the toast and in Company Drive', () => {
   // The mirror named its folders from state.builderModal, which is null here -- every
   // contact attachment would have landed under "App / Workspace files / Attached files".
-  const mount = fn('wbMountFileFields');
+  const mount = fn('mountFileFields', fileField);
   assert.match(mount, /const scope = zone\.dataset\.wbFileScope \|\| 'Workspaces';/);
   assert.match(mount, /const driveLabels = zone\.dataset\.wbFileDrive \? JSON\.parse\(zone\.dataset\.wbFileDrive\) : null;/);
   assert.match(mount, /wbMirrorFileToDrive\(file, objectPath, companyId, hidden\.getAttribute\('data-f'\), driveLabels\)/);
@@ -316,7 +318,7 @@ test('a file field can hold several, with the App Builder switch', () => {
 });
 
 test('the drop zone does not claim a contact belongs to one workspace', () => {
-  assert.match(fn('wbMountFileFields'), /const hint = zone\.dataset\.wbFileHint \|\| 'Uploads to this workspace';/);
+  assert.match(fn('mountFileFields', fileField), /const hint = zone\.dataset\.wbFileHint \|\| 'Uploads to this workspace';/);
   assert.match(page, /data-wb-file-hint="Shared with every workspace"/);
 });
 

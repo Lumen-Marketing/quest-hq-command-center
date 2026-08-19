@@ -23365,10 +23365,110 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-img-list .wb-file-row:hover .btn-mini,
 .wb-img-list .wb-file-row:focus-within .btn-mini { opacity: 1; }
 
-/* A cell showing more than one: they overlap, so eight photos still read as one value rather
-   than pushing every other column off the row. No wrapper element -- adjacent siblings only
-   occur in that cell. */
-.wb-img-avatar + .wb-img-avatar { margin-left: -12px; }
+/* A photo on a record is something you look at, so every thumbnail is a button into the
+   viewer. A table row draws ONE of them and a "+3" chip for the rest; the record page draws
+   the lot. Painting every photo into a row is what pushed the columns beside it off the
+   table and still left each one too small to make out. */
+.wb-img-cell { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; vertical-align: middle; }
+.wb-img-shot { padding: 0; border: 0; background: none; line-height: 0; border-radius: 50%; cursor: zoom-in; flex: none; }
+.wb-img-shot:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
+.wb-img-more {
+  display: inline-grid; place-items: center; min-width: 34px; height: 34px; padding: 0 8px;
+  border: 1px solid var(--border, #e2d5bf); border-radius: 999px; background: var(--surface-2, #f6efe4);
+  color: var(--text-muted, #72695d); font-size: .78rem; font-weight: 800; cursor: pointer; flex: none;
+}
+.wb-img-more:hover { border-color: var(--border-strong, #cdb595); color: var(--text, #2c241b); }
+/* On the record the photos are the point, so they get room -- and squares, because a row of
+   circles crops the corners off pictures that were chosen for what is in them. */
+.wb-img-cell.is-detail { gap: 8px; }
+.wb-img-cell.is-detail .wb-img-shot { border-radius: 10px; }
+.wb-img-cell.is-detail .wb-img-avatar { width: 78px; height: 78px; border-radius: 10px; border-width: 1px; }
+/* The click that opens the inline editor skips buttons, and a filled photo cell is nothing
+   but buttons. This is the part of the cell that still means "edit this field". */
+.wb-img-edit {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px;
+  border: 1px dashed var(--border-strong, #cdb595); background: var(--surface-2, #f6efe4);
+  color: var(--text-muted, #72695d); font-size: .75rem; font-weight: 700; cursor: pointer;
+}
+.wb-view-val:hover .wb-img-edit { color: var(--text, #2c241b); border-color: var(--orange, #e0552d); }
+
+/* The photo viewer. Its own layer on <body>, above every modal (240) and the sheet overlay
+   (900) but under the toasts (1000), so a failure still gets to speak over it. */
+.wb-lb {
+  position: fixed; inset: 0; z-index: 950; display: flex; flex-direction: column;
+  background: rgba(9, 11, 16, .93); backdrop-filter: blur(3px);
+}
+.wb-lb:focus { outline: none; }
+html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
+.wb-lb-head, .wb-lb-foot {
+  flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: var(--surface, #fffaf0); color: var(--text, #2c241b);
+}
+.wb-lb-head { border-bottom: 1px solid var(--border, #e2d5bf); }
+.wb-lb-foot { border-top: 1px solid var(--border, #e2d5bf); justify-content: flex-end; flex-wrap: wrap; }
+.wb-lb-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.wb-lb-name { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-lb-count { font-size: .76rem; color: var(--text-muted, #72695d); }
+.wb-lb-count:empty { display: none; }
+.wb-lb-acts { flex: none; display: flex; align-items: center; gap: 8px; }
+.wb-lb-body { flex: 1; min-height: 0; display: flex; }
+/* Flex, not grid, to centre the picture.
+
+   In a grid the row is auto-sized BY the image, so the image's own max-height: 100% resolves
+   against a height that the image is deciding -- circular, so the browser drops the constraint.
+   A 900x1600 phone photo then rendered at its full natural size and ran 936px through the
+   footer and off the screen. Landscape photos hid it: max-width resolves against a definite
+   width, so they were caught by that instead and looked correct.
+
+   A flex container's cross size is definite here, so the same percentage resolves. overflow
+   is the backstop: if a browser ever disagrees, the picture is clipped rather than laid over
+   the buttons. */
+.wb-lb-stage {
+  flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 18px 72px;
+}
+.wb-lb-img {
+  max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain;
+  border-radius: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+}
+/* Side by side with the picture, not on top of it: an arrow over the photo covers the part
+   of it somebody is trying to see. */
+.wb-lb-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px;
+  display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(255, 255, 255, .14); color: #fff; font-size: 26px;
+}
+.wb-lb-arrow:hover { background: rgba(255, 255, 255, .3); }
+.wb-lb-arrow:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.wb-lb-arrow.prev { left: 12px; }
+.wb-lb-arrow.next { right: 12px; }
+/* All of them at once. One of the two ways to read a gallery, and the toggle in the header
+   is what says which one you are in. */
+.wb-lb-grid { display: none; }
+.wb-lb.is-all .wb-lb-stage { display: none; }
+.wb-lb.is-all .wb-lb-grid {
+  flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px; padding: 16px; overflow: auto; align-content: start;
+}
+.wb-lb-tile {
+  padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden;
+  background: rgba(255, 255, 255, .08); cursor: pointer; aspect-ratio: 1; line-height: 0;
+}
+.wb-lb-tile.sel { border-color: var(--orange, #e0552d); }
+.wb-lb-tile:hover { border-color: rgba(255, 255, 255, .55); }
+.wb-lb-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (max-width: 640px) {
+  /* Smaller and tighter, but still BESIDE the picture. Moving them under it put both arrows
+     on top of the photo -- 36px over it for a portrait shot -- which is the half of the
+     picture somebody is usually trying to look at. The padding is what reserves their lane. */
+  .wb-lb-stage { padding: 10px 48px; }
+  .wb-lb-arrow { width: 40px; height: 40px; font-size: 22px; }
+  .wb-lb-arrow.prev { left: 4px; }
+  .wb-lb-arrow.next { right: 4px; }
+  .wb-lb-head, .wb-lb-foot { padding: 8px 10px; }
+  .wb-lb-foot { justify-content: stretch; }
+  .wb-lb-foot .btn { flex: 1; justify-content: center; }
+}
 
 .wb-activity { border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); padding: 8px 18px; }
 .wb-act-item { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border, #e2d5bf); }

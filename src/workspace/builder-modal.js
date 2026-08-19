@@ -359,7 +359,11 @@ function wbAppReportOptions(app) {
       const header = `<div class="wb-modal-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div><h3>${m.editId ? (h(wbItemTitle(app, item)) || 'Item') : h(newRecordLabel(app))}</h3>`;
       // View mode: read-only field list + comment thread. Edit only on request.
       if (m.mode === 'view' && item) {
-        const ctx = { companyId: m.companyId, workspace, app, values: item.values, item: null, canManage: false };
+        // detail: the record read whole, so an image field shows every photo rather than the
+        // one-and-a-count a table row is given.
+        const ctx = {
+          companyId: m.companyId, workspace, app, values: item.values, item: null, canManage: false, detail: true,
+        };
         const rows = app.fields.length ? app.fields.map((f) => `<div class="wb-view-row"><span class="wb-view-label">${h(f.label)}</span><span class="wb-view-val">${f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(ctx, f, item.values[f.id])}</span></div>`).join('') : '<div class="wb-sub">This app has no fields yet.</div>';
         return wbModalShell('Item', 'wb-modal-wide', header,
           `<div class="wb-view-fields">${rows}</div>${meta}${comments}`,

@@ -3902,6 +3902,7 @@ function render() {
   queueMicrotask(() => restoreScrollAfterRender(keptScroll));
   queueMicrotask(syncModalFocus);
   wbInvalidateAppIndex(); // rebuild the builder app-index fresh for this render
+  wbForgetImgSets(); // the photo sets the last paint registered go with the markup that held them
   state.route = getRoute();
   adoptRecoveryModeFromUrl();
 
@@ -16283,9 +16284,20 @@ function wbFmtVal(ctx, field, value) {
       // ARRAY, and reading only the first would quietly hide every photo after it.
       const shots = wbFileValues(value).filter((one) => one.url);
       if (!shots.length) return '<span class="wb-cell-empty">—</span>';
-      // No wrapper: the overlap is `img + img` in the stylesheet, which costs nothing in the
-      // entry bundle and there is nowhere else two of these sit side by side.
-      return shots.map((one) => `<img class="wb-img-avatar" src="${h(one.url)}" alt="${h(one.name || 'image')}" loading="lazy">`).join('');
+      // A row shows ONE photo and says how many more there are; the record itself shows the
+      // lot. Painting eight into a table cell pushed every column beside it off the row and
+      // still drew each one too small to make out, so the count is the honest summary and the
+      // viewer behind it is where photos are actually looked at.
+      //
+      // Every thumbnail is a BUTTON, which is what keeps the two clicks that surround it --
+      // the row click that opens the record, the cell click that opens the inline editor --
+      // from firing as well: both already skip anything interactive.
+      const key = wbImgSetKey(shots);
+      const at = (i) => `data-wb-images="${h(key)}" data-wb-img-at="${i}" data-wb-img-url="${h(shots[i].url)}" data-wb-img-name="${h(shots[i].name || 'Photo')}"`;
+      const tiles = shots.map((one, i) => `<button type="button" class="wb-img-shot" ${at(i)} title="${h(one.name || 'Photo')}" aria-label="${h(`View ${one.name || 'photo'}`)}"><img class="wb-img-avatar" src="${h(one.url)}" alt="${h(one.name || 'Photo')}" loading="lazy" decoding="async"></button>`);
+      const seen = ctx.detail ? tiles : tiles.slice(0, 1);
+      const rest = shots.length - seen.length;
+      return `<span class="wb-img-cell${ctx.detail ? ' is-detail' : ''}">${seen.join('')}${rest ? `<button type="button" class="wb-img-more" ${at(seen.length)} title="View all ${shots.length} photos" aria-label="View all ${shots.length} photos">+${rest}</button>` : ''}</span>`;
     }
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
     case 'rating': return wbRatingStars(value);
@@ -18833,6 +18845,9 @@ function wbFieldConfigUI(fd, app) {
 let wbFieldUiModule = null;
 let wbFieldUiPending = null;
 function wbLoadFieldUi() {
+  // The uploader alongside it, not after it. This module DRAWS the file field; the other one
+  // binds it, and fetching them in sequence would leave the drop zone blank for a round trip.
+  wbLoadFileField().catch(() => { /* reported when something actually tries to mount */ });
   if (wbFieldUiModule) return Promise.resolve(wbFieldUiModule);
   if (!wbFieldUiPending) {
     wbFieldUiPending = import('./workspace/field-config-ui.js').then((mod) => {
@@ -18894,6 +18909,45 @@ function wbFileValues(val) {
   return one ? [one] : [];
 }
 function wbFileDisplay(val) { return wbFileValue(val)?.name || ''; }
+
+/**
+ * The photos one cell is showing, held here rather than written into the markup.
+ *
+ * A cell hands the viewer a KEY. A signed URL is 200-odd characters, and a row that carried
+ * every photo on the record -- so that clicking the one it draws could still step through the
+ * rest -- would put a kilobyte of bearer token into every line of the table.
+ *
+ * Emptied at the top of every render, which is the same moment every element holding a key is
+ * thrown away. Nothing here outlives a paint, so nothing accumulates.
+ */
+const WB_IMG_SETS = new Map();
+let wbImgSetSeq = 0;
+function wbImgSetKey(shots) { wbImgSetSeq += 1; const key = `g${wbImgSetSeq}`; WB_IMG_SETS.set(key, shots); return key; }
+function wbForgetImgSets() { WB_IMG_SETS.clear(); wbImgSetSeq = 0; }
+
+/**
+ * The photo viewer, fetched on the click that opens it.
+ *
+ * Nothing that paints before that click needs a lightbox, and most sessions never open one.
+ */
+function wbShowImages(shots, at) {
+  if (!shots.length) { showToast('That photo is no longer attached.', 'local', 'Workspaces'); return; }
+  import('./workspace/image-lightbox.js')
+    .then((mod) => mod.openImageLightbox(shots, at))
+    .catch(() => showToast('The photo viewer could not be opened.', 'error', 'Workspaces'));
+}
+
+/**
+ * Open whatever a clicked thumbnail belongs to.
+ *
+ * The element carries its own url and name beside the key, so markup that outlived the render
+ * which registered it still opens THAT photo rather than reporting nothing to show.
+ */
+function wbOpenImagesFrom(el) {
+  const set = WB_IMG_SETS.get(el.dataset.wbImages);
+  if (set) { wbShowImages(set, Number(el.dataset.wbImgAt) || 0); return; }
+  wbShowImages(el.dataset.wbImgUrl ? [{ url: el.dataset.wbImgUrl, name: el.dataset.wbImgName || 'Photo' }] : [], 0);
+}
 
 // --- Checklist field -------------------------------------------------------
 // A checklist value is an array of { id, label, done }. Parse whatever is
@@ -19053,158 +19107,40 @@ function wbMirrorFileToDrive(file, objectPath, companyId, fieldId, labels = null
 }
 
 // Wire up drag-and-drop / click-to-upload for workspace "file" fields.
-function wbMountFileFields(overlay) {
-  overlay.querySelectorAll('[data-wb-file]').forEach((zone) => {
-    if (zone.dataset.bound) return;
-    zone.dataset.bound = '1';
-    const hidden = zone.querySelector('input[data-f]');
-    const fileInput = zone.querySelector('[data-wb-file-input]');
-    const openBtn = zone.querySelector('[data-wb-file-open]');
-    const actions = zone.querySelector('[data-wb-file-actions]');
-    const viewBtn = zone.querySelector('[data-wb-file-view]');
-    const downloadBtn = zone.querySelector('[data-wb-file-download]');
-    const removeBtn = zone.querySelector('[data-wb-file-remove]');
-    const progress = zone.querySelector('[data-wb-file-progress]');
-    const bar = zone.querySelector('[data-wb-file-bar]');
-    const ico = zone.querySelector('[data-wb-file-ico]');
-    const label = zone.querySelector('[data-wb-file-label]');
-    const isImage = zone.hasAttribute('data-wb-image');
-    const preview = zone.querySelector('[data-wb-img-preview]');
-    const multi = zone.hasAttribute('data-wb-file-multi');
-    // Company Contacts renders this same field, so the zone carries whose it is rather than
-    // the uploader assuming an App Builder record is open behind it.
-    const scope = zone.dataset.wbFileScope || 'Workspaces';
-    const driveLabels = zone.dataset.wbFileDrive ? JSON.parse(zone.dataset.wbFileDrive) : null;
-    // "Uploads to this workspace" is a lie on a contact, which every workspace shares.
-    const hint = zone.dataset.wbFileHint || 'Uploads to this workspace';
-    const list = zone.querySelector('[data-wb-file-list]');
-    const readAll = () => wbFileValues(hidden.value);
-    const writeAll = (files) => {
-      // One file still stores as one object, so switching a field to multiple and back does
-      // not rewrite records that only ever had one.
-      hidden.value = files.length ? JSON.stringify(files.length === 1 && !multi ? files[0] : files) : '';
-      hidden.dispatchEvent(new Event('input', { bubbles: true }));
-      paint();
-    };
-    const paintList = () => {
-      const files = readAll();
-      label.innerHTML = files.length
-        ? `<strong>Add another</strong><small>${files.length} attached</small>`
-        : '<strong>Click or drop files</strong><small>Several at once is fine</small>';
-      openBtn.classList.toggle('has-file', files.length > 0);
-      // A photo is its own label. Showing a generic file glyph beside eight filenames is the one
-      // arrangement that makes a gallery harder to read than a single picture was.
-      list.innerHTML = files.map((fv, i) => `<li class="wb-file-row">
-        ${isImage && fv.url
-    ? `<img class="wb-img-thumb" src="${h(fv.url)}" alt="${h(fv.name || 'photo')}" loading="lazy">`
-    : `<i class="ti ${h(wbFileIcon(fileTypeKind({ file_name: fv.name })))}" aria-hidden="true"></i>`}
-        <span class="wb-file-row-name" title="${h(fv.name)}">${h(fv.name)}</span>
-        ${fv.url ? `<a class="btn btn-mini" href="${h(fv.url)}" target="_blank" rel="noreferrer" title="View"><i class="ti ti-eye"></i></a>` : ''}
-        <button type="button" class="btn btn-mini danger" data-wb-file-drop-one="${i}" title="Remove ${h(fv.name)}" aria-label="Remove ${h(fv.name)}"><i class="ti ti-x"></i></button>
-      </li>`).join('');
-      list.querySelectorAll('[data-wb-file-drop-one]').forEach((btn) => {
-        btn.onclick = () => writeAll(readAll().filter((_, i) => i !== Number(btn.dataset.wbFileDropOne)));
+// The File and Image field uploader lives in ./workspace/file-field.js and is fetched on the
+// first field editor that needs it. Nothing that paints before one is open uses it, and the
+// entry chunk had no room left to carry 180 lines of drop zone, progress bar and uploader for
+// every session that never attaches anything.
+//
+// Prefetched by wbLoadFieldUi, which is what draws the markup this binds to -- so in practice
+// the module is already in hand by the time a file field appears, and the field paints on the
+// same frame it always did.
+let wbFileFieldModule = null;
+let wbFileFieldPending = null;
+function wbLoadFileField() {
+  if (wbFileFieldModule) return Promise.resolve(wbFileFieldModule);
+  if (!wbFileFieldPending) {
+    wbFileFieldPending = import('./workspace/file-field.js').then((mod) => {
+      wbFileFieldModule = mod.createFileField({
+        activeCompanyId, canonicalCompanyId, createSupabaseClient, fileTypeKind, guardUpload, h,
+        isLiveSupabaseSession, showToast, shrinkUpload, slugify, wbFileIcon, wbFileValue,
+        wbFileValues, wbMirrorFileToDrive, wbReadFileAsDataUrl, wbShowImages,
       });
-    };
-    const paint = () => {
-      if (multi) { paintList(); return; }
-      const fv = wbFileValue(hidden.value);
-      if (fv) {
-        if (isImage && preview) preview.innerHTML = fv.url ? `<img src="${h(fv.url)}" alt="${h(fv.name || 'image')}">` : '<i class="ti ti-photo"></i>';
-        else if (ico) ico.className = 'ti ti-file-check';
-        label.innerHTML = `<strong>${h(fv.name || (isImage ? 'Image' : 'Attached file'))}</strong><small>Click to replace</small>`;
-        openBtn.classList.add('has-file');
-        if (fv.url) {
-          actions.hidden = false;
-          viewBtn.hidden = false; viewBtn.href = fv.url;
-          if (downloadBtn) { downloadBtn.hidden = false; downloadBtn.href = fv.url; downloadBtn.setAttribute('download', fv.name || 'file'); }
-        } else {
-          actions.hidden = false;
-          viewBtn.hidden = true; if (downloadBtn) downloadBtn.hidden = true;
-        }
-      } else {
-        if (isImage && preview) preview.innerHTML = '<i class="ti ti-photo"></i>';
-        else if (ico) ico.className = 'ti ti-cloud-upload';
-        label.innerHTML = isImage ? '<strong>Click or drop an image</strong><small>Shown as a circular avatar</small>' : `<strong>Click or drop a file</strong><small>${h(hint)}</small>`;
-        openBtn.classList.remove('has-file');
-        actions.hidden = true;
-      }
-    };
-    const upload = async (rawFile) => {
-      if (!rawFile) return;
-      const photo = /.(png|jpe?g|webp)$/i.test(rawFile.name || '');
-      if (!(await guardUpload(rawFile, photo || isImage ? 'image' : 'document', scope))) return;
-      const file = photo ? await shrinkUpload(rawFile) : rawFile;
-      openBtn.disabled = true;
-      progress.hidden = false;
-      bar.style.width = '20%';
-      const companyId = activeCompanyId();
-      const client = createSupabaseClient();
-      const live = isLiveSupabaseSession();
-      let url = '';
-      let objectPath = '';
-      let uploadError = null;
-      if (client) {
-        try {
-          const path = `${canonicalCompanyId(companyId)}/workspace/${crypto.randomUUID()}-${slugify(file.name)}`;
-          const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: contentTypeFor(file) });
-          bar.style.width = '70%';
-          if (!up.error) {
-            objectPath = path;
-            // Short-lived signed URL for immediate viewing. We persist object_path
-            // (below) so links can be re-minted on demand instead of storing a
-            // year-long bearer token inside the shared workspace doc.
-            const signed = await client.storage.from('quest-job-files').createSignedUrl(path, 604800);
-            if (signed.data?.signedUrl) url = signed.data.signedUrl;
-          } else { uploadError = up.error; }
-        } catch (error) { uploadError = error; console.warn('Workspace file upload failed', error); }
-      }
-      const stop = () => { openBtn.disabled = false; progress.hidden = true; bar.style.width = '0%'; };
-      // On a live session, never embed file bytes into the synced doc and never
-      // present an un-stored file as attached — surface the failure and stop.
-      if (live && !objectPath) {
-        stop();
-        showToast(uploadError?.message || 'Upload failed — the file was not attached. Please try again.', 'error', 'Upload failed');
-        return;
-      }
-      // Local/demo only: embed a small data URL for preview. This never syncs to
-      // the shared server doc; cap size to protect localStorage.
-      if (!url && !live && file.size <= 2 * 1024 * 1024) { bar.style.width = '85%'; url = await wbReadFileAsDataUrl(file); }
-      if (!url && !objectPath) {
-        stop();
-        showToast('File is too large to attach here — link it by URL instead.', 'error', scope);
-        return;
-      }
-      bar.style.width = '100%';
-      const attached = { name: file.name, url, path: objectPath };
-      // Appended, not assigned: dropping three files at once must end with three, and each
-      // upload finishes on its own schedule.
-      if (multi) writeAll([...readAll(), attached]);
-      else {
-        hidden.value = JSON.stringify(attached);
-        hidden.dispatchEvent(new Event('input', { bubbles: true }));
-        paint();
-      }
-      openBtn.disabled = false;
-      setTimeout(() => { progress.hidden = true; bar.style.width = '0%'; }, 400);
-      // Mirror the upload into Company Drive under App > (App) > (Field).
-      const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId, hidden.getAttribute('data-f'), driveLabels) : '';
-      showToast(mirrored ? `File attached and saved to Company Drive → ${mirrored}.` : 'File attached.', live ? 'live' : 'local', scope);
-    };
-    // One at a time rather than in parallel: each upload owns the progress bar, and three
-    // racing each other drive it backwards.
-    const uploadAll = async (files) => {
-      const picked = [...(files || [])];
-      for (const file of (multi ? picked : picked.slice(0, 1))) await upload(file);
-    };
-    openBtn.onclick = () => fileInput.click();
-    if (removeBtn) removeBtn.onclick = () => { hidden.value = ''; hidden.dispatchEvent(new Event('input', { bubbles: true })); fileInput.value = ''; paint(); };
-    fileInput.onchange = () => { uploadAll(fileInput.files); fileInput.value = ''; };
-    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragging'); });
-    zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
-    zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragging'); uploadAll(e.dataTransfer?.files); });
-    paint();
-  });
+      return wbFileFieldModule;
+    }).catch((error) => {
+      wbFileFieldPending = null;
+      throw error;
+    });
+  }
+  return wbFileFieldPending;
+}
+// Synchronous when the module is in hand, which is the normal case. The mount is idempotent
+// (every zone it binds is marked), so arriving a tick late binds exactly once either way.
+function wbMountFileFields(overlay) {
+  if (wbFileFieldModule) { wbFileFieldModule.mountFileFields(overlay); return; }
+  wbLoadFileField()
+    .then((mod) => mod.mountFileFields(overlay))
+    .catch(() => showToast('The file field could not be loaded. Reload and try again.', 'error', 'Upload'));
 }
 
 // Duration fields show hours + minutes boxes; keep the hidden [data-f] (total
@@ -27492,6 +27428,10 @@ function onDocumentClick(event) {
   // copies of the same binding is three places for it to be forgotten.
   const viewFile = event.target.closest('[data-wb-view-file]');
   if (viewFile) { event.preventDefault(); openWbFilePreview(viewFile.dataset.fileUrl, viewFile.dataset.fileName); return; }
+  // A photo on a record, wherever it is drawn -- a table cell, a card, the record page. Claimed
+  // here so the click cannot also reach whatever the thumbnail is sitting inside.
+  const viewImage = event.target.closest('[data-wb-images]');
+  if (viewImage) { event.preventDefault(); event.stopPropagation(); wbOpenImagesFrom(viewImage); return; }
   const attAct = event.target.closest('[data-wb-att]');
   if (attAct) { event.preventDefault(); wbRecordPanelModule?.attachAction(attAct.dataset.wbAtt); return; }
   const cmtAct = event.target.closest('[data-wb-add-comment],[data-wb-comment-edit],[data-wb-comment-cancel],[data-wb-comment-save],[data-wb-comment-del]');

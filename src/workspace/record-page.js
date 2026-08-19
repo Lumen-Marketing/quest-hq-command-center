@@ -539,7 +539,9 @@ export function createRecordPage(ctx) {
     // module below, and a local named `ctx` shadows it for everything after this line --
     // which handed that dialog an object with no `state` on it, so the first press of any
     // tile threw instead of opening.
-    const valueCtx = { companyId, workspace, app, values: item.values, item, canManage: false };
+    // detail: this is the record, not a row of it -- an image field shows every photo here
+    // rather than one and a count, because this is the page somebody opened to look at them.
+    const valueCtx = { companyId, workspace, app, values: item.values, item, canManage: false, detail: true };
     const count = (item.comments || []).length;
     const editing = canManage && state.wbRecordManage;
 
@@ -557,8 +559,14 @@ export function createRecordPage(ctx) {
     const valueCell = (f) => {
       const shown = f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(valueCtx, f, item.values[f.id]);
       if (!canManage || !wbFieldIsEditable(f)) return `<span class="wb-view-val">${shown}</span>`;
+      // A photo cell is made of buttons, and the click that opens the editor deliberately
+      // skips buttons -- so a filled image field had nothing left to click. This chip is what
+      // that click lands on.
+      const change = f.type === 'image' && shown.includes('wb-img-shot')
+        ? '<span class="wb-img-edit"><i class="ti ti-pencil" aria-hidden="true"></i>Change</span>'
+        : '';
       return `<span class="wb-view-val wb-inline" data-wb-inline="${h(f.id)}" tabindex="0" role="button"
-        title="${h(`Click to edit ${f.label}`)}" aria-label="${h(`Edit ${f.label}`)}">${shown}</span>`;
+        title="${h(`Click to edit ${f.label}`)}" aria-label="${h(`Edit ${f.label}`)}">${shown}${change}</span>`;
     };
 
     const fieldRows = (fields) => (fields.length

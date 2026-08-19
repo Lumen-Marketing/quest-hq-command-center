@@ -325,7 +325,9 @@ test('Created and Last modified show their value on the record page', () => {
   // Named valueCtx, not ctx: the factory's own ctx is passed to the Quick Create module from
   // inside this same function, and a local called `ctx` shadowed it -- see
   // tests/record-quick-create-renders.test.mjs.
-  assert.match(slice('wbViewItemPage'), /const valueCtx = \{ companyId, workspace, app, values: item\.values, item, canManage: false \};/);
+  // detail: true rides along on the same object. It is what tells wbFmtVal this is the record
+  // rather than a row of it, so an image field shows every photo instead of one and a count.
+  assert.match(slice('wbViewItemPage'), /const valueCtx = \{ companyId, workspace, app, values: item\.values, item, canManage: false, detail: true \};/);
   assert.match(main, /if \(field\.type === 'created_time'\) \{ const t = ctx\.item && ctx\.item\.createdAt;/);
   assert.match(main, /if \(field\.type === 'updated_time'\)/);
 });
