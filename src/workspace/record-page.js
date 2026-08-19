@@ -524,7 +524,11 @@ export function createRecordPage(ctx) {
     // they rendered a dash on every record. canManage stays false, which is what actually
     // suppresses the live checkbox toggle -- that branch needs BOTH, so passing the item
     // alone changes nothing else on this page.
-    const ctx = { companyId, workspace, app, values: item.values, item, canManage: false };
+    // valueCtx, NOT ctx. This same function hands the FACTORY's ctx to the Quick Create
+    // module below, and a local named `ctx` shadows it for everything after this line --
+    // which handed that dialog an object with no `state` on it, so the first press of any
+    // tile threw instead of opening.
+    const valueCtx = { companyId, workspace, app, values: item.values, item, canManage: false };
     const count = (item.comments || []).length;
     const editing = canManage && state.wbRecordManage;
 
@@ -540,7 +544,7 @@ export function createRecordPage(ctx) {
     // -- are not offered. There is no input behind them, and wbReadFieldInput returns
     // undefined rather than a value, so a click would promise an edit that could never save.
     const valueCell = (f) => {
-      const shown = f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(ctx, f, item.values[f.id]);
+      const shown = f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(valueCtx, f, item.values[f.id]);
       if (!canManage || !wbFieldIsEditable(f)) return `<span class="wb-view-val">${shown}</span>`;
       return `<span class="wb-view-val wb-inline" data-wb-inline="${h(f.id)}" tabindex="0" role="button"
         title="${h(`Click to edit ${f.label}`)}" aria-label="${h(`Edit ${f.label}`)}">${shown}</span>`;

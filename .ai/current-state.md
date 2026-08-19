@@ -1305,6 +1305,25 @@ after (field)."
   and the record layout gains a **Calls & messages** block the first time one is scheduled, so what
   was just saved is visible on the page that saved it.
 
+- **Then every tile threw on its first press**, reported as *Cannot read properties of undefined
+  (reading 'wbQuick')*. `wbViewItemPage` declared `const ctx = { companyId, workspace, app, values,
+  item, canManage: false }` for `wbFmtVal` — and that name **shadowed the factory's own `ctx`** for
+  the rest of the function, which is where `renderQuickModal(ctx)` is called from. The dialog was
+  handed a formatting context with no `state` on it. It only ever showed on the FIRST press,
+  because `quickModule` is null until then and the render is guarded on it, so the press that
+  loaded the module was also the press that broke. Renamed to `valueCtx`.
+- **Two guards, both mutation-checked against the real bug.** A static one forbidding any
+  redeclaration of `ctx` in that file, and `tests/record-quick-create-renders.test.mjs`, which
+  fires a real click at the real listener and reads the page that comes back — the first test here
+  to render the record page rather than assert on its source. Its ctx is a Proxy answering unknown
+  keys with a stub, so it does not become a forty-key list to keep in step with main.js; the
+  ctx-key check already owns that. A dynamic import settles on a turn of the loop rather than a
+  microtask, which is why it waits with `setTimeout` — awaiting promises alone let the assertion
+  run before the module had loaded, and it failed for the wrong reason.
+- The same shadow exists in `crm/bulk-modals.js` and `home/company-dashboard.js` and is harmless
+  there: neither passes the factory ctx OBJECT onward from inside the shadowed scope. That is the
+  condition that makes it a bug, not the shadow itself.
+
 ## 2026-08-19 An image field on a document is a picture, not a filename
 
 "When the user wants to use the image field on the form builder, do not import or display it as

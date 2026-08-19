@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // "Make the buttons working."
@@ -117,4 +118,18 @@ test('a submit that is not the dialog form is left alone', async () => {
     preventDefault: () => { prevented = true; },
   });
   assert.equal(prevented, false, 'the comment box and every other form still submit');
+});
+
+test('nothing shadows the ctx the dialog is rendered with', () => {
+  // The bug this closes: a local `const ctx = { companyId, app, values, ... }` for wbFmtVal sat
+  // above the Quick Create block in the SAME function, so renderQuickModal(ctx) was handed a
+  // formatting context with no `state` on it. Every tile then threw "Cannot read properties of
+  // undefined (reading 'wbQuick')" on its first press -- the one press that makes quickModule
+  // truthy and puts the dialog on screen.
+  //
+  // Static, because the failure is a name resolving to the wrong object; it renders and reads
+  // correctly on both sides of the shadow.
+  const src = readFileSync(new URL('../src/workspace/record-page.js', import.meta.url), 'utf8');
+  const shadows = src.match(/^\s*(?:const|let|var)\s+ctx\s*=/gm) || [];
+  assert.deepEqual(shadows, [], 'ctx is the factory parameter here and must not be redeclared');
 });

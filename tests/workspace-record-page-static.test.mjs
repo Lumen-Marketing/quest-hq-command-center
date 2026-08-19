@@ -322,7 +322,10 @@ test('a comment shows the author photo, not always their initials', () => {
 test('Created and Last modified show their value on the record page', () => {
   // wbFmtVal already reads these off item.createdAt / item.updatedAt rather than out of
   // values. The record page passed item: null, so both rendered a dash on every record.
-  assert.match(slice('wbViewItemPage'), /const ctx = \{ companyId, workspace, app, values: item\.values, item, canManage: false \};/);
+  // Named valueCtx, not ctx: the factory's own ctx is passed to the Quick Create module from
+  // inside this same function, and a local called `ctx` shadowed it -- see
+  // tests/record-quick-create-renders.test.mjs.
+  assert.match(slice('wbViewItemPage'), /const valueCtx = \{ companyId, workspace, app, values: item\.values, item, canManage: false \};/);
   assert.match(main, /if \(field\.type === 'created_time'\) \{ const t = ctx\.item && ctx\.item\.createdAt;/);
   assert.match(main, /if \(field\.type === 'updated_time'\)/);
 });
