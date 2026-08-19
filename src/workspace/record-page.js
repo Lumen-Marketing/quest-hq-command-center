@@ -5,7 +5,7 @@
 // pure leaf module, so there is no cycle back to main.js, and a static import cannot be
 // null the way a fetched one can.
 
-import { opsWorkspaceId } from './builder-core.js';
+import { opsWorkspaceId } from './ops-workspace-id.js';
 import * as recordLayout from './record-layout.js';
 import * as children from './child-collections.js';
 // Pure leaf modules, like the two above: the stage field so stepping stays inside the deck you

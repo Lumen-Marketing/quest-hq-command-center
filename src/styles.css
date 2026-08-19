@@ -35306,8 +35306,14 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 }
 .fd-sub { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
 .fd-w { width: 100%; justify-content: flex-start; }
-.fd-shapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.fd-shapes .btn { justify-content: center; }
+/* Fifteen shapes, five to a row. Three columns was right for three shapes and would make this a
+   five-row column down the rail. */
+.fd-shapes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.fd-shapes .btn { justify-content: center; padding: 6px 0; }
+/* The button IS the shape, drawn from the same corner list the document uses -- so a heptagon
+   looks like a heptagon rather than borrowing whichever icon the font happened to have. */
+.fd-glyph { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+.fd-shapes .btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .fd-pick { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
 .fd-pick > span { display: flex; align-items: center; gap: 6px; }
 .fd-check { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); }
@@ -35461,9 +35467,60 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 .fd-icon { display: grid; place-items: center; width: 100%; height: 100%; line-height: 1; }
 .fd-ghost { font-size: 11px; color: #9ca3af; display: grid; place-items: center; height: 100%; font-style: italic; }
 
+/* A picture in a box it does not share proportions with. The <img> inside is sized to the
+   UNCROPPED area and pulled up and left; this is what clips it, which is the same composition
+   both exports draw onto a canvas. */
+.fd-imgbox { position: absolute; inset: 0; overflow: hidden; display: block; }
+.fd-imgbox .fd-img { position: absolute; }
+/* A shape filled with a picture. The colour stays underneath, so a shape whose picture has not
+   arrived is still a shape rather than a hole. */
+.fd-shape { position: relative; overflow: hidden; }
+/* A clipped shape's outline is a slightly larger copy of itself behind the fill: a CSS border on
+   a clip-path element is cut in half by the clip, so it comes out the wrong width and open at
+   the corners. */
+.fd-shape-edge { position: absolute; inset: 0; }
+.fd-shape .fd-img { position: absolute; }
+
+/* The crop window: everything outside it is dimmed, and the window itself is dragged by its
+   middle and resized by its corners. */
+.fd-cropmask { position: absolute; inset: 0; z-index: 3; background: rgba(15, 12, 10, .48); }
+.fd-cropwin {
+  position: absolute;
+  box-shadow: 0 0 0 9999px rgba(15, 12, 10, .48);
+  outline: 1.5px solid #fff;
+  cursor: move;
+}
+.fd-cropgrip {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border: 1.5px solid #2563eb;
+  border-radius: 2px;
+}
+.fd-cropgrip-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.fd-cropgrip-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.fd-cropgrip-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.fd-cropgrip-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+
+/* Four named colours before the wheel. "Primary" is a decision somebody can repeat on the next
+   document; #e0552d is a number they would have to write down. */
+.fd-presets { display: inline-flex; gap: 3px; }
+.fd-preset {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border-strong, #cdb595);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.fd-preset.on { box-shadow: 0 0 0 2px var(--accent); border-color: var(--accent); }
+.fd-sub-t { margin-top: 4px; }
+
 /* Eight handles, big enough to hit with a mouse without covering a small element. */
 .fd-grip {
   position: absolute;
+  z-index: 4;
   width: 9px;
   height: 9px;
   background: #fff;

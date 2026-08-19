@@ -21,7 +21,7 @@
 // Pure over its inputs -- bytes in, bytes out, no DOM -- so a page of text can be laid out and
 // measured in a test.
 
-import { colorChannels, pageMm } from './doc-model.js';
+import { colorChannels, pageMm, shapePoints } from './doc-model.js';
 
 /** Millimetres to PostScript points, the unit a PDF is measured in. */
 export const MM_TO_PT = 72 / 25.4;
@@ -227,7 +227,17 @@ function drawItem(item, pageHeightPt, imageNames) {
     } else if (item.shape === 'ellipse') {
       s += ellipsePath(x, y, w, h) + paintOp(style);
     } else {
-      s += roundRectPath(x, y, w, h, style.radius * K) + paintOp(style);
+      // Everything with straight edges is one path through some points, generated from the
+      // shape's own corner list -- so a decagon costs the writer nothing that a triangle did
+      // not already cost. The y axis is flipped because a PDF measures up from the bottom.
+      const points = shapePoints(item.shape, item.sides);
+      if (points) {
+        s += points.map(([px, py], i) => `${fmt(x + px * w)} ${fmt(y + (1 - py) * h)} ${i ? 'l' : 'm'}\n`).join('');
+        s += 'h\n';
+        s += paintOp(style);
+      } else {
+        s += roundRectPath(x, y, w, h, style.radius * K) + paintOp(style);
+      }
     }
     return `${s}Q\n`;
   }

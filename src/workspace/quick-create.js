@@ -17,7 +17,7 @@
 import {
   ensureBlock, placeFieldInLayout, quickCreateField, quickEntry,
 } from './record-layout.js';
-import { opsWorkspaceId } from './builder-core.js';
+import { opsWorkspaceId } from './ops-workspace-id.js';
 
 // ---- the dialogs ---------------------------------------------------------------------------
 
@@ -389,7 +389,21 @@ export function setQuickValue(pair, ctx, typed) {
 function find(ctx, seat) {
   const workspace = (ctx.wbDoc(seat.companyId)?.workspaces || []).find((one) => one.id === seat.workspaceId);
   const app = (workspace?.apps || []).find((one) => one.id === seat.appId);
-  return { app, item: (app?.items || []).find((one) => one.id === seat.itemId) };
+  // The workspace comes back as well as the app: the activity log is stored ON it, and every
+  // one of these actions is something that happened to the record you are looking at.
+  return { workspace, app, item: (app?.items || []).find((one) => one.id === seat.itemId) };
+}
+
+/**
+ * Say on the record that this happened.
+ *
+ * Quick Create makes things that live elsewhere -- a field on the app, a row in
+ * wb_record_events -- so without a line here the record shows no sign of what was done from it.
+ * `recordFeed` selects on itemId, which is why every entry carries one.
+ */
+function note(ctx, workspace, appId, itemId, icon, color, text) {
+  if (!workspace) return;
+  ctx.wbLogActivity?.(workspace, { icon, color, appId, itemId, text });
 }
 
 /** Which numbers a scheduled message is aimed at. One row each, so a sender has nothing to parse. */
@@ -432,6 +446,10 @@ export async function press(key, seat, ctx) {
     const contactField = (app.fields || []).find((one) => one.type === 'company_contact');
     ctx.openRecordTask({
       companyId,
+      // The seat travels with it so the modal can say on THIS record that a task was made here.
+      workspaceId,
+      appId,
+      itemId,
       appName: app.name || 'this record',
       title: ctx.wbItemTitle?.(app, item) || '',
       contactId: contactField ? String(item.values?.[contactField.id] || '') : '',
@@ -458,7 +476,7 @@ export async function saveQuick(values, ctx) {
   const v = view(ctx);
   if (!v || v.busy) return 'idle';
   const { companyId, workspaceId, appId, itemId } = v.seat;
-  const { app, item } = find(ctx, v.seat);
+  const { workspace, app, item } = find(ctx, v.seat);
   if (!app || !item) {
     ctx.state.wbQuick = { ...v, error: 'This record is no longer here.' };
     ctx.render();
@@ -478,6 +496,8 @@ export async function saveQuick(values, ctx) {
     // Made AND placed. A `fields` block with an explicit list is honoured exactly, so a field in
     // none of them is invisible on this page with nothing to say why.
     if (Array.isArray(app.recordLayout)) app.recordLayout = placeFieldInLayout(app.recordLayout, made.id);
+    note(ctx, workspace, appId, itemId, 'ti-plus', '#2563eb',
+      `Added the field <b>${ctx.h(label)}</b> (${ctx.h(ctx.WB_FIELD_TYPES?.[type]?.label || type)}) to <b>${ctx.h(app.name || 'this app')}</b>`);
     await ctx.wbSave(companyId);
     ctx.state.wbQuick = null;
     ctx.showToast(`${label} added.`, 'local', 'Workspaces');
@@ -534,7 +554,15 @@ export async function saveQuick(values, ctx) {
   // The card goes on the record the first time something is scheduled, so what was just saved is
   // visible without going to Customize to find out where it went. Adding it again is a no-op.
   const put = ensureBlock(app.recordLayout, 'events', ctx.wbUid);
-  if (put.added) { app.recordLayout = put.blocks; await ctx.wbSave(companyId); }
+  if (put.added) app.recordLayout = put.blocks;
+  const aimed = rows.length > 1 ? `${rows.length} numbers` : (rows[0]?.to_number || 'this record');
+  note(ctx, workspace, appId, itemId,
+    v.kind === 'sms' ? 'ti-message-2' : 'ti-phone',
+    v.kind === 'sms' ? '#d97706' : '#0891b2',
+    `Scheduled ${v.kind === 'sms' ? 'a message' : 'a call'} to <b>${ctx.h(aimed)}</b> — <b>${ctx.h(base.title)}</b>`
+    + ` for ${ctx.h(ctx.formatDate?.(values.date) || values.date)} at ${ctx.h(values.time || '09:00')}`);
+  // Saved whether or not the card was added: the line above is in the document too.
+  await ctx.wbSave(companyId);
   // Drop the cached rows for this record so the card re-reads them.
   const key = [companyId, workspaceId, appId, itemId].join('|');
   if (ctx.state.wbEventRows) delete ctx.state.wbEventRows[key];

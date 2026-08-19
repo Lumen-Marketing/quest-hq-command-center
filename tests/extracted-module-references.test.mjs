@@ -168,6 +168,7 @@ const FACTORY_MODULES = [
   ['src/platform/master-panel.js', 'createPlatformPanel'],
   ['src/workspace/data-io.js', 'createDataIO'],
   ['src/workspace/record-panel.js', 'createRecordPanel'],
+  ['src/workspace/record-task.js', 'createRecordTask'],
   ['src/workspace/mention-picker.js', 'createMentionPicker'],
   ['src/workspace/field-config-ui.js', 'renderFieldConfig'],
   ['src/ui/appearance-panel.js', 'createAppearancePanel'],

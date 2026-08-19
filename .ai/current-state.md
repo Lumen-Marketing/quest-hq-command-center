@@ -1385,6 +1385,37 @@ this — first select after or before, then select which field, then the name of
   3,900 tests could notice a uuid column rejecting the key. They use a real `ws-<uuid>` now, and
   both the write and the read are pinned and were mutation-checked.
 
+## 2026-08-19 Quick Create writes back to the record's Activity card
+
+"Added: Quick Create also has an activity log on the activity card."
+
+- **Everything Quick Create makes lives somewhere else** — a field on the app, a row in
+  `wb_record_events`, a row in `public.tasks` — so the record it was all done FROM showed no sign
+  of any of it. Four lines now, through the one `wbLogActivity`: the field added and its type, a
+  scheduled call with the number and when, a scheduled message ("to 2 numbers" when it went to
+  all of them), and the task with who it is for.
+- **Every entry carries `itemId`**, because `recordFeed` selects on it. An entry without one is
+  stored and invisible, which is the failure the tests are written against — they assert through
+  `recordFeed`, the reader the card actually draws from, and dropping the id fails six of them.
+- **Logged only once the thing is real.** A refused insert or a task the shared writer turned down
+  leaves no line: saying it happened, for something that did not, is worse than saying nothing.
+- **The entry bundle was already over, and the tolerance was hiding it.** Measuring the entry
+  chunk properly — off `.vite/manifest.json`, the way `check-bundle-budget` does, not by globbing
+  `index-*.js` — the session went **507 → 12 → 16 → −57** bytes. The last step was putting
+  `opsWorkspaceId` in `builder-core.js`, which main.js imports STATICALLY, so a helper only three
+  lazy modules call was riding in the chunk every session downloads. `check-bundle-budget` still
+  said "passed" because −57 is inside `GZIP_ENVIRONMENT_TOLERANCE_BYTES`, which the budget note
+  says is measurement noise and NOT spendable.
+- **Paid for with an extraction, as the note asks.** `opsWorkspaceId` moved to its own
+  `src/workspace/ops-workspace-id.js` (+32), and the New task modal —
+  `openRecordTaskModal`, `renderRecordTaskModal`, `wbCreateTaskFromRecord` — moved out of main.js
+  into `src/workspace/record-task.js`, reachable only from a record page. Headroom is **+147**
+  bytes, a real number rather than one leaning on the tolerance, and it paid for the task's
+  activity line as well.
+- main.js keeps the loader and the two dispatch points. The modal is only ever reached after
+  `openRecordTaskModal` has fetched the module, so the `questLoader` fallback is for the render
+  that races the import, not for a modal nobody opened.
+
 ## 2026-08-19 An image field on a document is a picture, not a filename
 
 "When the user wants to use the image field on the form builder, do not import or display it as
@@ -1513,6 +1544,85 @@ the data."
 - Money asks for a currency (defaulting to `$` rather than blank), a number for an optional unit, a checklist for its steps. Everything else asks for nothing, so the dialog stays two fields for the common case.
 - **Changing the type redraws the dialog and keeps the name already typed.** What a field needs depends on what it is, and asking for all of it at once is a form nobody reads.
 - Confirmed by mutation: removing the options guard fails two tests. Entry headroom **17 bytes**.
+
+## 2026-08-19 Crop a picture, fill a shape with one, and four colours you can name
+
+"Add an option so I can crop the image; in shape, an option to fill it with colour or image;
+preset colours, primary and secondary with black and white, for text and shape; and the image can
+be imported or imported from the current record with an image field."
+
+- **Crop is stored as FRACTIONS of the source** (`{x,y,w,h}`, whole picture = `0,0,1,1`), not as
+  pixels -- so it survives the file being re-uploaded at another size, and the same four numbers
+  mean the same thing on screen, in the PDF and in the exported PNG. There is no separate
+  "cropped" flag to fall out of step with them; `isCropped()` reads the numbers.
+- **One composition, three renderers.** `fitRect(fit, srcW, srcH, boxW, boxH)` places the source
+  in the UNCROPPED area and the crop then windows it. On screen that is an oversized `<img>`
+  behind `overflow: hidden`; in both exports it is the same arithmetic on a canvas. A preview
+  that printed differently would be worse than no crop at all.
+- **The crop is baked into the bytes**, which is why `doc-pdf.js` did not change at all: the
+  cropped, shape-clipped picture is rasterised by `toJpeg` and the writer still just draws an
+  image. A shape's picture is trimmed to its own outline on that canvas -- JPEG has no
+  transparency, so an oval's corners come out WHITE, which on printed paper is the one place that
+  is not a compromise.
+- **A shape keeps its colour underneath the picture**, so a shape whose file has not loaded, or
+  whose record field is empty, is still a shape rather than a hole. Both routes in are offered --
+  a file to upload (`src`) and the record's own image field (`from`, read live) -- and "Remove the
+  picture" clears both, because either could have been the one showing.
+- **Four named presets before the colour wheel**, on every colour control there is. Primary and
+  secondary are read from the app's own theme (`--accent`, `--ink-2`) so a re-themed company gets
+  ITS colours; black and white are constants because they are what text and paper are. A custom
+  property holding `color-mix()` or a colour name falls back rather than reaching a document that
+  has to print it.
+- 12 new cases in `doc-editor-boots.test.mjs` and 4 in `doc-model.test.mjs`. `npm run build:icons`
+  was re-run for `ti-crop`.
+
+**Entry bundle: 54 bytes OVER the ceiling at HEAD**, passing only on the 64-byte gzip-environment
+tolerance. Nothing in this change touched main.js -- all of it is in the lazy doc-editor chunk --
+so the overrun arrived with the commits that landed alongside it. The next change to main.js of
+any size needs an extraction first.
+
+## 2026-08-19 The basic geometry: polygons to ten sides, a circle, a trapezoid
+
+"Add different types of shapes: the polygons 1-10, a circle, a trapezoid -- the basic geometrical
+shapes."
+
+- **Fifteen shapes, one drawing problem.** Everything with straight edges is a path through some
+  corners, so each shape names its corners in `shapePoints(shape, sides)` and the three renderers
+  all walk the same list: `clip-path: polygon()` on the page, a `m`/`l`/`h` path in the PDF, and
+  `moveTo`/`lineTo` on the export canvas. A decagon costs the PDF writer nothing a triangle did
+  not already cost.
+- **A regular polygon is generated, not tabulated** -- one `polygon` kind with a `sides` number,
+  so 3 to 10 is a slider rather than eight more entries. Inscribed in the box rather than kept
+  regular, so a hexagon stretched into a wide box becomes a wide hexagon, which is what dragging
+  a corner in a drawing tool has always meant. First corner at the top, so a triangle points up.
+- **A circle is an ellipse in a square box**, which is what a circle IS. Giving it its own kind
+  would be a second name for one shape and a second thing to keep in step -- so the palette
+  button, and switching an existing shape to it, square the BOX instead.
+- **The palette buttons are the shapes, drawn.** An icon font was the obvious thing and was the
+  wrong thing: Tabler has no heptagon, nonagon, decagon or trapezoid, so four of them would have
+  had to borrow a glyph that means something else. A 20x20 inline SVG from the same corner list
+  costs nothing, adds no icon names for the four alternative packs to have to cover, and makes
+  the button a picture of exactly what it puts on the page.
+- A clipped shape takes its outline as a slightly larger copy of itself behind the fill: a CSS
+  border on a `clip-path` element is cut in half by the clip, so it comes out the wrong width and
+  open at the corners.
+- 6 cases in `doc-model.test.mjs` and 10 in `doc-editor-boots.test.mjs`, including a pentagon and
+  a decagon counted corner by corner in the real PDF output.
+
+**Fill / Fit / Stretch did nothing on a record field**, reported the same day. `normalizeElement`
+gave `fit` and `crop` only to image and shape elements, so on a field the button wrote the value
+and normalising threw it straight back away -- a silent failure of the worst shape, where nothing
+anywhere says no. Every kind that can DRAW a picture carries them now (image, shape, field) and a
+kind that cannot still carries neither, so a text box does not grow two properties that mean
+nothing to it. The regression test walks all three kinds rather than the one that was reported.
+
+**And Stretch rendered as Fit.** `object-fit: stretch` is not a CSS value -- the keyword is
+`fill` -- and an invalid value is DROPPED rather than falling back to the default, so the
+stylesheet's own `.fd-img { object-fit: contain }` stayed in charge and the button did nothing
+visible. The model keeps `stretch` as its word, because "Fill" is already the name of a shape's
+colour, and `objectFitFor()` translates. The test asserts every member of `IMAGE_FITS` maps to a
+keyword CSS actually has, so the next value added cannot repeat it. The canvas exports never had
+the bug -- `fitRect` handles the model's own word -- and are now pinned so the two cannot drift.
 
 ## Remaining controlled launch configuration
 

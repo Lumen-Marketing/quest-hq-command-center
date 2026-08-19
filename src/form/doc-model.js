@@ -23,12 +23,87 @@ import { PAGE_SIZES, normalizePage } from './form-model.js';
 export const ELEMENT_KINDS = ['text', 'field', 'image', 'icon', 'shape'];
 
 /** The shapes worth having: a box, an oval, and a rule. */
-export const SHAPE_KINDS = ['rect', 'ellipse', 'line'];
+export const SHAPE_KINDS = ['rect', 'ellipse', 'line', 'polygon', 'trapezoid', 'right-triangle', 'star'];
+
+/** How many sides a regular polygon may have. Three is a triangle; past ten it reads as a circle. */
+export const MIN_SIDES = 3;
+export const MAX_SIDES = 10;
+
+/**
+ * A shape as a list of corners, in fractions of its own box.
+ *
+ * Everything with straight edges is ONE drawing problem -- a path through some points -- so
+ * rather than a branch per shape in the editor, in the PDF writer and on the export canvas,
+ * each of them names its corners here and the three renderers all walk the same list. A regular
+ * polygon is generated rather than tabulated, which is what makes "3 to 10 sides" a number
+ * somebody drags instead of eight more entries.
+ *
+ * Inscribed in the box rather than kept regular, so a hexagon stretched into a wide box becomes
+ * a wide hexagon -- which is what dragging a corner in a drawing tool has always meant.
+ *
+ * @returns {Array<[number, number]>|null} null for the shapes that are not polygons at all
+ */
+export function shapePoints(shape, sides = 6) {
+  if (shape === 'rect' || shape === 'ellipse' || shape === 'line') return null;
+  if (shape === 'trapezoid') return [[0.2, 0], [0.8, 0], [1, 1], [0, 1]];
+  if (shape === 'right-triangle') return [[0, 0], [0, 1], [1, 1]];
+  if (shape === 'star') {
+    // Five points, which is what "a star" means to everyone who is not an astronomer.
+    return Array.from({ length: 10 }, (_, i) => {
+      const reach = i % 2 ? 0.21 : 0.5;
+      const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+      return [0.5 + reach * Math.cos(angle), 0.5 + reach * Math.sin(angle)];
+    });
+  }
+  const n = Math.min(MAX_SIDES, Math.max(MIN_SIDES, Math.round(Number(sides) || 6)));
+  // First corner at the top, so a triangle points up and a pentagon sits the way one is drawn.
+  return Array.from({ length: n }, (_, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    return [0.5 + 0.5 * Math.cos(angle), 0.5 + 0.5 * Math.sin(angle)];
+  });
+}
 
 export const TEXT_ALIGN = ['left', 'center', 'right'];
 
 /** Where a document's content comes from. A designed page, or a PDF somebody already had. */
 export const DOC_SOURCES = ['design', 'upload'];
+
+/** How a picture sits in a box it does not share proportions with. */
+export const IMAGE_FITS = ['cover', 'contain', 'stretch'];
+
+/**
+ * Which part of a picture shows, as fractions of the picture itself.
+ *
+ * Fractions rather than pixels so a crop survives the file being re-uploaded at another size,
+ * and so the same numbers mean the same thing on screen, in the PDF and in the exported image.
+ * The whole picture is { x: 0, y: 0, w: 1, h: 1 }, which is what "not cropped" is stored as --
+ * there is no separate flag to get out of step with the numbers.
+ */
+export function normalizeCrop(raw) {
+  const box = raw && typeof raw === 'object' ? raw : {};
+  const frac = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback;
+  };
+  const x = frac(box.x, 0);
+  const y = frac(box.y, 0);
+  // A zero-width crop shows nothing at all, so the minimum is a twentieth of the picture --
+  // small enough for any real crop and large enough that a stray drag cannot erase the image.
+  const w = Math.min(1 - x, Math.max(0.05, frac(box.w, 1)));
+  const h = Math.min(1 - y, Math.max(0.05, frac(box.h, 1)));
+  return {
+    x: round(x * 10000) / 10000,
+    y: round(y * 10000) / 10000,
+    w: round(w * 10000) / 10000,
+    h: round(h * 10000) / 10000,
+  };
+}
+
+/** Whether a crop actually takes anything off. */
+export const isCropped = (crop) => {
+  const c = normalizeCrop(crop);
+  return c.x > 0 || c.y > 0 || c.w < 1 || c.h < 1;
+};
 
 /** Nothing smaller than this can be grabbed with a mouse, so nothing may be made smaller. */
 export const MIN_MM = 4;
@@ -114,6 +189,14 @@ export function normalizeElement(input, makeId = (() => `e${Math.random().toStri
     el.withLabel = raw.withLabel === true;
     el.fallback = String(raw.fallback ?? '');
   }
+  // How a picture fills its box, and which part of it shows. On EVERY kind that can draw one --
+  // a placed image, a shape filled with one, and a record field pointing at one. Leaving it off
+  // the field was a silent bug of the worst shape: the button wrote the value, normalising threw
+  // it straight back away, and nothing anywhere said no.
+  if (kind === 'image' || kind === 'shape' || kind === 'field') {
+    el.fit = IMAGE_FITS.includes(raw.fit) ? raw.fit : 'cover';
+    el.crop = normalizeCrop(raw.crop);
+  }
   if (kind === 'image') {
     el.src = str(raw.src);
     el.name = str(raw.name);
@@ -125,6 +208,12 @@ export function normalizeElement(input, makeId = (() => `e${Math.random().toStri
   }
   if (kind === 'shape') {
     el.shape = SHAPE_KINDS.includes(raw.shape) ? raw.shape : 'rect';
+    el.sides = Math.min(MAX_SIDES, Math.max(MIN_SIDES, Math.round(num(raw.sides, 6))));
+    // A shape can be filled with a PICTURE instead of a colour: an uploaded one in `src`, or a
+    // live one from the record's own image field in `from`. The colour stays underneath either
+    // way, so a shape whose picture has not arrived yet is still a shape and not a hole.
+    el.src = str(raw.src);
+    el.from = str(raw.from);
     el.style.fill = normalizeColor(raw.style?.fill, el.shape === 'line' ? 'none' : '#e5e7eb');
     el.style.stroke = normalizeColor(raw.style?.stroke, '#111111');
     el.style.strokeWidth = Math.min(20, Math.max(el.shape === 'line' ? 0.2 : 0, num(raw.style?.strokeWidth, el.shape === 'line' ? 0.6 : 0)));

@@ -15245,48 +15245,28 @@ async function wbCreateTaskFromActivity(companyId, actId, { title, assigneeId, d
  * the insert into public.tasks, and notifyTaskChange telling the assignee. That is what puts it
  * in My Tasks; nothing here knows how a task is stored.
  */
+// ---- the New task modal on a record ----------------------------------------------------------
+// Body lives in ./workspace/record-task.js: it is reachable only from a record page, and the
+// entry chunk was carrying it for every session that never opens one.
+let recordTaskModule = null;
+let recordTaskPending = null;
+function loadRecordTask() {
+  if (recordTaskModule) return Promise.resolve(recordTaskModule);
+  if (!recordTaskPending) {
+    recordTaskPending = import('./workspace/record-task.js').then((mod) => {
+      recordTaskModule = mod.createRecordTask({
+        activeCompanyId, field, h, isLiveSupabaseSession, render, renderModalShell, showToast,
+        state, wbCreateTaskFromPost, wbDoc, wbLogActivity, wbMembers, wbSave,
+      });
+      return recordTaskModule;
+    }).catch((error) => { recordTaskPending = null; throw error; });
+  }
+  return recordTaskPending;
+}
+
 function openRecordTaskModal(seed) {
-  state.wbRecordTask = {
-    companyId: seed?.companyId || activeCompanyId(),
-    title: String(seed?.title || ''),
-    contactId: String(seed?.contactId || ''),
-    appName: String(seed?.appName || ''),
-  };
-  state.modal = 'wb-record-task';
-  render();
-}
-
-function renderRecordTaskModal(companyId) {
-  const seed = state.wbRecordTask || {};
-  const members = wbMembers(companyId);
-  const about = seed.title ? `${seed.title}${seed.appName ? ` · ${seed.appName}` : ''}` : '';
-  return renderModalShell('Workspaces', 'New task', `
-    <form class="compact-tool-form" data-wb-record-task-form>
-      ${about ? `<p class="form-note">${h(`For ${about}`)}</p>` : ''}
-      ${field('Task title', 'title', seed.title || '', true)}
-      <label><span>Assign to</span><select name="assignee_id"><option value="">Me</option>${members.map((member) => `<option value="${h(member.id)}">${h(member.name)}</option>`).join('')}</select></label>
-      ${field('Due date', 'due', '', false, 'date')}
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit"><i class="ti ti-circle-check"></i>Create task</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `, 'task-modal');
-}
-
-async function wbCreateTaskFromRecord(companyId, { title, assigneeId, due }) {
-  const seed = state.wbRecordTask || {};
-  // The record's name rides along as the description as well as the title, because the title is
-  // the user's to rewrite and the task should still say where it came from if they do.
-  const saved = await wbCreateTaskFromPost(companyId, {
-    title, assigneeId, due, contactId: seed.contactId,
-    body: seed.title ? `From ${seed.title}${seed.appName ? ` in ${seed.appName}` : ''}` : '',
-  });
-  if (!saved) return;
-  state.modal = '';
-  state.wbRecordTask = null;
-  showToast('Task created. It is in My Tasks now.', isLiveSupabaseSession() ? 'live' : 'local', 'Tasks');
-  render();
+  loadRecordTask().then((mod) => mod.openRecordTaskModal(seed))
+    .catch(() => showToast('The task form could not be opened.', 'local', 'Tasks'));
 }
 
 // The log text is markup built at write time; a task title has to be words.
@@ -25272,7 +25252,9 @@ function renderActiveModal(route, session) {
   if (state.modal === 'chat-leave-confirm') return renderLeaveConversationModal(activeCompanyId(), state.leavingConversationId);
   if (state.modal === 'remove-member-confirm') return renderRemoveMemberModal(state.removingMemberId);
   if (state.modal === 'wb-activity-task') return renderActivityTaskModal(activeCompanyId(), state.wbTaskFromActivityId);
-  if (state.modal === 'wb-record-task') return renderRecordTaskModal(activeCompanyId());
+  // Only ever reached after openRecordTaskModal, which is what fetches the module -- so the
+  // loader here is for the render that races it, not for a modal nobody opened.
+  if (state.modal === 'wb-record-task') return recordTaskModule ? recordTaskModule.renderRecordTaskModal(activeCompanyId()) : questLoader('Loading');
   if (state.modal === 'delete-workspace') return renderDeleteWorkspaceModal(activeCompanyId(), state.deletingWorkspaceId);
   if (state.modal === 'message-search') return renderMessageSearchModal(activeCompanyId());
   if (state.modal === 'calendar-event-detail') return renderCalendarEventDetailModal(activeCompanyId());
@@ -30841,11 +30823,11 @@ function onDocumentSubmit(event) {
     const data = Object.fromEntries(new FormData(event.target).entries());
     const done = beginSubmitting(event.target, 'Creating…');
     if (!done) return;
-    wbCreateTaskFromRecord(activeCompanyId(), {
+    loadRecordTask().then((mod) => mod.createTaskFromRecord(activeCompanyId(), {
       title: String(data.title || '').trim(),
       assigneeId: String(data.assignee_id || ''),
       due: String(data.due || ''),
-    }).catch((error) => showToast(error.message || 'Task could not be created.', 'local', 'Tasks'))
+    })).catch((error) => showToast(error.message || 'Task could not be created.', 'local', 'Tasks'))
       .finally(done);
     return;
   }

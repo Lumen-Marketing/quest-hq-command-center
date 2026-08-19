@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { MIN_MM } from '../src/form/doc-model.js';
+
 // The document builder, CONSTRUCTED and CLICKED rather than read.
 //
 // The sheet editor shipped throwing "Cannot access 'menuButton' before initialization" the instant
@@ -912,4 +914,295 @@ test('the PDF prints the photo as a photo, and never its filename as a line of t
   assert.ok(!text.includes('roof.jpg'), 'the filename must not be drawn on the page');
   // The rest of the document is unaffected -- a text field still prints.
   assert.ok(text.includes('(Acme Roofing) Tj'), `expected the client line: ${text.match(/\([^)]*\) Tj/g)}`);
+});
+
+// --- crop, preset colours, and a shape filled with a picture ---------------------------------------
+//
+// "Can you add an option so I can crop the image, also in shape can I have an option to fill it
+// with colour or image, and there is also preset colours, primary and secondary with black and
+// white for text and shape, and the image can be imported or imported from the current record
+// with an image field."
+
+test('the four presets are named colours, and the theme decides two of them', async () => {
+  const { presetColors } = await import('../src/form/doc-editor.js');
+  const themed = presetColors((name) => ({ '--accent': '#123456', '--ink-2': '#abcdef' }[name] || ''));
+  assert.deepEqual(themed.map((p) => p.key), ['primary', 'secondary', 'black', 'white']);
+  assert.equal(themed[0].color, '#123456', 'primary follows the app accent');
+  assert.equal(themed[1].color, '#abcdef');
+  assert.equal(themed[2].color, '#111111');
+  assert.equal(themed[3].color, '#ffffff');
+});
+
+test('a theme colour that cannot be printed falls back rather than reaching the document', async () => {
+  // A custom property can hold color-mix(), a var() chain or a name; a document stores a colour
+  // it has to be able to PRINT.
+  const { presetColors } = await import('../src/form/doc-editor.js');
+  const odd = presetColors((name) => (name === '--accent' ? 'color-mix(in srgb, red 20%, blue)' : 'rebeccapurple'));
+  assert.match(odd[0].color, /^#[0-9a-f]{6}$/);
+  assert.match(odd[1].color, /^#[0-9a-f]{6}$/);
+  // A short hex still works, because plenty of themes are written that way.
+  assert.equal(presetColors(() => '#f80')[0].color, '#ff8800');
+});
+
+test('a preset writes a real colour onto the element', async () => {
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'text', text: 'Hi', x: 10, y: 10, w: 60, h: 8 }] } });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('click', '[data-fd-preset]', { fdPreset: 'color:#ffffff' });
+  assert.equal(editor.doc().elements[0].style.color, '#ffffff');
+  assert.match(editor.named['[data-fd-side]'].innerHTML, /data-fd-preset="color:/);
+});
+
+test('the picture is placed by fit, and the same maths serves screen and print', async () => {
+  const { fitRect } = await import('../src/form/doc-editor.js');
+  // Stretch fills the box exactly; fit letterboxes inside it; fill overflows it on one axis.
+  assert.deepEqual(fitRect('stretch', 100, 50, 200, 200), { dx: 0, dy: 0, dw: 200, dh: 200 });
+  assert.deepEqual(fitRect('contain', 100, 50, 200, 200), { dx: 0, dy: 50, dw: 200, dh: 100 });
+  assert.deepEqual(fitRect('cover', 100, 50, 200, 200), { dx: -100, dy: 0, dw: 400, dh: 200 });
+  // A source with no measurable size must not divide by zero.
+  assert.ok(Number.isFinite(fitRect('cover', 0, 0, 100, 100).dw));
+});
+
+test('cropping is a mode, and leaving the element leaves the mode', async () => {
+  const editor = await open({
+    doc: {
+      elements: [
+        { id: 'e1', kind: 'image', src: 'data:image/png;base64,AA', x: 10, y: 10, w: 60, h: 40 },
+        { id: 'e2', kind: 'text', text: 'Elsewhere', x: 10, y: 60, w: 60, h: 8 },
+      ],
+    },
+  });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  assert.ok(!editor.named['[data-fd-page]'].innerHTML.includes('fd-cropwin'), 'not until it is asked for');
+  await editor.fire('click', '[data-fd-crop]', {});
+  assert.match(editor.named['[data-fd-page]'].innerHTML, /fd-cropwin/);
+  assert.match(editor.named['[data-fd-page]'].innerHTML, /data-fd-crop-grip="move"/);
+  // Selecting something else puts the handles away -- a crop window over an element nobody is
+  // looking at any more is a set of handles that do something surprising.
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e2' });
+  assert.ok(!editor.named['[data-fd-page]'].innerHTML.includes('fd-cropwin'));
+});
+
+test('a crop can be taken back without hunting for the original numbers', async () => {
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'image', src: 'u', x: 10, y: 10, w: 60, h: 40, crop: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 } }] },
+  });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  assert.match(editor.named['[data-fd-side]'].innerHTML, /data-fd-crop-reset/, 'offered only when there is a crop');
+  await editor.fire('click', '[data-fd-crop-reset]', {});
+  assert.deepEqual(editor.doc().elements[0].crop, { x: 0, y: 0, w: 1, h: 1 });
+});
+
+test('how a picture fills its box is a choice, and it reaches the document', async () => {
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'image', src: 'u', x: 10, y: 10, w: 60, h: 40 }] } });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('click', '[data-fd-fit]', { fdFit: 'contain' });
+  assert.equal(editor.doc().elements[0].fit, 'contain');
+});
+
+test('a shape offers a picture from the record, beside the colour', async () => {
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'rect', x: 10, y: 10, w: 60, h: 40 }] } });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  const side = editor.named['[data-fd-side]'].innerHTML;
+  assert.match(side, /data-fd-shape-image/, 'a file to upload');
+  assert.match(side, /data-fd-shape-from/, 'or a picture the record already holds');
+  assert.match(side, /value="h-photo"/, 'and only the fields that can hold one');
+  assert.ok(!side.includes('value="h-client"'), 'a text field is not a picture');
+});
+
+test('a shape filled from the record draws the picture, keeping its colour underneath', async () => {
+  const editor = await open({
+    hostValues: { 'h-photo': JSON.stringify({ name: 'roof.jpg', url: 'https://files.test/roof.jpg' }) },
+    doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'ellipse', from: 'h-photo', x: 10, y: 10, w: 60, h: 40 }] },
+  });
+  const page = editor.named['[data-fd-page]'].innerHTML;
+  assert.match(page, /class="fd-shape"/, 'still a shape');
+  assert.ok(page.includes('<img class="fd-img" src="https://files.test/roof.jpg"'));
+  assert.match(page, /background:#e5e7eb/, 'the colour stays under it');
+});
+
+test('choosing a record field for a shape reaches the document', async () => {
+  const editor = await open({ doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'rect', x: 10, y: 10, w: 60, h: 40 }] } });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('change', '[data-fd-shape-from]', {}, {
+    target: {
+      matches: (want) => want === '[data-fd-shape-from]', closest: () => null, value: 'h-photo', dataset: {},
+    },
+  });
+  assert.equal(editor.doc().elements[0].from, 'h-photo');
+});
+
+test('removing a shape picture clears BOTH ways it could have got there', async () => {
+  const editor = await open({
+    hostValues: { 'h-photo': JSON.stringify({ url: 'https://files.test/a.png' }) },
+    doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'rect', src: 'data:image/png;base64,AA', from: 'h-photo', x: 10, y: 10, w: 60, h: 40 }] },
+  });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('click', '[data-fd-shape-image-clear]', {});
+  const el = editor.doc().elements[0];
+  assert.equal(el.src, '');
+  assert.equal(el.from, '', 'either one could have been what was showing');
+});
+
+test('a cropped picture is pulled up and left behind a box that clips it', async () => {
+  // The same composition both exports draw onto a canvas, which is what makes the preview honest.
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'image', src: 'u', x: 10, y: 10, w: 60, h: 40, crop: { x: 0.25, y: 0.5, w: 0.5, h: 0.5 } }] },
+  });
+  const page = editor.named['[data-fd-page]'].innerHTML;
+  assert.match(page, /class="fd-imgbox"/);
+  assert.ok(page.includes('width:200.0000%'), 'a half-width crop doubles the picture');
+  assert.ok(page.includes('left:-50.0000%'), 'and pulls it left by the part being cut off');
+  assert.ok(page.includes('top:-100.0000%'));
+});
+
+// --- the shape palette ------------------------------------------------------------------------
+
+test('the palette offers the basic geometry, drawn rather than named', async () => {
+  const editor = await open();
+  const rail = editor.named['[data-fd-rail]'].innerHTML;
+  for (const label of ['Box', 'Oval', 'Circle', 'Line', 'Triangle', 'Diamond', 'Pentagon',
+    'Hexagon', 'Heptagon', 'Octagon', 'Nonagon', 'Decagon', 'Trapezoid', 'Right triangle', 'Star']) {
+    assert.ok(rail.includes(`title="${label}"`), `${label} is not on the palette`);
+  }
+  // The button IS the shape: an icon font has no heptagon, no nonagon, no decagon and no
+  // trapezoid, so four of them would have had to borrow a glyph that means something else.
+  assert.match(rail, /<svg class="fd-glyph"/);
+  assert.match(rail, /<polygon points="/);
+  assert.ok(!rail.includes('ti-heptagon'), 'no icon was invented for a glyph that does not exist');
+});
+
+test('each shape arrives at a size you can recognise it at', async () => {
+  const editor = await open();
+  await editor.fire('click', '[data-fd-add-shape]', { fdAddShape: 'line:0:120:2' });
+  const line = editor.doc().elements[0];
+  assert.equal(line.w, 120, 'a line wants to be long');
+  // Asked for 2mm and given the 4mm floor: nothing smaller can be grabbed with a mouse.
+  assert.equal(line.h, MIN_MM);
+  await editor.fire('click', '[data-fd-add-shape]', { fdAddShape: 'polygon:7:40:40' });
+  const seven = editor.doc().elements[1];
+  assert.equal(seven.shape, 'polygon');
+  assert.equal(seven.sides, 7, 'the button carries the side count');
+  assert.equal(seven.w, seven.h, 'and a polygon wants a square box');
+});
+
+test('a circle is an ellipse in a square box, which is what a circle is', async () => {
+  const editor = await open();
+  await editor.fire('click', '[data-fd-add-shape]', { fdAddShape: 'circle:0:40:40' });
+  const el = editor.doc().elements[0];
+  assert.equal(el.shape, 'ellipse', 'not a second name for one shape');
+  assert.equal(el.w, el.h);
+});
+
+test('switching an existing shape to a circle squares its box', async () => {
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'rect', x: 10, y: 10, w: 80, h: 30 }] },
+  });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  await editor.fire('click', '[data-fd-shape]', { fdShape: 'circle:0' });
+  const el = editor.doc().elements[0];
+  assert.equal(el.shape, 'ellipse');
+  assert.equal(el.w, 30, 'squared to the shorter side, so it stays where it was put');
+  assert.equal(el.h, 30);
+});
+
+test('the number of sides is a slider, not twelve more buttons to maintain', async () => {
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'polygon', sides: 5, x: 10, y: 10, w: 40, h: 40 }] },
+  });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  assert.match(editor.named['[data-fd-side]'].innerHTML, /data-fd-sides/);
+  await editor.fire('input', '[data-fd-sides]', {}, {
+    target: {
+      matches: (want) => want === '[data-fd-sides]', closest: () => null, value: '9', dataset: {}, type: 'range',
+    },
+  });
+  assert.equal(editor.doc().elements[0].sides, 9);
+});
+
+test('the slider is offered only where it means something', async () => {
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'rect', x: 10, y: 10, w: 40, h: 40 }] },
+  });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  assert.ok(!editor.named['[data-fd-side]'].innerHTML.includes('data-fd-sides'), 'a box has four sides and no choice');
+});
+
+test('a polygon is clipped to its own corners on the page', async () => {
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'polygon', sides: 6, x: 10, y: 10, w: 40, h: 40, style: { fill: '#ff0000' } }] },
+  });
+  const page = editor.named['[data-fd-page]'].innerHTML;
+  assert.match(page, /clip-path:polygon\(/);
+  assert.match(page, /background:#ff0000/);
+});
+
+test('a polygon prints as a path, through the real PDF writer', async () => {
+  const editor = await open({
+    doc: {
+      elements: [
+        { id: 'e1', kind: 'shape', shape: 'polygon', sides: 5, x: 20, y: 20, w: 60, h: 60, style: { fill: '#ff0000' } },
+      ],
+    },
+  });
+  await editor.fire('click', '[data-fd-download]', { fdDownload: 'pdf' });
+  const text = Buffer.from(new Uint8Array(await editor.blobs.at(-1).arrayBuffer())).toString('latin1');
+  // One moveto and four linetos, closed -- a pentagon.
+  const moves = text.match(/^[\d.]+ [\d.]+ m$/gm) || [];
+  const lines = text.match(/^[\d.]+ [\d.]+ l$/gm) || [];
+  assert.equal(moves.length, 1, 'the path starts once');
+  assert.equal(lines.length, 4, 'and turns four corners');
+  assert.match(text, /^h$/m, 'then closes');
+});
+
+test('a ten-sided polygon prints ten corners, not a fallback box', async () => {
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'shape', shape: 'polygon', sides: 10, x: 20, y: 20, w: 60, h: 60, style: { fill: '#00ff00' } }] },
+  });
+  await editor.fire('click', '[data-fd-download]', { fdDownload: 'pdf' });
+  const text = Buffer.from(new Uint8Array(await editor.blobs.at(-1).arrayBuffer())).toString('latin1');
+  assert.equal((text.match(/^[\d.]+ [\d.]+ l$/gm) || []).length, 9);
+});
+
+test('a trapezoid and a star print too, from the same one path', async () => {
+  for (const [shape, corners] of [['trapezoid', 3], ['right-triangle', 2], ['star', 9]]) {
+    // eslint-disable-next-line no-await-in-loop
+    const editor = await open({
+      doc: { elements: [{ id: 'e1', kind: 'shape', shape, x: 20, y: 20, w: 60, h: 60, style: { fill: '#0000ff' } }] },
+    });
+    // eslint-disable-next-line no-await-in-loop
+    await editor.fire('click', '[data-fd-download]', { fdDownload: 'pdf' });
+    // eslint-disable-next-line no-await-in-loop
+    const text = Buffer.from(new Uint8Array(await editor.blobs.at(-1).arrayBuffer())).toString('latin1');
+    assert.equal((text.match(/^[\d.]+ [\d.]+ l$/gm) || []).length, corners, `${shape} drew the wrong number of corners`);
+  }
+});
+
+test('every fit becomes a CSS keyword that actually exists', async () => {
+  // Stretch rendered as Fit. `object-fit: stretch` is not a CSS value, and an invalid value is
+  // DROPPED rather than falling back to the default -- so the stylesheet's own
+  // `.fd-img { object-fit: contain }` stayed in charge and the button did nothing visible.
+  const { objectFitFor } = await import('../src/form/doc-editor.js');
+  const REAL = new Set(['fill', 'contain', 'cover', 'none', 'scale-down']);
+  const { IMAGE_FITS } = await import('../src/form/doc-model.js');
+  for (const fit of IMAGE_FITS) {
+    assert.ok(REAL.has(objectFitFor(fit)), `${fit} maps to ${objectFitFor(fit)}, which CSS will drop`);
+  }
+  assert.equal(objectFitFor('stretch'), 'fill', 'the keyword for stretch is fill');
+  assert.equal(objectFitFor('nonsense'), 'cover', 'and anything unknown still draws something');
+});
+
+test('a stretched picture is written into the page as fill', async () => {
+  const editor = await open({
+    doc: { elements: [{ id: 'e1', kind: 'image', src: 'u', fit: 'stretch', x: 10, y: 10, w: 60, h: 40 }] },
+  });
+  const page = editor.named['[data-fd-page]'].innerHTML;
+  assert.ok(page.includes('object-fit:fill'), 'the stylesheet would otherwise keep it contained');
+  assert.ok(!page.includes('object-fit:stretch'), 'a value CSS does not know is a value CSS throws away');
+});
+
+test('and the exports stretch it the same way the page does', async () => {
+  // The canvas side never had this bug -- fitRect handles the model's own word -- so this is
+  // here to keep the two from drifting apart the next time one of them is touched.
+  const { fitRect } = await import('../src/form/doc-editor.js');
+  assert.deepEqual(fitRect('stretch', 100, 50, 200, 200), { dx: 0, dy: 0, dw: 200, dh: 200 });
 });

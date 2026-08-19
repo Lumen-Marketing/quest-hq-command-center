@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { opsWorkspaceId } from '../src/workspace/builder-core.js';
+import { opsWorkspaceId } from '../src/workspace/ops-workspace-id.js';
 
 // "invalid input syntax for type uuid: ws-42959c90-a8e6-4ec4-af78-82036849dba7"
 //

@@ -13,6 +13,9 @@ import { press } from '../src/workspace/quick-create.js';
 // Work listing. Quick Create opens THAT form pre-filled rather than growing a second task writer.
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+// The modal moved out of main.js: it is reachable only from a record page, and the entry chunk
+// every session downloads was carrying it regardless.
+const task = readFileSync(new URL('../src/workspace/record-task.js', import.meta.url), 'utf8');
 
 function harness({ withContact = true, title = '58th Pl' } = {}) {
   const fields = [
@@ -92,9 +95,9 @@ test('it writes nothing to the app', async () => {
 });
 
 test('the form is a modal on the record, with an assignee and a due date', () => {
-  assert.ok(main.includes('function renderRecordTaskModal(companyId)'));
+  assert.ok(task.includes('function renderRecordTaskModal(companyId)'));
   assert.match(main, /state.modal === 'wb-record-task'/);
-  const modal = main.slice(main.indexOf('function renderRecordTaskModal'), main.indexOf('async function wbCreateTaskFromRecord'));
+  const modal = task.slice(task.indexOf('function renderRecordTaskModal'), task.indexOf('function noteOnRecord'));
   assert.ok(modal.includes("field('Task title', 'title'"));
   assert.ok(modal.includes('name="assignee_id"'), "no assignee: nobody would be told to do it");
   assert.ok(modal.includes("field('Due date', 'due'"));
@@ -104,7 +107,7 @@ test('the form is a modal on the record, with an assignee and a due date', () =>
 test('saving goes through the one shared writer, so it lands in My Tasks', () => {
   // Not re-implemented here: wbCreateTaskFromPost checks the permission, stamps the creator,
   // writes the row through the single task shape, and notifies the assignee.
-  const fn = main.slice(main.indexOf('async function wbCreateTaskFromRecord'), main.indexOf('// The log text is markup'));
+  const fn = task.slice(task.indexOf('async function createTaskFromRecord'));
   assert.ok(fn.includes('wbCreateTaskFromPost(companyId'), "the record modal writes its own task row");
   assert.ok(fn.includes('contactId: seed.contactId'), "the contact link is dropped on the way");
   const writer = main.slice(main.indexOf('async function wbCreateTaskFromPost'), main.indexOf('async function wbCreateTaskFromPost') + 1500);
@@ -114,6 +117,7 @@ test('saving goes through the one shared writer, so it lands in My Tasks', () =>
   assert.ok(writer.includes('contact_id: contactId'), "the writer cannot carry a contact");
   const quick = readFileSync(new URL('../src/workspace/quick-create.js', import.meta.url), 'utf8');
   assert.ok(!/from('tasks').insert/.test(quick), "quick-create must not write a task row itself");
+  assert.ok(!/from('tasks').insert/.test(task), "nor may the modal");
 });
 // ---- and it is actually on the card ---------------------------------------------------------
 //
@@ -196,7 +200,7 @@ test("who will work on it is asked on the modal, from the company's own people",
   // "who will work with this". The list is wbMembers -- the people in this company -- and the
   // chosen one is what decides whose My Tasks the row shows up in. Left blank it is Me, which
   // is the common case for a note somebody makes while reading a record.
-  const modal = main.slice(main.indexOf('function renderRecordTaskModal'), main.indexOf('async function wbCreateTaskFromRecord'));
+  const modal = task.slice(task.indexOf('function renderRecordTaskModal'), task.indexOf('function noteOnRecord'));
   assert.ok(modal.includes('<option value="">Me</option>'), "an unassigned task belongs to nobody");
   assert.ok(modal.includes('wbMembers(companyId)'));
   const writer = main.slice(main.indexOf('async function wbCreateTaskFromPost'), main.indexOf('async function wbCreateTaskFromPost') + 1200);

@@ -8,7 +8,7 @@
 // the passcode hash is derived here (src/intake/passcode.js) precisely so that no server route
 // has to re-answer that question. See the note in api/_lib/intake.js.
 
-import { opsWorkspaceId } from '../workspace/builder-core.js';
+import { opsWorkspaceId } from '../workspace/ops-workspace-id.js';
 import { generatePasscode, generateToken, hashPasscode, makePasscodeSalt } from './passcode.js';
 
 let ctx = null;

@@ -14,9 +14,9 @@
 // inspector, a file picker and four export buttons.
 
 import {
-  MAX_VERSIONS, MIN_MM, addElement, docFilled, elementText, layerElement, moveElement, normalizeDoc,
-  pageMm, removeElement, removeVersion, resizeElement, restoreVersion, saveVersion, setPage,
-  styleElement,
+  MAX_VERSIONS, MIN_MM, addElement, docFilled, elementText, isCropped, layerElement,
+  moveElement, normalizeCrop, normalizeDoc, pageMm, removeElement, removeVersion, resizeElement,
+  restoreVersion, saveVersion, setPage, shapePoints, styleElement, MAX_SIDES, MIN_SIDES,
 } from './doc-model.js';
 import { MM_TO_PT, jpegInfo, textWidth, wrapText, writePdf } from './doc-pdf.js';
 import { fieldImageUrl, placeableFields, plainFieldText } from './host-values.js';
@@ -37,13 +37,119 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
 
 const uid = (prefix) => `${prefix}${Math.random().toString(36).slice(2, 9)}`;
 
+/**
+ * Every shape, and what it is called.
+ *
+ * `sides` is what separates one regular polygon from another -- they are all one kind under the
+ * model, so the palette is a list of starting points rather than a list of drawing routines.
+ * A circle is an ellipse in a square box, which is what a circle IS; giving it its own kind
+ * would be a second name for one shape and a second thing to keep in step.
+ */
 const SHAPE_BUTTONS = [
-  ['rect', 'ti-square', 'Box'],
-  ['ellipse', 'ti-circle', 'Oval'],
-  ['line', 'ti-minus', 'Line'],
+  ['rect', 'Box', 0, [50, 30]],
+  ['ellipse', 'Oval', 0, [50, 30]],
+  ['circle', 'Circle', 0, [40, 40]],
+  ['line', 'Line', 0, [120, 2]],
+  ['polygon', 'Triangle', 3, [44, 40]],
+  ['polygon', 'Diamond', 4, [40, 40]],
+  ['polygon', 'Pentagon', 5, [40, 40]],
+  ['polygon', 'Hexagon', 6, [40, 40]],
+  ['polygon', 'Heptagon', 7, [40, 40]],
+  ['polygon', 'Octagon', 8, [40, 40]],
+  ['polygon', 'Nonagon', 9, [40, 40]],
+  ['polygon', 'Decagon', 10, [40, 40]],
+  ['trapezoid', 'Trapezoid', 0, [50, 34]],
+  ['right-triangle', 'Right triangle', 0, [44, 40]],
+  ['star', 'Star', 0, [40, 40]],
 ];
 
+/**
+ * The palette button's picture: the shape itself, drawn.
+ *
+ * An icon font was the obvious thing and was the wrong thing -- it has no heptagon, no nonagon,
+ * no decagon and no trapezoid, so four of these would have had to borrow a glyph that means
+ * something else. Drawing them from the same corner list the document uses costs nothing, adds
+ * no icon names for the alternative packs to have to cover, and means the button is a picture of
+ * exactly what pressing it puts on the page.
+ */
+function shapeGlyph(shape, sides) {
+  const points = shapePoints(shape === 'circle' ? 'ellipse' : shape, sides);
+  const body = points
+    ? `<polygon points="${points.map(([x, y]) => `${(x * 20).toFixed(2)},${(y * 20).toFixed(2)}`).join(' ')}" />`
+    : {
+      line: '<line x1="1" y1="10" x2="19" y2="10" />',
+      ellipse: '<ellipse cx="10" cy="10" rx="9.2" ry="6.4" />',
+      circle: '<circle cx="10" cy="10" r="8.4" />',
+    }[shape] || '<rect x="1.2" y="3.4" width="17.6" height="13.2" rx="1.6" />';
+  return `<svg class="fd-glyph" viewBox="0 0 20 20" aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+/** A shape's outline as a CSS clip-path, for the shapes that are a list of corners. */
+function clipPathFor(el) {
+  const points = shapePoints(el.shape, el.sides);
+  if (!points) return '';
+  return `clip-path:polygon(${points.map(([x, y]) => `${(x * 100).toFixed(3)}% ${(y * 100).toFixed(3)}%`).join(',')});`;
+}
+
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
+/**
+ * The four colours anything on the page can be, without opening a colour wheel.
+ *
+ * Primary and secondary are the app's own accent colours, read from the stylesheet so a company
+ * that re-themed the app gets ITS colours here rather than a hard-coded orange. Black and white
+ * are not a theme -- they are what text and paper are -- so they are constants.
+ */
+const FALLBACK_PRESETS = { primary: '#e0552d', secondary: '#1e3a8a' };
+
+export function presetColors(readVar) {
+  const hex = (value, fallback) => {
+    const raw = String(value || '').trim().toLowerCase();
+    if (/^#[0-9a-f]{6}$/.test(raw)) return raw;
+    if (/^#[0-9a-f]{3}$/.test(raw)) return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+    // A theme can hold anything in a custom property -- color-mix(), a var() chain, a name --
+    // and a document stores a colour it has to be able to PRINT, so anything else is refused.
+    return fallback;
+  };
+  return [
+    { key: 'primary', label: 'Primary', color: hex(readVar('--accent'), FALLBACK_PRESETS.primary) },
+    { key: 'secondary', label: 'Secondary', color: hex(readVar('--ink-2') || readVar('--amber'), FALLBACK_PRESETS.secondary) },
+    { key: 'black', label: 'Black', color: '#111111' },
+    { key: 'white', label: 'White', color: '#ffffff' },
+  ];
+}
+
+/**
+ * Where the source picture lands inside the box it is being drawn into.
+ *
+ * Shared by the screen and by both exports, because a crop that previews one way and prints
+ * another is worse than no crop at all. The box here is the UNCROPPED area -- the crop windows
+ * it afterwards -- which is what makes the same numbers work in CSS (an oversized <img> behind
+ * `overflow: hidden`) and on a canvas.
+ */
+/**
+ * The CSS keyword for a fit.
+ *
+ * `stretch` is the model's word and it is NOT a CSS value -- the keyword for it is `fill`. An
+ * invalid value does not fall back to the default, it is DROPPED, which left the stylesheet's
+ * `object-fit: contain` in charge and made Stretch render as Fit with nothing to show for it.
+ * The model keeps its own word because "Fill" is already the name of a shape's colour.
+ */
+export function objectFitFor(fit) {
+  return { stretch: 'fill', contain: 'contain', cover: 'cover' }[fit] || 'cover';
+}
+
+export function fitRect(fit, srcW, srcH, boxW, boxH) {
+  const sw = Math.max(1, Number(srcW) || 1);
+  const sh = Math.max(1, Number(srcH) || 1);
+  if (fit === 'stretch') return { dx: 0, dy: 0, dw: boxW, dh: boxH };
+  const ratio = fit === 'contain'
+    ? Math.min(boxW / sw, boxH / sh)
+    : Math.max(boxW / sw, boxH / sh);
+  const dw = sw * ratio;
+  const dh = sh * ratio;
+  return { dx: (boxW - dw) / 2, dy: (boxH - dh) / 2, dw, dh };
+}
 
 /**
  * The whole editor, over a document it reads and writes through two callbacks.
@@ -72,6 +178,11 @@ export function openDocEditor({
   let iconsOpen = false;
   // Whether the template list is showing over a page that already has something on it.
   let templatesOpen = false;
+  // Which element is having its crop adjusted. Separate from `sel` for the same reason `editing`
+  // is: selecting a picture and choosing which part of it shows are two different intentions.
+  let cropping = '';
+  // Which control opened the file picker: an image element, or a shape being filled with one.
+  let shapePicking = false;
   let iconList = null;
   let objectUrls = [];
   // Undo and redo, kept as whole-document snapshots rather than as a log of reversible
@@ -204,8 +315,41 @@ export function openDocEditor({
    */
   function imageFor(el) {
     if (!el || el.kind !== 'field' || !el.from) return '';
-    const field = fields.find((entry) => entry.id === el.from);
-    return field ? fieldImageUrl(field, hostValues[el.from]) : '';
+    return fieldPicture(el.from);
+  }
+
+  /** The picture a record's image field is holding right now. */
+  function fieldPicture(fieldId) {
+    const field = fields.find((entry) => entry.id === fieldId);
+    return field ? fieldImageUrl(field, hostValues[fieldId]) : '';
+  }
+
+  /**
+   * Any picture on the page, whatever is carrying it.
+   *
+   * An image element carries its own file, a shape can be FILLED with one -- uploaded, or read
+   * live from the record's image field -- and a placed field resolves to one. Three ways in, one
+   * answer, because the screen, the PDF and the exported picture all ask this question.
+   */
+  function pictureFor(el) {
+    if (!el) return '';
+    if (el.kind === 'image') return el.src || '';
+    if (el.kind === 'shape') return el.src || (el.from ? fieldPicture(el.from) : '');
+    return imageFor(el);
+  }
+
+  /**
+   * The CSS that puts a cropped picture in a box.
+   *
+   * The <img> is sized to the UNCROPPED area and pulled up and left, with the box clipping it --
+   * which is the same composition the exports draw, so what is previewed is what prints.
+   */
+  function cropStyle(el) {
+    const crop = normalizeCrop(el.crop);
+    const pct = (n) => `${(n * 100).toFixed(4)}%`;
+    return `position:absolute;width:${pct(1 / crop.w)};height:${pct(1 / crop.h)};`
+      + `left:-${pct(crop.x / crop.w)};top:-${pct(crop.y / crop.h)};`
+      + `object-fit:${objectFitFor(el.fit)}`;
   }
 
   /**
@@ -249,6 +393,24 @@ export function openDocEditor({
     scale = Math.min(5, Math.max(1.4, room / wMm));
   }
 
+  /**
+   * The crop window, drawn over the element while its crop is being set.
+   *
+   * Four corners and a middle: drag the middle to move the window, a corner to resize it. The
+   * numbers are fractions of the picture, so the same window means the same thing after the box
+   * is resized or the file is replaced with a bigger one.
+   */
+  function cropMarkup(el) {
+    if (cropping !== el.id || readOnly) return '';
+    const crop = normalizeCrop(el.crop);
+    const pct = (n) => `${(n * 100).toFixed(3)}%`;
+    const corners = ['nw', 'ne', 'se', 'sw']
+      .map((corner) => `<span class="fd-cropgrip fd-cropgrip-${corner}" data-fd-crop-grip="${corner}"></span>`).join('');
+    return `<div class="fd-cropmask" data-fd-crop-mask>
+      <div class="fd-cropwin" data-fd-crop-grip="move" style="left:${pct(crop.x)};top:${pct(crop.y)};width:${pct(crop.w)};height:${pct(crop.h)}">${corners}</div>
+    </div>`;
+  }
+
   function elementMarkup(el) {
     const px = (mm) => `${(mm * scale).toFixed(2)}px`;
     const box = `left:${px(el.x)};top:${px(el.y)};width:${px(el.w)};height:${px(el.h)};opacity:${el.style.opacity}`;
@@ -267,7 +429,23 @@ export function openDocEditor({
         return `<div ${common}><span class="fd-rule" style="background:${el.style.stroke === 'none' ? '#111827' : el.style.stroke};height:${thickness.toFixed(2)}px"></span>${grips}</div>`;
       }
       const radius = el.shape === 'ellipse' ? '50%' : `${(el.style.radius * scale).toFixed(2)}px`;
-      return `<div ${common}><span class="fd-shape" style="background:${fill};${stroke}border-radius:${radius}"></span>${grips}</div>`;
+      // A polygon is clipped rather than drawn: the same corner list the PDF walks, handed to
+      // CSS. The picture inside is clipped with it, because clip-path takes the children too.
+      const clip = clipPathFor(el);
+      // The colour stays UNDER the picture rather than being replaced by it, so a shape whose
+      // picture has not loaded (or whose record field is empty) is still a shape, not a hole.
+      const picture = pictureFor(el);
+      const inside = picture
+        ? `<img class="fd-img" src="${esc(picture)}" alt="" draggable="false" style="${cropStyle(el)}" />`
+        : '';
+      // An outline on a clipped shape is drawn by the clip itself eating half the border, so a
+      // polygon takes its stroke as a second, slightly larger shape behind it rather than as a
+      // CSS border that would come out half the width it asked for.
+      const outline = clip && el.style.stroke !== 'none' && el.style.strokeWidth > 0
+        ? `<span class="fd-shape fd-shape-edge" style="background:${el.style.stroke};${clip}"></span>`
+        : '';
+      const inset = outline ? `inset:${Math.max(1, el.style.strokeWidth * scale).toFixed(2)}px;` : '';
+      return `<div ${common}>${outline}<span class="fd-shape" style="background:${fill};${clip ? `${clip}${inset}` : `${stroke}border-radius:${radius}`}">${inside}</span>${cropMarkup(el)}${grips}</div>`;
     }
 
     // A placed field holding a picture is drawn as the picture, not as its filename. Checked
@@ -276,16 +454,16 @@ export function openDocEditor({
       const src = imageFor(el);
       const field = fields.find((entry) => entry.id === el.from);
       const body = src
-        ? `<img class="fd-img" src="${esc(src)}" alt="${esc(field?.label || 'Image')}" draggable="false" />`
+        ? `<span class="fd-imgbox"><img class="fd-img" src="${esc(src)}" alt="${esc(field?.label || 'Image')}" draggable="false" style="${cropStyle(el)}" /></span>`
         : `<span class="fd-ghost">${esc(field ? field.label : 'Pick a field')}</span>`;
-      return `<div ${common}>${body}${grips}</div>`;
+      return `<div ${common}>${body}${cropMarkup(el)}${grips}</div>`;
     }
 
     if (el.kind === 'image') {
       const body = el.src
-        ? `<img class="fd-img" src="${esc(el.src)}" alt="" draggable="false" />`
+        ? `<span class="fd-imgbox"><img class="fd-img" src="${esc(el.src)}" alt="" draggable="false" style="${cropStyle(el)}" /></span>`
         : '<span class="fd-ghost">Pick an image</span>';
-      return `<div ${common}>${body}${grips}</div>`;
+      return `<div ${common}>${body}${cropMarkup(el)}${grips}</div>`;
     }
 
     if (el.kind === 'icon') {
@@ -381,7 +559,7 @@ export function openDocEditor({
         </label>
         <button class="btn btn-sm fd-w" type="button" data-fd-image-pick><i class="ti ti-photo"></i>Image</button>
         <button class="btn btn-sm fd-w" type="button" data-fd-icons><i class="ti ti-star"></i>Icon</button>
-        <div class="fd-shapes">${SHAPE_BUTTONS.map(([shape, icon, label]) => `<button class="btn btn-sm" type="button" data-fd-add-shape="${shape}" title="${label}"><i class="ti ${icon}"></i></button>`).join('')}</div>
+        <div class="fd-shapes">${SHAPE_BUTTONS.map(([shape, label, sides, size]) => `<button class="btn btn-sm" type="button" data-fd-add-shape="${shape}:${sides}:${size[0]}:${size[1]}" title="${esc(label)}" aria-label="${esc(label)}">${shapeGlyph(shape, sides)}</button>`).join('')}</div>
         ${iconsOpen ? `<div class="fd-icongrid" data-fd-icongrid>${iconGridMarkup()}</div>` : ''}
       </div>
       <div class="fd-group"><div class="fd-group-t">Paper</div>
@@ -419,10 +597,29 @@ export function openDocEditor({
     // A field holding a picture has no typography to set. Offering Size, Bold and Colour over
     // an image is three controls that do nothing.
     const isWords = el.kind === 'text' || (el.kind === 'field' && !drawsAsImage(el));
+    // Only the fields that can actually hold a picture are offered as a shape's fill.
+    const imageFields = fields.filter((field) => ['image', 'file'].includes(field.type));
+    // The four presets, then the wheel for anything else. Named rather than shown as four more
+    // anonymous chips: "Primary" is a decision somebody can repeat on the next document, and
+    // #e0552d is a number they would have to write down.
+    const presets = presetColors((name) => {
+      try { return window.getComputedStyle(document.documentElement).getPropertyValue(name); } catch { return ''; }
+    });
     const swatch = (key, value, label) => `<label class="fd-color"><span>${label}</span>
-      <input type="color" data-fd-style="${key}" value="${value === 'none' ? '#ffffff' : value}" />
+      <span class="fd-presets">${presets.map((preset) => `<button type="button" class="fd-preset ${value === preset.color ? 'on' : ''}" data-fd-preset="${key}:${preset.color}" title="${esc(preset.label)}" aria-label="${esc(preset.label)}" style="background:${preset.color}"></button>`).join('')}</span>
+      <input type="color" data-fd-style="${key}" value="${value === 'none' ? '#ffffff' : value}" title="Any other colour" />
       ${key !== 'color' ? `<button type="button" class="fd-none ${value === 'none' ? 'on' : ''}" data-fd-none="${key}" title="No ${label.toLowerCase()}">None</button>` : ''}
     </label>`;
+
+    // Fit and crop, shared by an image element and a shape being filled with one.
+    const pictureControls = (target) => `
+      <div class="fd-btns">${[['cover', 'Fill'], ['contain', 'Fit'], ['stretch', 'Stretch']]
+    .map(([fit, name]) => `<button type="button" class="fd-tog ${(target.fit || 'cover') === fit ? 'on' : ''}" data-fd-fit="${fit}" title="${name} the box">${name}</button>`).join('')}</div>
+      <div class="fd-row">
+        <button class="btn btn-sm ${cropping === target.id ? 'btn-primary' : ''}" type="button" data-fd-crop><i class="ti ti-crop"></i>${cropping === target.id ? 'Done cropping' : 'Crop'}</button>
+        ${isCropped(target.crop) ? '<button class="btn btn-sm" type="button" data-fd-crop-reset title="Show the whole picture again">Reset</button>' : ''}
+      </div>
+      ${cropping === target.id ? '<div class="fd-sub">Drag the window to move it, a corner to resize it.</div>' : ''}`;
 
     return `<div class="fd-side-head"><b>${esc({
       text: 'Text', field: 'Record field', image: 'Image', icon: 'Icon', shape: 'Shape',
@@ -451,9 +648,10 @@ export function openDocEditor({
         <option value="">— Choose a field —</option>
         ${fields.map((field) => `<option value="${esc(field.id)}" ${el.from === field.id ? 'selected' : ''}>${esc(field.label)}</option>`).join('')}
       </select>
-      <label class="fd-check"><input type="checkbox" data-fd-withlabel ${el.withLabel ? 'checked' : ''}> Print the field's name too</label>
-      <label class="fd-pick"><span>If it is empty, print</span><input class="wb-input" data-fd-fallback value="${esc(el.fallback)}" placeholder="nothing" /></label>
+      ${drawsAsImage(el) ? '' : `<label class="fd-check"><input type="checkbox" data-fd-withlabel ${el.withLabel ? 'checked' : ''}> Print the field's name too</label>
+      <label class="fd-pick"><span>If it is empty, print</span><input class="wb-input" data-fd-fallback value="${esc(el.fallback)}" placeholder="nothing" /></label>`}
       <div class="fd-sub">Read from the record every time the document is opened, so it is never out of date.</div>
+      ${imageFor(el) ? pictureControls(el) : ''}
     </div>` : ''}
     ${el.kind === 'icon' ? `<div class="fd-group"><div class="fd-group-t">Icon</div>
       ${swatch('color', el.style.color, 'Colour')}
@@ -463,11 +661,24 @@ export function openDocEditor({
     ${el.kind === 'image' ? `<div class="fd-group"><div class="fd-group-t">Image</div>
       <button class="btn btn-sm fd-w" type="button" data-fd-image-pick><i class="ti ti-photo"></i>${el.src ? 'Replace it' : 'Choose a file'}</button>
       ${el.name ? `<div class="fd-sub">${esc(el.name)}</div>` : ''}
+      ${el.src ? pictureControls(el) : ''}
     </div>` : ''}
     ${el.kind === 'shape' ? `<div class="fd-group"><div class="fd-group-t">Shape</div>
-      <div class="fd-btns">${SHAPE_BUTTONS.map(([shape, icon, label]) => `<button type="button" class="fd-tog ${el.shape === shape ? 'on' : ''}" data-fd-shape="${shape}" title="${label}"><i class="ti ${icon}"></i></button>`).join('')}</div>
+      <div class="fd-shapes">${SHAPE_BUTTONS.map(([shape, label, sides]) => `<button type="button" class="btn btn-sm ${el.shape === (shape === 'circle' ? 'ellipse' : shape) && (shape !== 'polygon' || el.sides === sides) ? 'on' : ''}" data-fd-shape="${shape}:${sides}" title="${esc(label)}" aria-label="${esc(label)}">${shapeGlyph(shape, sides)}</button>`).join('')}</div>
       ${el.shape === 'line' ? '' : swatch('fill', el.style.fill, 'Fill')}
       ${swatch('stroke', el.style.stroke, el.shape === 'line' ? 'Line' : 'Outline')}
+      ${el.shape === 'line' ? '' : `<div class="fd-group-t fd-sub-t">Or fill it with a picture</div>
+        <button class="btn btn-sm fd-w" type="button" data-fd-shape-image><i class="ti ti-photo"></i>${el.src ? 'Replace the picture' : 'Choose a file'}</button>
+        <label class="fd-pick"><span>Or a picture from this record</span>
+          <select class="wb-input" data-fd-shape-from>
+            <option value="">— None —</option>
+            ${imageFields.map((field) => `<option value="${esc(field.id)}" ${el.from === field.id ? 'selected' : ''}>${esc(field.label)}</option>`).join('')}
+          </select>
+        </label>
+        ${pictureFor(el) ? `${pictureControls(el)}<button class="btn btn-sm fd-w" type="button" data-fd-shape-image-clear>Remove the picture</button>` : ''}`}
+      ${el.shape === 'polygon' ? `<label class="fd-pick"><span>Sides <b data-fd-sides-out>${el.sides}</b></span>
+        <input type="range" min="${MIN_SIDES}" max="${MAX_SIDES}" step="1" value="${el.sides}" data-fd-sides />
+      </label>` : ''}
       <label class="fd-num"><span>${el.shape === 'line' ? 'Thickness' : 'Outline width'} mm</span><input type="number" class="wb-input" data-fd-style="strokeWidth" value="${el.style.strokeWidth}" min="0" max="20" step="0.2" /></label>
       ${el.shape === 'rect' ? `<label class="fd-num"><span>Corner radius mm</span><input type="number" class="wb-input" data-fd-style="radius" value="${el.style.radius}" min="0" max="40" step="1" /></label>` : ''}
     </div>` : ''}
@@ -529,10 +740,30 @@ export function openDocEditor({
     if (editing === id && event.target.closest('[data-fd-edit]')) return;
     // Selecting and dragging are one gesture, not two. Requiring a click to select and then a
     // second press to move is the single most irritating thing an editor can ask for.
-    if (sel !== id || editing) { sel = id; editing = ''; paint(); }
+    if (sel !== id || editing) { sel = id; editing = ''; cropping = ''; paint(); }
     if (readOnly) return;
     const el = selected();
     if (!el) return;
+    // A crop window sits ON TOP of the element, so its grips are checked first -- otherwise
+    // every attempt to move the window would move the element underneath it instead.
+    const cropGrip = event.target.closest('[data-fd-crop-grip]')?.dataset.fdCropGrip || '';
+    if (cropping === id && cropGrip) {
+      const node = event.target.closest('[data-fd-crop-mask]');
+      const box = node?.getBoundingClientRect?.() || { width: 1, height: 1 };
+      drag = {
+        id,
+        cropGrip,
+        startX: event.clientX,
+        startY: event.clientY,
+        from: normalizeCrop(el.crop),
+        boxW: Math.max(1, box.width),
+        boxH: Math.max(1, box.height),
+        moved: false,
+        pointerId: event.pointerId,
+        was: doc,
+      };
+      return;
+    }
     const grip = event.target.closest('[data-fd-grip]')?.dataset.fdGrip || '';
     drag = {
       id,
@@ -556,6 +787,7 @@ export function openDocEditor({
 
   overlay.addEventListener('pointermove', (event) => {
     if (!drag) return;
+    if (drag.cropGrip) { cropMove(event); return; }
     const dxMm = (event.clientX - drag.startX) / scale;
     const dyMm = (event.clientY - drag.startY) / scale;
     if (!drag.moved && Math.abs(dxMm) < 0.3 && Math.abs(dyMm) < 0.3) return;
@@ -588,13 +820,60 @@ export function openDocEditor({
     }
   });
 
+  /**
+   * Dragging the crop window.
+   *
+   * Everything is in FRACTIONS of the element's box, which is the same rectangle the picture is
+   * composed into -- so the numbers can be written straight onto the element with no conversion
+   * and no dependence on the zoom.
+   */
+  function cropMove(event) {
+    const dx = (event.clientX - drag.startX) / drag.boxW;
+    const dy = (event.clientY - drag.startY) / drag.boxH;
+    if (!drag.moved && Math.abs(dx) < 0.004 && Math.abs(dy) < 0.004) return;
+    drag.moved = true;
+    event.preventDefault();
+    const was = drag.from;
+    let next;
+    if (drag.cropGrip === 'move') {
+      // Clamped rather than refused: a window dragged past the edge stops at the edge, the same
+      // way an element dragged off the paper does.
+      next = {
+        x: Math.min(1 - was.w, Math.max(0, was.x + dx)),
+        y: Math.min(1 - was.h, Math.max(0, was.y + dy)),
+        w: was.w,
+        h: was.h,
+      };
+    } else {
+      const west = drag.cropGrip.includes('w');
+      const north = drag.cropGrip.includes('n');
+      const right = was.x + was.w;
+      const bottom = was.y + was.h;
+      const x = west ? Math.min(right - 0.05, Math.max(0, was.x + dx)) : was.x;
+      const y = north ? Math.min(bottom - 0.05, Math.max(0, was.y + dy)) : was.y;
+      next = {
+        x,
+        y,
+        w: west ? right - x : Math.min(1 - was.x, Math.max(0.05, was.w + dx)),
+        h: north ? bottom - y : Math.min(1 - was.y, Math.max(0.05, was.h + dy)),
+      };
+    }
+    doc = normalizeDoc({
+      ...doc,
+      elements: doc.elements.map((entry) => (entry.id === drag.id ? { ...entry, crop: next } : entry)),
+    }, () => uid('e'));
+    // The window and the picture under it both move, so this repaints the page rather than
+    // nudging one node -- a crop is a handful of elements, not a hundred.
+    paintPage();
+  }
+
   overlay.addEventListener('pointerup', () => {
     if (!drag) return;
     const settled = drag;
     drag = null;
     // A click that never moved is a selection, already handled, and must not write a version of
     // the document identical to the one already stored.
-    if (settled.moved) commit(doc, { before: settled.was });
+    if (settled.moved) commit(doc, { before: settled.was, repaint: settled.cropGrip ? 'page' : 'all' });
   });
 
   // --- keyboard ---------------------------------------------------------------------------------
@@ -655,7 +934,7 @@ export function openDocEditor({
     // Clicking the paper but not an element clears the selection, which is how every editor
     // behaves and the only way to get the inspector's help text back.
     if (event.target.closest('[data-fd-page]') && !event.target.closest('[data-fd-el]')) {
-      if (sel) { sel = ''; paint(); }
+      if (sel) { sel = ''; cropping = ''; paint(); }
       return;
     }
 
@@ -680,8 +959,17 @@ export function openDocEditor({
 
     const shape = hit('add-shape');
     if (shape) {
-      const kind = shape.dataset.fdAddShape;
-      place({ kind: 'shape', shape: kind, w: kind === 'line' ? 120 : 50, h: kind === 'line' ? 2 : 30 });
+      // Each button carries its own starting box, because the size that makes a shape
+      // recognisable is part of the shape: a line wants to be long and a pentagon wants to be
+      // square, and arriving as the wrong rectangle means resizing before you can even see it.
+      const [kind, sides, w, h] = String(shape.dataset.fdAddShape).split(':');
+      place({
+        kind: 'shape',
+        shape: kind === 'circle' ? 'ellipse' : kind,
+        sides: Number(sides) || 6,
+        w: Number(w),
+        h: Number(h),
+      });
       return;
     }
 
@@ -733,10 +1021,49 @@ export function openDocEditor({
     if (align) { commit(styleElement(doc, sel, { style: { align: align.dataset.fdAlign } })); return; }
 
     const shapeKind = hit('shape');
-    if (shapeKind) { commit(styleElement(doc, sel, { shape: shapeKind.dataset.fdShape })); return; }
+    if (shapeKind) {
+      const [kind, sides] = String(shapeKind.dataset.fdShape).split(':');
+      // A circle is an ellipse in a square box, which is what a circle IS -- so it changes the
+      // BOX rather than being a second name for one shape.
+      const el = selected();
+      const square = kind === 'circle' && el ? { w: Math.min(el.w, el.h), h: Math.min(el.w, el.h) } : {};
+      commit(styleElement(doc, sel, {
+        shape: kind === 'circle' ? 'ellipse' : kind, sides: Number(sides) || 6, ...square,
+      }));
+      return;
+    }
 
     const none = hit('none');
     if (none) { commit(styleElement(doc, sel, { style: { [none.dataset.fdNone]: 'none' } })); return; }
+
+    const preset = hit('preset');
+    if (preset) {
+      const [key, color] = String(preset.dataset.fdPreset).split(':');
+      commit(styleElement(doc, sel, { style: { [key]: color } }));
+      return;
+    }
+
+    const fit = hit('fit');
+    if (fit) { commit(styleElement(doc, sel, { fit: fit.dataset.fdFit })); return; }
+
+    if (hit('crop')) {
+      // A toggle, and selecting anything else leaves it -- a crop window over an element nobody
+      // is looking at any more is a set of handles that do something surprising.
+      cropping = cropping === sel ? '' : sel;
+      paint();
+      return;
+    }
+
+    if (hit('crop-reset')) { commit(styleElement(doc, sel, { crop: { x: 0, y: 0, w: 1, h: 1 } })); return; }
+
+    if (hit('shape-image')) { shapePicking = true; $('[data-fd-image]').click(); return; }
+
+    if (hit('shape-image-clear')) {
+      // Both halves: an uploaded picture AND a record field, because either could be what is
+      // showing and "remove the picture" means the shape goes back to being a colour.
+      commit(styleElement(doc, sel, { src: '', from: '' }));
+      return;
+    }
 
     if (hit('versions')) { versionsOpen = !versionsOpen; paint(); return; }
 
@@ -857,6 +1184,15 @@ export function openDocEditor({
       return;
     }
 
+    if (target.matches('[data-fd-sides]') && sel) {
+      // The page only, and its own readout updated by hand: a full repaint rebuilds the rail
+      // AND the inspector, which means rebuilding the slider being dragged.
+      commit(styleElement(doc, sel, { sides: Number(target.value) }), { repaint: 'page', mark: `sides:${sel}` });
+      const out = $('[data-fd-sides-out]');
+      if (out) out.textContent = String(selected()?.sides ?? '');
+      return;
+    }
+
     if (target.matches('[data-fd-margin]')) {
       // The page only. A full repaint rebuilds the rail, which means rebuilding the slider being
       // dragged -- and a slider replaced under the pointer stops following it after one step.
@@ -915,12 +1251,20 @@ export function openDocEditor({
     if (target.matches('[data-fd-from]') && sel) { commit(styleElement(doc, sel, { from: target.value })); return; }
     if (target.matches('[data-fd-withlabel]') && sel) { commit(styleElement(doc, sel, { withLabel: target.checked })); return; }
 
+    if (target.matches('[data-fd-shape-from]') && sel) {
+      commit(styleElement(doc, sel, { from: target.value }));
+      return;
+    }
+
     if (target.matches('[data-fd-image]')) {
       const file = target.files?.[0];
       target.value = '';
+      const forShape = shapePicking;
+      shapePicking = false;
       if (!file) return;
       try {
         const src = await readDataUrl(file);
+        if (forShape && sel) { commit(styleElement(doc, sel, { src, name: file.name })); return; }
         const size = await imageSize(src);
         const el = selected();
         if (el && el.kind === 'image') {
@@ -1000,7 +1344,7 @@ export function openDocEditor({
   }
 
   /** An image element's bytes as JPEG, which is the one format a PDF takes as-is. */
-  function toJpeg(src, wMm, hMm) {
+  function toJpeg(src, wMm, hMm, el = null) {
     return new Promise((resolve) => {
       const img = new Image();
       // A record's image field holds a link to the file bucket, not the bytes. Reading a
@@ -1019,7 +1363,16 @@ export function openDocEditor({
         // otherwise come out on black.
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // The same composition the screen draws: the picture is placed into the UNCROPPED area
+        // by `fit`, then the crop windows it. Doing the arithmetic here rather than in the PDF
+        // is what keeps the PDF writer free of clipping paths -- the crop is baked into the
+        // bytes it embeds.
+        const crop = normalizeCrop(el?.crop);
+        const uw = canvas.width / crop.w;
+        const uh = canvas.height / crop.h;
+        const box = fitRect(el?.fit || 'cover', img.naturalWidth || img.width, img.naturalHeight || img.height, uw, uh);
+        if (el && shapeClip(ctx, el, canvas.width, canvas.height)) ctx.clip();
+        ctx.drawImage(img, box.dx - crop.x * uw, box.dy - crop.y * uh, box.dw, box.dh);
         // A canvas that was tainted anyway throws here rather than returning anything. One
         // picture that will not convert must not take the whole PDF with it.
         try { resolve(dataUrlBytes(canvas.toDataURL('image/jpeg', 0.9))); } catch { resolve(null); }
@@ -1027,6 +1380,31 @@ export function openDocEditor({
       img.onerror = () => resolve(null);
       img.src = src;
     });
+  }
+
+  /**
+   * A picture filling a shape is trimmed to that shape.
+   *
+   * JPEG has no transparency, so the corners outside an oval come out WHITE rather than clear.
+   * A document is printed on white paper, which is the one place that is not a compromise -- and
+   * it buys a PDF with no clipping paths in it at all.
+   *
+   * @returns {boolean} whether a path was laid down for the caller to clip to
+   */
+  function shapeClip(ctx, el, w, h) {
+    // Read off `clipShape`, not off `kind`: by the time the exports see it, a filled shape has
+    // been handed over AS an image element, and its own outline is what it still has to be
+    // trimmed to.
+    const shape = el.clipShape || (el.kind === 'shape' ? el.shape : '');
+    if (!shape || shape === 'line') return false;
+    ctx.beginPath();
+    const points = shapePoints(shape, el.sides);
+    if (points) points.forEach(([px, py], i) => (i ? ctx.lineTo(px * w, py * h) : ctx.moveTo(px * w, py * h)));
+    else if (shape === 'ellipse') ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    else if (ctx.roundRect) ctx.roundRect(0, 0, w, h, ((el.style?.radius || 0) / Math.max(el.w, 0.01)) * w);
+    else ctx.rect(0, 0, w, h);
+    ctx.closePath();
+    return true;
   }
 
   /** An icon is a glyph in a webfont, so it is drawn onto a canvas and embedded as a picture. */
@@ -1061,9 +1439,22 @@ export function openDocEditor({
   async function buildPdfBytes() {
     // A field holding a picture is handed to the writer AS an image element. The writer draws
     // by `kind`, so telling it the truth here is all it takes -- no second branch in the PDF.
-    const items = doc.elements.map((el) => (imageFor(el)
-      ? { ...el, kind: 'image', src: imageFor(el), text: '' }
-      : { ...el, text: wordsFor(el) }));
+    // A field resolving to a picture, and a shape FILLED with one, are both handed to the writer
+    // as image elements -- the writer draws by `kind`, so telling it the truth here is all it
+    // takes. A filled shape keeps its own entry too, drawn underneath, so its outline still
+    // prints around the picture.
+    const items = [];
+    for (const el of doc.elements) {
+      const picture = pictureFor(el);
+      if (el.kind === 'shape' && picture) {
+        items.push({ ...el, text: '' });
+        items.push({ ...el, id: `${el.id}~img`, kind: 'image', src: picture, text: '', clipShape: el.shape });
+      } else if (el.kind !== 'image' && picture) {
+        items.push({ ...el, kind: 'image', src: picture, text: '' });
+      } else {
+        items.push({ ...el, text: wordsFor(el) });
+      }
+    }
     const images = [];
     for (const el of items) {
       if (el.kind !== 'image' && el.kind !== 'icon') continue;
@@ -1071,7 +1462,7 @@ export function openDocEditor({
         // Sequential on purpose: twenty images decoded at once is where a phone runs out of
         // memory, and an export is not a place to be clever.
         // eslint-disable-next-line no-await-in-loop
-        const bytes = el.kind === 'icon' ? iconJpeg(el) : await toJpeg(el.src, el.w, el.h);
+        const bytes = el.kind === 'icon' ? iconJpeg(el) : await toJpeg(el.src, el.w, el.h, el);
         if (!bytes) continue;
         const info = jpegInfo(bytes);
         images.push({
@@ -1103,11 +1494,23 @@ export function openDocEditor({
       ctx.globalAlpha = el.style.opacity;
       if (el.kind === 'shape') {
         ctx.beginPath();
-        if (el.shape === 'ellipse') ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+        const corners = shapePoints(el.shape, el.sides);
+        if (corners) {
+          corners.forEach(([cx, cy], i) => (i ? ctx.lineTo(x + cx * w, y + cy * h) : ctx.moveTo(x + cx * w, y + cy * h)));
+          ctx.closePath();
+        } else if (el.shape === 'ellipse') ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
         else if (el.shape === 'line') { ctx.moveTo(x, y + h / 2); ctx.lineTo(x + w, y + h / 2); }
         else if (ctx.roundRect) ctx.roundRect(x, y, w, h, px(el.style.radius));
         else ctx.rect(x, y, w, h);
         if (el.style.fill !== 'none' && el.shape !== 'line') { ctx.fillStyle = el.style.fill; ctx.fill(); }
+        // eslint-disable-next-line no-await-in-loop
+        const inside = el.shape === 'line' ? null : await loadImage(pictureFor(el)).catch(() => null);
+        if (inside) {
+          ctx.save();
+          ctx.clip();
+          drawPicture(ctx, inside, el, x, y, w, h);
+          ctx.restore();
+        }
         if (el.style.stroke !== 'none' && el.style.strokeWidth > 0) {
           ctx.strokeStyle = el.style.stroke;
           ctx.lineWidth = Math.max(1, px(el.style.strokeWidth));
@@ -1123,10 +1526,10 @@ export function openDocEditor({
           ctx.textBaseline = 'middle';
           ctx.fillText(glyph, x + w / 2, y + h / 2);
         }
-      } else if ((el.kind === 'image' && el.src) || imageFor(el)) {
+      } else if ((el.kind === 'image' && el.src) || pictureFor(el)) {
         // eslint-disable-next-line no-await-in-loop
-        const img = await loadImage(el.src || imageFor(el)).catch(() => null);
-        if (img) ctx.drawImage(img, x, y, w, h);
+        const img = await loadImage(el.src || pictureFor(el)).catch(() => null);
+        if (img) drawPicture(ctx, img, el, x, y, w, h);
       } else {
         const text = wordsFor(el);
         if (text.trim()) {
@@ -1160,6 +1563,28 @@ export function openDocEditor({
     return new Promise((done, fail) => {
       try { canvas.toBlob(done, 'image/png'); } catch { fail(new Error('a picture on the page could not be read back — it may be hosted somewhere that does not allow it')); }
     });
+  }
+
+  /**
+   * One picture, composed the way the screen composes it.
+   *
+   * `fit` places the source in the UNCROPPED area, the crop windows it, and the caller has
+   * already clipped to whatever shape it belongs in. The same three lines the PDF's own
+   * rasteriser runs, so the two exports cannot disagree.
+   */
+  function drawPicture(ctx, img, el, x, y, w, h) {
+    const crop = normalizeCrop(el.crop);
+    const uw = w / crop.w;
+    const uh = h / crop.h;
+    const box = fitRect(el.fit || 'cover', img.naturalWidth || img.width, img.naturalHeight || img.height, uw, uh);
+    ctx.save();
+    // Clipped to the box even for a plain picture: `cover` deliberately overflows, and without
+    // this it would spill across whatever is beside it.
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.drawImage(img, x + box.dx - crop.x * uw, y + box.dy - crop.y * uh, box.dw, box.dh);
+    ctx.restore();
   }
 
   function fileName(extension) {

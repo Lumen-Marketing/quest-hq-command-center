@@ -302,3 +302,130 @@ test('filled means there is something to open, either way it got there', () => {
   assert.equal(docFilled({ upload: { name: 'a.pdf', src: 'data:application/pdf;base64,AA' } }), true);
   assert.equal(docFilled({ title: 'Named but empty' }), false);
 });
+
+// --- a crop, and a shape filled with a picture ----------------------------------------------------
+
+test('a crop is fractions of the picture, so it survives the file being replaced', async () => {
+  const { normalizeCrop } = await import('../src/form/doc-model.js');
+  assert.deepEqual(normalizeCrop(null), { x: 0, y: 0, w: 1, h: 1 }, 'no crop is the whole picture');
+  assert.deepEqual(normalizeCrop({ x: 0.25, y: 0.1, w: 0.5, h: 0.5 }), { x: 0.25, y: 0.1, w: 0.5, h: 0.5 });
+  // Out of range in every direction, and never a window that shows nothing.
+  assert.deepEqual(normalizeCrop({ x: -3, y: 'no', w: 0, h: 99 }), { x: 0, y: 0, w: 0.05, h: 1 });
+  const right = normalizeCrop({ x: 0.8, y: 0, w: 1, h: 1 });
+  assert.ok(right.x + right.w <= 1.0001, 'a window cannot run off the edge of the picture');
+});
+
+test('cropped means cropped, with no separate flag to fall out of step', async () => {
+  const { isCropped } = await import('../src/form/doc-model.js');
+  assert.equal(isCropped({ x: 0, y: 0, w: 1, h: 1 }), false);
+  assert.equal(isCropped(undefined), false);
+  assert.equal(isCropped({ x: 0.1, y: 0, w: 0.9, h: 1 }), true);
+  assert.equal(isCropped({ x: 0, y: 0, w: 1, h: 0.5 }), true);
+});
+
+test('an image element carries how it fills its box, and which part of it shows', () => {
+  const el = normalizeElement({ kind: 'image', src: 'u', fit: 'contain', crop: { x: 0.1, y: 0, w: 0.8, h: 1 } }, id);
+  assert.equal(el.fit, 'contain');
+  assert.deepEqual(el.crop, { x: 0.1, y: 0, w: 0.8, h: 1 });
+  // Fill is the default, because a picture placed on a document is nearly always meant to fill
+  // the box somebody just drew for it.
+  assert.equal(normalizeElement({ kind: 'image', src: 'u' }, id).fit, 'cover');
+  assert.equal(normalizeElement({ kind: 'image', src: 'u', fit: 'nonsense' }, id).fit, 'cover');
+});
+
+test('a shape can be filled with a picture, uploaded or read from the record', () => {
+  const uploaded = normalizeElement({ kind: 'shape', shape: 'ellipse', src: 'data:image/png;base64,AA' }, id);
+  assert.equal(uploaded.src, 'data:image/png;base64,AA');
+  const live = normalizeElement({ kind: 'shape', shape: 'rect', from: 'f-photo' }, id);
+  assert.equal(live.from, 'f-photo');
+  // And the colour is still there underneath, so a shape whose picture is missing is a shape.
+  assert.equal(live.style.fill, '#e5e7eb');
+});
+
+// --- the basic geometry --------------------------------------------------------------------------
+//
+// "Add different types of shapes: the polygons 1-10, a circle, a trapezoid -- the basic
+// geometrical shapes."
+//
+// Everything with straight edges is ONE drawing problem: a path through some corners. So each
+// shape names its corners and the three renderers -- the page, the PDF and the exported picture --
+// all walk the same list. A decagon costs the PDF writer nothing a triangle did not already cost.
+
+test('a regular polygon is generated, not tabulated', async () => {
+  const { shapePoints, MIN_SIDES, MAX_SIDES } = await import('../src/form/doc-model.js');
+  assert.equal(MIN_SIDES, 3);
+  assert.equal(MAX_SIDES, 10);
+  for (let sides = MIN_SIDES; sides <= MAX_SIDES; sides += 1) {
+    const points = shapePoints('polygon', sides);
+    assert.equal(points.length, sides, `${sides} sides should give ${sides} corners`);
+    for (const [x, y] of points) {
+      assert.ok(x >= -0.001 && x <= 1.001, 'a corner outside the box would be clipped away');
+      assert.ok(y >= -0.001 && y <= 1.001);
+    }
+  }
+});
+
+test('a triangle points up, because that is how one is drawn', async () => {
+  const { shapePoints } = await import('../src/form/doc-model.js');
+  const [top] = shapePoints('polygon', 3);
+  assert.deepEqual(top.map((n) => Number(n.toFixed(3))), [0.5, 0], 'first corner at the top middle');
+});
+
+test('the shapes that are not polygons say so, and keep their own drawing', async () => {
+  const { shapePoints } = await import('../src/form/doc-model.js');
+  // A rounded box and an ellipse are curves; the PDF has a path of its own for each.
+  assert.equal(shapePoints('rect'), null);
+  assert.equal(shapePoints('ellipse'), null);
+  assert.equal(shapePoints('line'), null);
+  // And the named straight-edged ones are corner lists like any polygon.
+  assert.equal(shapePoints('trapezoid').length, 4);
+  assert.equal(shapePoints('right-triangle').length, 3);
+  assert.equal(shapePoints('star').length, 10, 'five points is ten corners');
+});
+
+test('a trapezoid is narrower at the top, and a right triangle has its right angle', async () => {
+  const { shapePoints } = await import('../src/form/doc-model.js');
+  const trap = shapePoints('trapezoid');
+  const topWidth = trap[1][0] - trap[0][0];
+  const bottomWidth = trap[2][0] - trap[3][0];
+  assert.ok(topWidth < bottomWidth, 'otherwise it is a rectangle');
+  const right = shapePoints('right-triangle');
+  assert.deepEqual(right[0], [0, 0]);
+  assert.deepEqual(right[1], [0, 1], 'two corners share an edge, which is what makes the angle right');
+});
+
+test('a shape carries how many sides it has, clamped to what can be drawn', () => {
+  assert.equal(normalizeElement({ kind: 'shape', shape: 'polygon' }, id).sides, 6);
+  assert.equal(normalizeElement({ kind: 'shape', shape: 'polygon', sides: 99 }, id).sides, 10);
+  assert.equal(normalizeElement({ kind: 'shape', shape: 'polygon', sides: 0 }, id).sides, 3);
+  assert.equal(normalizeElement({ kind: 'shape', shape: 'polygon', sides: 'seven' }, id).sides, 6);
+});
+
+test('a shape nobody recognises falls back to a box rather than drawing nothing', () => {
+  assert.equal(normalizeElement({ kind: 'shape', shape: 'dodecahedron' }, id).shape, 'rect');
+});
+
+test('every kind that can DRAW a picture can be told how to fill its box', () => {
+  // The Fill / Fit / Stretch buttons did nothing on a record field. They were writing the value
+  // and normalising was throwing it straight back away, because only image and shape elements
+  // carried `fit` -- a silent failure of the worst shape, where nothing anywhere said no.
+  for (const raw of [
+    { kind: 'image', src: 'u' },
+    { kind: 'shape', shape: 'rect' },
+    { kind: 'field', from: 'h-photo' },
+  ]) {
+    const el = normalizeElement({ ...raw, id: 'e1' }, id);
+    assert.equal(el.fit, 'cover', `${raw.kind} has no default fit`);
+    assert.deepEqual(el.crop, { x: 0, y: 0, w: 1, h: 1 }, `${raw.kind} has no crop`);
+    const fitted = styleElement({ elements: [el] }, 'e1', { fit: 'contain' }).elements[0];
+    assert.equal(fitted.fit, 'contain', `${raw.kind} lost the fit it was just given`);
+    const cropped = styleElement({ elements: [el] }, 'e1', { crop: { x: 0.1, y: 0, w: 0.8, h: 1 } }).elements[0];
+    assert.equal(cropped.crop.w, 0.8, `${raw.kind} lost the crop it was just given`);
+  }
+});
+
+test('a kind that cannot draw a picture carries neither', () => {
+  // Otherwise every text box on every document grows two properties that mean nothing to it.
+  assert.equal(normalizeElement({ kind: 'text', text: 'x' }, id).fit, undefined);
+  assert.equal(normalizeElement({ kind: 'icon', glyph: 'ti-star' }, id).crop, undefined);
+});
