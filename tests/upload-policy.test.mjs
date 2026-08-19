@@ -55,17 +55,28 @@ test('Layer 2: a MIME type that disagrees with the extension is rejected', async
 });
 
 test('oversize files are rejected', async () => {
-  const file = fakeFile('logo.png', PNG, 'image/png');
-  file.size = 99 * 1024 * 1024;
-  const result = await validateUpload(file, 'image');
-  assert.equal(result.ok, false);
+  // Past the decode guard, where a browser is likelier to die decoding than to produce a
+  // picture. A 99 MB photo is inside it now: it will be re-encoded to a few megabytes.
+  const runaway = fakeFile('logo.png', PNG, 'image/png');
+  runaway.size = 200 * 1024 * 1024;
+  assert.equal((await validateUpload(runaway, 'image')).ok, false);
+  const ordinary = fakeFile('logo.png', PNG, 'image/png');
+  ordinary.size = 99 * 1024 * 1024;
+  assert.equal((await validateUpload(ordinary, 'image')).ok, true);
+  // A document is stored as it arrives, so its cap is a real one and much smaller.
+  const paper = fakeFile('scope.zip', ZIP, 'application/zip');
+  paper.size = 30 * 1024 * 1024;
+  assert.equal((await validateUpload(paper, 'document')).ok, false);
 });
 
-test('workspace icons take a file far past the general image cap, but still not a runaway one', async () => {
+test('a re-encoding policy takes what a storing one will not', async () => {
+  // The icon is drawn to a 192px tile before anything is uploaded, so the source file’s weight
+  // decides nothing. The same is now true of any still photo, which is why `image` agrees.
   const photo = fakeFile('logo.png', PNG, 'image/png');
-  photo.size = 24 * 1024 * 1024; // a phone photo: rejected as 'image', fine as an icon source
-  assert.equal((await validateUpload(photo, 'image')).ok, false);
+  photo.size = 30 * 1024 * 1024;
   assert.equal((await validateUpload(photo, 'workspaceicon')).ok, true);
+  assert.equal((await validateUpload(photo, 'image')).ok, true);
+  assert.equal((await validateUpload(photo, 'document')).ok, false, 'a document is stored as it arrives');
   const runaway = fakeFile('logo.png', PNG, 'image/png');
   runaway.size = 200 * 1024 * 1024;
   assert.equal((await validateUpload(runaway, 'workspaceicon')).ok, false);

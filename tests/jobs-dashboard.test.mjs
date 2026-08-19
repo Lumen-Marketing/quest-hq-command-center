@@ -237,3 +237,35 @@ test('the tile shows production days, not pipeline position', () => {
   assert.match(view, /jobStreak\(job, productionForJob\)/);
   assert.ok(!view.includes('pipelineStageColor'), 'the progress dots were replaced, not doubled up');
 });
+
+test('the Jobs rail lists no stages, because the page already does', () => {
+  // "can you removed this" -- the eight stage rows under Jobs. They were a second copy of the
+  // chips on the Jobs page: same stages, same counts, same action. Calendar and All jobs stay.
+  const fn = main.slice(main.indexOf("function navItemPipeline"), main.indexOf("function plannedNavItem"));
+  assert.ok(fn.includes("const showStages = kind !== 'jobs'"), "the rail still builds job stages");
+  // Emptied at the source rather than branched in the markup, so there is one shape for both.
+  assert.ok(fn.includes("showStages ? pipelineStages(kind, companyId) : []"));
+  assert.ok(fn.includes("showStages ? pipelineStageCounts(kind, companyId) : {}"),
+    "counting every job on every route paint, for rows nobody draws");
+  // The two rows that stay.
+  assert.ok(fn.includes("jobsNavViews(route, companyId)"), "Calendar is gone too");
+  assert.ok(fn.includes("All ${h(navLabel.toLowerCase())}"), "the All row is gone");
+});
+
+test('Deals keeps the stage list it always had', () => {
+  // One function draws both. Jobs is the one that is pinned open and lived in; Deals sits
+  // behind a chevron, so its list is not the same eight rows in the way.
+  const fn = main.slice(main.indexOf("function navItemPipeline"), main.indexOf("function plannedNavItem"));
+  assert.ok(fn.includes("stages.map((stage)"), "the stage rows were deleted outright");
+  assert.ok(fn.includes("kind !== 'jobs'"), "the exclusion is not scoped to jobs");
+});
+
+test('nothing was lost: the same filters are chips on the page', () => {
+  // This is what makes the removal safe rather than a feature being taken away.
+  const toolbar = main.slice(main.indexOf("function pipelineToolbar"), main.indexOf("function pipelineToolbar") + 1400);
+  assert.ok(toolbar.includes("pipelineStages(kind, companyId)"));
+  assert.ok(toolbar.includes("pipelineStageCounts(kind, companyId)"));
+  assert.ok(toolbar.includes('data-action="pipeline-stage"'), "the page chips no longer filter by stage");
+  // Same handler as the rail used, so the behaviour behind them is literally the same code.
+  assert.ok(main.includes("case 'pipeline-stage'") || main.includes("pipeline-stage'"), "the action is gone");
+});

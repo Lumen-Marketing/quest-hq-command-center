@@ -1245,6 +1245,7 @@ export function createCompanyContactsPage(ctx) {
     return `
           <div class="cc-use">
             <div class="cc-use-head">
+              ${use.appIcon ? `<span class="cc-use-ic" style="background:${h(use.appColor || '#6b7280')}"><i class="ti ${h(use.appIcon)}"></i></span>` : ''}
               <b>${h(use.appName)}</b>
               <span class="cc-ws">${h(use.workspaceName)}</span>
               ${facts ? `<em>${facts}</em>` : ''}

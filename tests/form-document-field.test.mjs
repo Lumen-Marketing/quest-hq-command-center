@@ -315,13 +315,95 @@ test('the row click is delegated, and stops the row from also opening', () => {
 });
 
 test('the row opener is lazy too, and hands over what it needs to find the record', () => {
+  // Both ways in share one named context now, so what the row opener gets is what that names.
   const at = MAIN.indexOf('function wbOpenFormRow(');
   assert.notEqual(at, -1);
   const body = MAIN.slice(at, MAIN.indexOf('\n}', at));
-  assert.match(body, /import\('\.\/form\/doc-editor\.js'\)/, 'a page editor must not be in the entry bundle');
-  assert.match(body, /openForRecord\(fieldId, seat, \{/);
+  assert.ok(body.includes('openForRecord(fieldId, seat, wbDocEditorCtx())'));
+  const loader = MAIN.slice(MAIN.indexOf('const wbOpenDoc ='), MAIN.indexOf('function wbOpenFormRow('));
+  assert.ok(loader.includes("import('./form/doc-editor.js')"), 'a page editor must not be in the entry bundle');
+  const shared = MAIN.slice(MAIN.indexOf('const wbDocEditorCtx ='), MAIN.indexOf('const wbOpenDoc ='));
   // wbSave and render, because a row has no form around it to write the change back through.
   ['wbDoc', 'wbSave', 'render', 'can'].forEach((needed) => {
-    assert.ok(body.includes(needed), `${needed} has to reach the module`);
+    assert.ok(shared.includes(needed), `${needed} has to reach the module`);
   });
+});
+
+// --- an image field is placed as a picture --------------------------------------------------------
+
+test('the picture a field is holding is found however the app stored it', async () => {
+  const { fieldImageUrl } = await import('../src/form/host-values.js');
+  const image = { id: 'f-photo', type: 'image', label: 'Roof photo', config: {} };
+  // One object, an array of them, a JSON string of either, or a bare URL -- every shape the file
+  // field has ever written.
+  assert.equal(fieldImageUrl(image, '{"name":"a.png","url":"https://x/a.png?token=1.2.3"}'), 'https://x/a.png?token=1.2.3');
+  assert.equal(fieldImageUrl(image, [{ name: 'a.jpg', url: 'u/a.jpg' }, { url: 'b.png' }]), 'u/a.jpg');
+  assert.equal(fieldImageUrl(image, 'https://x/photo.WEBP'), 'https://x/photo.WEBP');
+  assert.equal(fieldImageUrl(image, 'data:image/png;base64,AA'), 'data:image/png;base64,AA');
+});
+
+test('a signed link is judged on its path, not on the token hanging off it', () => {
+  // Every Supabase URL ends in something like "...&token=eyJ.hbG.ci0", so reading the extension
+  // off the whole string finds ".ci0" and decides nothing is ever a picture.
+  const image = { id: 'f-photo', type: 'image', config: {} };
+  return import('../src/form/host-values.js').then(({ fieldImageUrl }) => {
+    assert.ok(fieldImageUrl(image, 'https://s.co/o/sign/roof.jpeg?token=eyJ.hbG.ci0'));
+    assert.equal(fieldImageUrl(image, 'https://s.co/o/sign/scope.pdf?token=eyJ.hbG.png'), '', 'the token must not decide it either');
+  });
+});
+
+test('only a picture is a picture', async () => {
+  const { fieldImageUrl } = await import('../src/form/host-values.js');
+  // A file field holding a document keeps printing its name -- that is all a page can say about
+  // a spreadsheet -- and a text field holding a URL is text, not an image somebody smuggled in.
+  assert.equal(fieldImageUrl({ type: 'file', config: {} }, '{"name":"scope.pdf","url":"https://x/scope.pdf"}'), '');
+  assert.equal(fieldImageUrl({ type: 'text', config: {} }, 'https://x/a.png'), '');
+  assert.equal(fieldImageUrl({ type: 'image', config: {} }, ''), '');
+  assert.equal(fieldImageUrl(null, 'https://x/a.png'), '');
+  // But a file field that really is holding one draws it.
+  assert.equal(fieldImageUrl({ type: 'file', config: {} }, '{"name":"roof.jpg","url":"https://x/roof.jpg"}'), 'https://x/roof.jpg');
+});
+
+// --- a placed field prints a NAME, never an id ----------------------------------------------------
+
+test('a company contact prints the person, not cc-91dffeeb-0787-49a8-...', async () => {
+  // The id lives in the company's own contact directory, not among the app's records, so the
+  // resolver that walks app.items finds nothing and prints the raw id onto the document.
+  const { plainFieldText } = await import('../src/form/host-values.js');
+  const field = { id: 'f-contact', type: 'company_contact', label: 'Client', config: {} };
+  const helpers = {
+    contactName: (id) => (id === 'cc-91dffeeb' ? 'Eugenio Roman' : ''),
+    recordTitle: (id) => String(id),
+  };
+  assert.equal(plainFieldText(field, 'cc-91dffeeb', helpers), 'Eugenio Roman');
+});
+
+test('a contact nobody can resolve still shows its id, rather than an empty line', () => {
+  // A broken link is worth seeing. A blank line on a proposal is not.
+  return import('../src/form/host-values.js').then(({ plainFieldText }) => {
+    const field = { id: 'f-contact', type: 'company_contact', label: 'Client', config: {} };
+    assert.equal(plainFieldText(field, 'cc-gone', { recordTitle: (id) => String(id) }), 'cc-gone');
+  });
+});
+
+test('the builder hands the contact directory to the resolver, from both ways in', () => {
+  const editor = readFileSync(new URL('../src/form/doc-editor.js', import.meta.url), 'utf8');
+  assert.match(editor, /function contactNamer\(state\)/);
+  assert.match(editor, /state\?\.companyContacts/);
+  // Both entry points: the form's hidden input, and a row or the record page.
+  assert.equal((editor.match(/contactName: contactNamer\(state\)/g) || []).length, 2);
+  // And main.js hands `state` to BOTH ways in, from one named context -- the row path did not
+  // need it before, and two copies of the same list is where the next one gets forgotten.
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.ok(main.includes('const wbDocEditorCtx = () => ({'), 'the shared context is not named');
+  assert.ok(main.includes('state, wbDoc, wbFind, wbSave, render, can, formatDate, memberName, wbItemTitle,'));
+  assert.ok(main.includes('openForRecord(fieldId, seat, wbDocEditorCtx())'), 'the row path must take it');
+  assert.ok(main.includes('...wbDocEditorCtx(),'), 'and so must the form path');
+});
+
+test('a placed field prints the value with no field name in front of it', async () => {
+  const { normalizeElement, elementText } = await import('../src/form/doc-model.js');
+  const el = normalizeElement({ kind: 'field', from: 'f-name' }, () => 'e1');
+  const fields = [{ id: 'f-name', type: 'text', label: 'Name' }];
+  assert.equal(elementText(el, { fields, values: { 'f-name': 'Kim' } }), 'Kim');
 });

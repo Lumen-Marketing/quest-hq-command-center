@@ -107,9 +107,11 @@ export function normalizeElement(input, makeId = (() => `e${Math.random().toStri
   if (kind === 'text') el.text = String(raw.text ?? '');
   if (kind === 'field') {
     el.from = str(raw.from);
-    // The label is drawn from the record's field name, not typed here, so renaming the field
-    // renames it on the document too. Whether it shows at all is a choice.
-    el.withLabel = raw.withLabel !== false;
+    // OFF by default. A placed field prints the VALUE -- "Acme Roofing", not "Client: Acme
+    // Roofing" -- because a document says what it says in its own words, and whoever wanted a
+    // heading has already typed one above the box. The checkbox is still there for the cases
+    // that read better with it, and a document that stored `true` keeps it.
+    el.withLabel = raw.withLabel === true;
     el.fallback = String(raw.fallback ?? '');
   }
   if (kind === 'image') {

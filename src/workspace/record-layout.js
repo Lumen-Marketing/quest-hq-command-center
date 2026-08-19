@@ -27,33 +27,39 @@ export const BLOCK_TYPES = [
   { type: 'meta', label: 'Details', icon: 'ti-info-circle', desc: 'Created and last edited', size: 1, config: false },
   { type: 'note', label: 'Note', icon: 'ti-note', desc: 'A line of text on every record', size: 2, config: true },
   { type: 'collection', label: 'Sub-items', icon: 'ti-list-check', desc: 'Records inside this record — dailies, line items, visits', size: 4, config: true },
+  { type: 'events', label: 'Calls & messages', icon: 'ti-calendar-event', desc: 'Calls and messages scheduled on this record', size: 2, config: false },
   { type: 'quick', label: 'Quick Create', icon: 'ti-bolt', desc: 'Make a spreadsheet, form, file or proposal on this record', size: 2, config: false },
 ];
 
 /**
  * What Quick Create can make.
  *
- * The first four are FIELD TYPES. The App Builder stores a record's values keyed by field id and
- * has no per-record attachment slot, so "attached to this record" can only mean: the app gains a
- * field of that type, and this record's value of it is opened. The field is made once and reused
- * -- pressing Spreadsheet on a second record opens the same column, not a second one -- which is
- * why `name` is a plain noun rather than something per-record.
+ * Nothing here is a field on the record any more. Spreadsheet, Form, Image and File were, and
+ * they were removed on request: each one added a COLUMN TO THE APP the first time it was
+ * pressed, so a spreadsheet made for one job put an empty Spreadsheet box on every other record
+ * in that app for ever. That is what the App Builder's storage allows -- values are keyed by
+ * field id, with no per-record attachment slot -- and it is not what Quick Create is for.
  *
- * The consequence is worth stating rather than discovering: the column exists on every record in
- * the app from then on, blank until used. That is the same thing a Button push already does to
- * the app it pushes into.
+ * What is left makes something ELSEWHERE and points it at this record. A task is a row in
+ * public.tasks, made through the Tasks module's own New-task form, so it arrives with the
+ * assignee, the due date, the notification and the My Work listing every other task has --
+ * rather than a second task writer here that would drift from the first.
  *
- * `proposal` is not a field at all. It is a row in public.proposal_documents, which already has
- * the generic `related_type` / `related_id` pair, so it can point at a record here with nothing
- * added to the schema. Task and Estimate are deliberately absent: public.tasks and public.deals
- * link only to a contact, deal, job or project, so attaching one needs a migration of its own.
+ * `soon` marks an entry that is declared but has nothing behind it yet, so the card does not
+ * draw it. Marked on the entry rather than filtered by the card, because the card is not the
+ * place to remember which half of this list works.
  */
 export const QUICK_CREATE = [
-  { key: 'sheet', field: 'sheet', name: 'Spreadsheet', label: 'Spreadsheet', desc: 'A grid with formulas', icon: 'ti-table', tone: '#0f766e' },
-  { key: 'form', field: 'form', name: 'Form', label: 'Form', desc: 'A document you fill in and print', icon: 'ti-file-text', tone: '#4f46e5' },
-  { key: 'image', field: 'image', name: 'Image', label: 'Image', desc: 'A picture on this record', icon: 'ti-photo', tone: '#0891b2' },
-  { key: 'file', field: 'file', name: 'File', label: 'File', desc: 'Attach a document', icon: 'ti-paperclip', tone: '#6b7280' },
-  { key: 'proposal', module: 'proposal', label: 'Proposal', desc: 'A proposal linked to this record', icon: 'ti-file-description', tone: '#7c3aed' },
+  { key: 'task', module: 'task', label: 'Task', desc: 'Something for someone to do', icon: 'ti-checkbox', tone: '#16a34a' },
+  { key: 'field', module: 'field', label: 'New Field', desc: 'Add a field, and say where it goes', icon: 'ti-plus', tone: '#2563eb' },
+  { key: 'call', module: 'call', label: 'Call', desc: 'Call now, or schedule one', icon: 'ti-phone', tone: '#0891b2' },
+  { key: 'sms', module: 'sms', label: 'SMS', desc: 'Write a message to send later', icon: 'ti-message-2', tone: '#d97706' },
+  // `soon`: declared here, nothing behind it yet, so the card does not draw it. Marked on the
+  // entry rather than filtered out by the card, because the card is not the place to remember
+  // which half of this list works -- an entry added without the flag is drawn, which is the
+  // right default: a tile somebody forgot to show is invisible, and invisible is how Task
+  // spent its first day.
+  { key: 'proposal', module: 'proposal', label: 'Proposal', desc: 'A proposal linked to this record', icon: 'ti-file-description', tone: '#7c3aed', soon: true },
 ];
 
 export const quickEntry = (key) => QUICK_CREATE.find((entry) => entry.key === key) || null;
@@ -182,4 +188,18 @@ export function unplacedFields(app, blocks) {
   if (groups.some((b) => !Array.isArray(b.config?.fieldIds))) return [];
   const shown = new Set(groups.flatMap((b) => b.config.fieldIds || []));
   return (app?.fields || []).filter((f) => !shown.has(f.id));
+}
+
+/**
+ * The layout with one block of `type` on it, added if it was not there.
+ *
+ * Scheduling the first call puts the card on the record, so the thing just saved is visible
+ * without anybody going to Customize to find out where it went. Once it is on the layout it is
+ * an element like any other -- movable, resizable, removable -- and adding it again is a no-op,
+ * so removing it deliberately is not undone by the next save.
+ */
+export function ensureBlock(blocks, type, makeId = nextId) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  if (list.some((block) => block?.type === type)) return { blocks: list, added: false };
+  return { blocks: [...list, normalizeBlock({ type }, makeId)], added: true };
 }

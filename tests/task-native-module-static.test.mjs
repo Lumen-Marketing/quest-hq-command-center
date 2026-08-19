@@ -4,6 +4,9 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const envExample = readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
+// The New/Edit task form moved into its own fetched-on-demand module: it is the body of one
+// modal, and every session that never opens it was carrying it in the entry bundle.
+const taskForm = readFileSync(new URL('../src/tasks/task-form.js', import.meta.url), 'utf8');
 
 function sourceBetween(start, end) {
   const startAt = source.indexOf(start);
@@ -32,8 +35,11 @@ test('native Tasks renders list, board, detail, create, and edit inside Command 
   assert.match(nativePage, /renderTaskTable\(companyId, tasks\)/);
   assert.doesNotMatch(nativePage, /taskmanagement\/app\.html|<iframe/);
   assert.match(source, /function renderTaskRouteModal\(route, companyId\)/);
-  assert.match(source, /renderTaskForm\(companyId, job, null\)/);
-  assert.match(source, /renderTaskForm\(companyId, job, task\)/);
+  assert.match(source, /taskFormModule\.renderTaskForm\(companyId, job, of\)/);
+  assert.match(source, /import\('\.\/tasks\/task-form\.js'\)/);
+  // Both openings still exist; they share one builder now rather than two call sites.
+  assert.match(source, /form\('New task', null\)/);
+  assert.match(source, /form\('Edit task', task\)/);
   assert.match(source, /renderTaskDetail\(companyId, task\)/);
 });
 
@@ -46,7 +52,7 @@ test('task detail and forms expose job, contact, and deal business context', () 
   assert.match(context, /companyPath\('contacts'/);
   assert.match(context, /companyPath\('deals'/);
 
-  const form = sourceBetween('function renderTaskForm(companyId, job, task)', 'function renderFilesPage');
+  const form = taskForm;
   assert.match(form, /selectField\('Job', 'project_id'/);
   assert.match(form, /selectField\('Contact', 'contact_id'/);
   assert.match(form, /selectField\('Quote', 'deal_id'/);

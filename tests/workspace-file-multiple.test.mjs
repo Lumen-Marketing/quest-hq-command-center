@@ -51,11 +51,21 @@ test('empty and junk yield no files rather than throwing', () => {
 
 // ---- the field ------------------------------------------------------------------------------
 
-test('the file field offers a multiple toggle, and it is saved', () => {
-  assert.match(fieldUi, /id="wbFileMulti"/);
-  // Read where every type's config is read, not inside the relationship branch, or it would
-  // never run for a file field.
-  assert.match(main, /if \(t === 'file'\) m\.draft\.config\.multiple = !!checked\('wbFileMulti'\);/);
+test('the file field asks how many, in two named options, and saves the answer', () => {
+  // A switch labelled "Allow multiple files" named what ON meant and left OFF to be inferred.
+  // The question has two answers, and the Display style control above it is already written
+  // that way.
+  assert.match(fieldUi, /id="wbFileMode"/);
+  assert.match(fieldUi, /<option value="single"/);
+  assert.match(fieldUi, /<option value="multiple"/);
+  // Single is what a field with no config says, so an existing field keeps behaving as it did.
+  assert.match(fieldUi, /const multiple = !!fd\.config\.multiple;/);
+  // Read where every type config is read, not inside another type branch, or it would never
+  // run for a file field. And only when the control is on screen: a missing element reads as
+  // undefined, and the old !!checked(...) turned that into false, resetting a field that was
+  // set to multiple whenever the draft was collected before the field UI chunk had arrived.
+  assert.match(main, /const mode = val\('wbFileMode'\);/);
+  assert.match(main, /if \(mode !== undefined\) m\.draft\.config\.multiple = mode === 'multiple';/);
 });
 
 test('the input only accepts several when the field says so', () => {

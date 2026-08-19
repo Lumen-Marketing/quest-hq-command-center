@@ -1199,6 +1199,241 @@ line."
 - Taking Location or another Company Contact field off the card remembers its prior card region. Adding it back restores that region instead of forcing it into Details.
 - Cross-app destination lists now exclude apps stranded in deleted, inactive, or inaccessible operational workspaces. The Apps navigation badge counts the resolved apps visible in the selected workspace rather than the number of builder workspace containers.
 
+## 2026-08-18 Quick Create makes a task for somebody
+
+- "On Quick Create tiles add a Task, so we can add a task for someone to do that will be saved on the task on My Work."
+- **A task is not a field on the record**, unlike the other four tiles. It is a row in `public.tasks`, and the Tasks module already owns making one: the assignee, the due date, `notifyTaskChange` telling them, `runTaskSaveHooks`, and the My Work listing. Pressing Task opens **that** form — the tasks section with `new=1`, which is what raises the New-task modal — pre-filled. A task writer inside Quick Create would have been a second one to keep in step with the first, and the first is the one with the permission check and the notification in it.
+- **It writes nothing to the app.** The other tiles add a field and place it in the layout; a task must not, or every record in the app grows an empty Task box for ever.
+- **What travels is what the form can already hold**: the record's NAME as the title, so the task says what it is about, and the record's contact — when it has one — as the linked contact, which is a real link rather than a sentence. A record with no contact sends none, rather than an empty one that would render as a link to nothing.
+- **What does NOT travel is a pointer back to the record.** `public.tasks` links to a contact, a deal, a job or a project and has no generic pair like the `related_type` / `related_id` that `proposal_documents` carries, so nothing here pretends otherwise. Giving a task a real handle on an App Builder record needs a migration of its own; it is still outstanding, along with Estimate.
+- The seeding is scoped to a NEW task (`task ? null : {…}`), so a stale `title` in the query cannot overwrite the title of a task somebody opened to edit.
+- **And for its first day the tile was never drawn.** The card selected on `entry.field`, which is true of the four tiles that add a column to the app and false of a task — so Task was in the model, handled by `press()`, seeded into the form by `main.js`, covered by seven passing tests, and absent from the card. Every one of those tests exercised the press; none of them asked whether anything on screen could reach it.
+- **What is drawn is now a fact of the model, not a guess by the card.** An entry carries `soon: true` when it is declared but unbuilt (Proposal), and the card draws everything without it. The default is therefore DRAWN: a new tile that nobody flags shows up, which is the failure worth having — a visible button with nothing behind it is reported in a minute, and an invisible one that works is not reported at all.
+- `tests/quick-create-task.test.mjs` presses the tile, reads where it lands, and now also checks it is on the card — ten cases, **confirmed by mutation**: sending `contact_id` unconditionally fails the no-contact case, and putting the `entry.field` filter back fails the paint case. One test derives both sides of the invariant — the modules `press()` actually handles, read out of `press()`, against the flags in the model — so a tile that works and is not drawn fails, and so does a tile that is drawn and does nothing.
+- The assignee is not asked for here. The Tasks form asks, from `companyTaskAssignees(companyId)`, and that field is what decides whose My Work it lands in.
+- **It opens on the record now, not on another page.** "when creating a task in quick create it will open a modal to fill the task, then it will passed to My task so it is recorded there." Pressing Task raises `renderRecordTaskModal` over the record — title (pre-filled with the record's name), Assign to, Due date — and the reader keeps their page, their scroll and their place. The same modal shape as **New task from activity**, for the same reason: three fields is a form, not a page.
+- **It is still not a second task model.** The write is `wbCreateTaskFromPost`, the shared one the workspace feed and the activity modal use: `tasks.manage` checked, the creator stamped, the single `normalizeTask`/`taskPayload` shape ADR-0001 requires, the insert into `public.tasks`, and `notifyTaskChange` telling the assignee. That is what puts it in My Tasks — nothing in Quick Create knows how a task is stored.
+- The writer gained an optional `contactId`, so the record's contact rides across as a real link. Sent only when the record has one; `blankTask` already supplies `''`, and writing an empty string over it would be the same value with a worse name.
+- Assign to is `wbMembers` — this company's people — and defaults to **Me**, which is the common case for a note somebody makes while reading a record. That field is what decides whose My Tasks the row lands in.
+- **The earlier route into the Tasks page is gone, and so is the fork edit that served it.** The previous pass had forwarded the record title across the iframe boundary in four hops (host URL → `config.js` → `AppController` → `NewTaskPageView`) because the tile used to navigate. Nothing navigates now, so those hops were dead code inside the vendored app; they were reverted and `taskmanagement/` is byte-for-byte untouched again, which is what ADR-0001 asks for. `tests/task-prefill-across-the-frame.test.mjs` went with them.
+- `tests/quick-create-task.test.mjs` presses the tile and reads what it opened — ten cases, **confirmed by mutation**: navigating away instead of opening the modal, dropping the contact on the way to the writer, writing a task row directly instead of through the shared writer, and taking the assignee select off the modal each fail their own case.
+- **Still outstanding**: there is no column on `public.tasks` for an App Builder record, so the task carries the record's name as text and its contact as a link, but cannot link back to the record itself. That needs a migration.
+## 2026-08-18 In flight is read by its icons
+
+- "Can you add the icon of the apps here? so for easy to read." In flight lists every app that references the contact, and three or four of them is a column of names in identical type — the app is the thing being scanned for.
+- **The icon is carried by the MODEL**, not fetched again by the panel. `contactUsage` already answers "which app is this"; `appIcon` and `appColor` join `appName` there, so anything else listing connected apps gets them without a second lookup that could disagree.
+- **Both are validated where they are read, not where they are drawn.** The icon goes straight into `class="ti ${…}"` and the colour into a `style` attribute, so a value that is not a Tabler name or a hex colour is dropped in the model rather than escaped at the last moment. A test puts `ti-x" onload="alert(1)` through it, and a mutation that passes the icon through unchecked fails that test.
+- **Drawn only when the app HAS an icon.** A default would be this panel claiming a mark the app does not have; a colourless app still gets a chip, in grey, because the shape is what makes the row scannable.
+- Sized to the line it sits on (20px) rather than to the record page's larger tile: here it is a label, not a header.
+
+## 2026-08-19 The Jobs rail stops repeating the Jobs page
+
+- "can you removed this" — the eight pipeline stage rows under Production > Jobs (Unscheduled through On hold), each with its dot and its count.
+- **They were a second copy of a control that already exists.** `pipelineToolbar` renders the same stages as chips on the Jobs page itself: same list, same counts, same `data-action="pipeline-stage"` handler. The rail was eight rows deep and mostly zeros, in the section people live in, and pressing one did exactly what the chip does. Nothing was taken away by removing them.
+- `navItemPipeline` draws both Jobs and Deals. Only Jobs is excluded — it is the one pinned open (`alwaysOpen`), so its list is permanently in the way, while Deals sits behind a chevron. **Calendar and All jobs stay.**
+- **Emptied at the source, not branched in the markup**: `showStages` decides whether `stages`/`counts` are fetched at all, and the template maps over an empty list. One shape for both kinds instead of two, and `pipelineStageCounts` — which walks every job in the company — no longer runs on a paint that happens on every route.
+- Guarded in `tests/jobs-dashboard.test.mjs`, **confirmed by mutation**: turning `showStages` back on fails, and deleting the stage rows outright (which would take them from Deals as well) fails the test that says Deals keeps its list.
+
+## 2026-08-18 An Image field can hold several photos
+
+- "On the App Builder fields, allow field Image to upload multiple photos."
+- **The machinery already existed.** The File field has had `config.multiple` for a while, and the uploader that mounts both reads one attribute on the zone (`data-wb-file-multi`) to decide list-or-single. So this is the Image field joining what is there rather than a second gallery: the toggle, `multiple` on the input, and the list the uploader paints into.
+- **Three places still assumed exactly one photo**, and those were the work:
+  - The config collector read the toggle only `if (t === 'file')`, so on an image it painted, flipped, and was forgotten on save.
+  - The list row is an icon plus a filename — fine for a contract, wrong for a photograph. An image row is the picture itself; eight named rows are harder to read than the one picture they replaced, which is the opposite of the point.
+  - **The read-only cell used `wbFileValue`, which reads ONE.** A field switched to multiple would have rendered the first photo and looked like the rest never uploaded. It reads `wbFileValues` now, and a mutation back to the single reader fails a test.
+- **A single image is still a circular avatar**; a gallery is squares, because a row of circles crops faces and corners off pictures that were chosen for what is in them. In a table cell several photos overlap, so eight of them still read as one value rather than pushing every other column off the row.
+- **Turning it off keeps what is already attached.** The uploader stores one file as an object and several as an array, so switching back only stops new ones being added — it does not rewrite the record.
+
+## 2026-08-19 A file field asks how many, in words
+
+- "in the app builder fields, lets Update the fields, so to set it up it has 2 option. single file upload, Or the Multiple file upload."
+- **The capability was already there and had been for a while**: `config.multiple`, the `data-wb-file-multi` zone, `wbFileValues` reading both the single-object and array shapes, per-file removal, the multi-file cell. What was missing was the way it reads in setup — a switch labelled "Allow multiple files", which names what ON means and leaves OFF to be inferred.
+- Now two named options: **Single — one file on this field** / **Multiple — several files on this field**, as a `<select>`. That is the shape the **Display style** control directly above it in the same panel already uses, so the panel reads one way rather than two. An Image field says photo/photos.
+- **Fixing the wording turned up a real bug in the save.** `m.draft.config.multiple = !!checked('wbFileMulti')` read a missing element as `undefined` and stored `false` — so collecting the draft while the field-config chunk had not arrived silently reset a field that was set to multiple. The read now writes only when the control is actually on screen.
+- Nothing changes for existing fields: no `config.multiple` still means single, and switching back to single keeps every file already attached — the uploader stores one file as one object and several as an array, and only stops new ones being added.
+- Guarded in `tests/workspace-file-multiple.test.mjs` and `tests/image-field-multiple.test.mjs`, **confirmed by mutation**: collapsing the two options to one, dropping the save, putting the missing-control bug back, and taking `data-wb-file-multi` off the zone each fail their own case.
+
+## 2026-08-18 Quick Create is rebuilt around what does not grow the app
+
+- "Remove Spreadsheet, Form, Image and File. The new Quick Create is Task, New Field, Call and SMS."
+- **The four field tiles are gone.** Each of them added a COLUMN TO THE APP the first time it was pressed, so a spreadsheet made for one job put an empty Spreadsheet box on every other record in that app for ever. That is what the App Builder's storage allows — values keyed by field id, no per-record attachment slot — and it is not what Quick Create is for. `quickCreateField` and `placeFieldInLayout` are kept and still tested, because **New Field** is the tile that replaces them and finding-or-making a field is what it will do; their tests were repointed at the helper rather than at a tile that has gone.
+- **Paid for with an extraction, as the budget file asks.** `renderTaskForm` — 2.9 KB, the body of one modal, raised from the Tasks section and from Quick Create — moved into `src/tasks/task-form.js`. Entry headroom went from **−9 bytes to +185**, which is the first honest headroom since the image field landed. Added to FACTORY_MODULES, so the ctx-key check covers it.
+- **`20260818090000_wb_record_events.sql`** is the home for a scheduled call or SMS. Not the record document: that is one row per company holding every app, so moving one reminder would rewrite the whole thing, and nothing outside a signed-in browser tab could read it — a reminder only a tab can see is not a reminder. Not the workspace activity log either: that records what HAS happened, and a future date sorts into it wrongly. The number is stored as scheduled rather than looked up later, because the record's phone field can change and a reminder must ring the number the person meant.
+- **SMS will not have a Send button.** The brain already says it: contact SMS is fail-closed, and the workspace routing contract is not implemented, so production stays disabled even with the tables. Building Send now ships a button that does nothing on questbase.io. The tile gets phone-field detection, the picker for a record with several numbers, the message box and Schedule-for-later; Send waits for the backend.
+- **Call Now needs nothing new.** A phone field already refuses to hand the browser a bare `tel:` link — it raises its own confirmation and logs the call on the record before dialling — and Quick Create reuses that.
+- Still to build: the New Field, Call and SMS tiles themselves, and the activity card that reads `wb_record_events` as a Customize-able record-layout block. **The migration is written but NOT applied.** *(Both done on 2026-08-19 — see below. The migration is applied.)*
+
+## 2026-08-19 The three Quick Create dialogs, and the task tile that was already right
+
+"Task opens a modal to create a quick task that is saved in Tasks. In the call, call now or call
+for later or follow-up with date and time; if multiple phone fields, it will just select one. Same
+with SMS: create a title, select one phone or all of them, and it can be set for later. New Field
+opens a modal to select the field, add the label, then select where to insert — before (field) or
+after (field)."
+
+- **Three dialogs, one shell.** New Field, Call and SMS all need something typed before anything
+  can happen, so all three open the same modal over the record. State lives on `state.wbQuick`
+  rather than in the DOM: the record page redraws for reasons of its own — a save, a toast, a
+  background sync — and a half-written message has to survive that.
+- **Task was already built, and building it again was the mistake.** The tile briefly grew its own
+  dialog and its own writer, calling `saveTask` with a detached form. It was deleted the same day.
+  `openRecordTaskModal` → `renderRecordTaskModal` → `wbCreateTaskFromPost` already raises a modal
+  ON the record and writes through the one shared task path: `tasks.manage` checked, the creator
+  stamped, the contact linked, `notifyTaskChange` telling the assignee. A second writer missing any
+  of those is a task nobody hears about, which is worse than no task. `press()` calls
+  `ctx.openRecordTask` and stops there.
+- **New Field offers only the types it can finish.** `calculation` needs a formula, `rollup` and
+  `relationship` need another app to point at, `button` needs a destination, and a sourced
+  `progress` needs a checklist to fill from. None of those can be asked for here, and a field that
+  renders but can never hold a value looks configured and is not — so they are not offered, and a
+  choice field with no options is refused outright rather than shipped as an empty dropdown on
+  every record for ever. Options are one per line and their colours are assigned: picking eight of
+  them is not what somebody opening this dialog came to do.
+- **One number picker, not a control per number.** A record with a mobile and an office line is
+  asking WHICH, not asking for two ways to press. With one number there is nothing to choose, so it
+  is stated. **All numbers** is offered for a message and never for a call — you cannot ring two at
+  once — and a message to all of them writes ONE ROW PER NUMBER, so whatever sends them gets a list
+  of messages rather than a field to parse.
+- **Call now reuses `data-wb-call`.** That is the record page's existing confirm-then-log-then-dial
+  path; a second dialler would skip the logging. It is bound by the pass that runs after every
+  workspace paint, and a test now pins both the selector and that gate — "they drew fine and did
+  nothing" is a failure this page has had before.
+- **A scheduled call is a note of when, not an alarm**, and the dialog says so. There is no reminder
+  job yet, so promising a ring would be a lie told by a placeholder.
+- `20260818090000_wb_record_events.sql` **is applied.** Rows are written straight from the dialog,
+  and the record layout gains a **Calls & messages** block the first time one is scheduled, so what
+  was just saved is visible on the page that saved it.
+
+## 2026-08-19 An image field on a document is a picture, not a filename
+
+"When the user wants to use the image field on the form builder, do not import or display it as
+text, make it imported as an image."
+
+- `plainFieldText` printed `roof.jpg` for an Image field. That is the right answer for a list of
+  attachments and the wrong one for the field somebody drags onto a proposal to show the house on.
+  A new pure `fieldImageUrl(field, raw)` in `host-values.js` resolves the picture instead, through
+  every shape the file field has ever written: an object, an array of them, a JSON string of
+  either, or a bare URL.
+- **A signed link is judged on its path.** Every Supabase URL ends in something like
+  `...&token=eyJ.hbG.ci0`, so reading the extension off the whole string finds `.ci0` and decides
+  nothing is ever a picture. The query and the fragment are cut first.
+- **An Image field is a picture slot even when empty** — it ghosts as one so a proposal can be laid
+  out against a record that has nothing on it yet. A **File** field is not: it usually holds a
+  signed scope or a workbook, and only draws as a picture when what it is holding actually is one.
+  A PDF on a file field still prints its name, which is all a page can say about a document.
+- Drawn as a picture in all three renderers from one function: the page, the PDF and the exported
+  PNG. The PDF took no new branch — `drawItem` keys on `kind`, so the field is handed over AS an
+  image element and the writer does the rest.
+- **CORS, which is what would have broken the export.** A record's image field holds a link to the
+  bucket, not the bytes; reading a cross-origin picture back off a canvas taints it, and the taint
+  throws at `toDataURL`/`toBlob`. Both loaders now ask for CORS up front, and both read-backs are
+  wrapped — one picture that will not convert must not take the whole PDF with it.
+- Placed picture-shaped (60x45mm) rather than in the 70x8 strip a line of text gets, and the
+  inspector drops Size/Bold/Colour over an image, which were three controls that did nothing.
+
+### Save, on the same pass
+
+- **The name typed in the builder was being thrown away.** The document has a name box in the
+  builder and another on the field panel behind it, and the panel's is what gets stored — so
+  `wbCollectModalDraft` collected straight over a rename made in the box that is actually on
+  screen. The builder's wins now, by being written into the panel's box before it is read back.
+- **Save says so on the button**, not only in the status line at the foot of a full-screen modal,
+  which is easy to press Save and never see -- and which sent people to the Versions panel to save
+  it "properly".
+
+## 2026-08-19 A photo is made to fit instead of being refused
+
+- "lets change the 5mb limit on uploading images and files, lets make it max is 100mb, so if exceeds 100mb it will compress to make it below 100mb."
+- **The cap moved from 5 MB to 100 MB, and stopped being a storage limit.** A phone camera produces 8-15 MB a shot, so 5 MB was refusing ordinary photos of a roof. A still photo is now re-encoded before anything is uploaded — `src/media/shrink-image.js`, fetched on demand — so what reaches the bucket is a few megabytes whatever the camera did. `image`, `workspaceicon` and `avatarimage` share one `DECODE_GUARD` constant, because all three re-encode and the number means the same thing in each: past this the browser is likelier to die decoding than to produce a picture.
+- **A photo is judged as a photo whatever field it was dropped on.** A File field used the `document` policy, so a 30 MB photo attached to one was refused for being a document.
+- The shrinker scales the longest edge to 2560px FIRST — pixels are what the file is made of, and dropping quality on an 8000px photo to hit a budget gives a large soft image where a smaller sharp one was wanted — then walks six WebP/JPEG rungs and stops at the first that fits 8 MB. A file already inside the budget is returned as the same object: re-encoding something small enough spends quality for nothing and renames a file nobody asked to rename.
+- **A GIF is never re-encoded**: drawing an animated one to a canvas returns its first frame, so it stays bound by the cap rather than being silently flattened.
+- **Only still photos can be made to fit, and that is the honest limit of the request.** A video cannot be transcoded in a browser without shipping a codec; a PDF, an Office file or a zip is already compressed and re-zipping it saves nothing. Those stand or fall on their cap.
+- **The server is the smaller number, and it is 25 MB.** Live `storage.buckets` show `quest-job-files`, `quest-message-attachments`, `quest-client-portal-documents` and `quest-finance-attachments` at **26214400** (not the 52428800 the original migration set), `quest-form-response-files` at 15 MB and `avatars` at 2 MB. Nothing over 25 MB reaches storage today whatever the client allows — which the shrinker makes moot for photos and leaves standing for documents. **Raising it needs a migration and a check that the project plan allows the larger body.**
+- **No bucket allows a video MIME type at all** — every one of them lists pdf/png/jpeg/webp/gif/txt/csv/office/zip. The `media` upload policy accepts mp4, webm, mov and m4v at 50 MB, so a video attached to a comment passes every client check and is refused by storage. Found while reading the live bucket rows; not fixed here.
+- `tests/shrink-image.test.mjs` runs the ladder under a stub canvas rather than reading it — 13 cases, **confirmed by mutation**: removing the early-exit rung, dropping the downscale, removing the already-small short-circuit, treating a GIF as a still, importing the module statically, and putting the 5 MB cap back each fail their own case.
+- **The entry bundle is at 2 bytes of headroom** (364,542 of 364,544). The shrinker itself is a separate chunk; what costs is the few lines in `main.js` that reach it. The next change of any size needs a slice extracted first — this is the point the budget comments have been warning about.
+
+## 2026-08-18 Quick Create: Task, New Field, Call, SMS
+
+- All four tiles are on the card and all four do something. The card draws every entry the model does not mark `soon`, so declaring one is what makes it appear.
+- **New Field** adds a field to the app and says where it goes: a type from the palette in the palette's own order, a name, and `Before <field>` / `After <field>` / `At the end` built from the app's own field order. `insertFieldAt` is pure and tested, including the case that goes wrong quietly — a position naming a field that has since been deleted. `findIndex` returns −1 and `splice(-1)` inserts BEFORE the last item, so the careless version drops the new field second-to-last instead of at the end; a mutation removing that guard fails two tests. The field is placed in the record layout as well as made, or it would be invisible on the page with nothing to say why.
+- **Call** is two halves. *Call now* renders one button per number the record actually holds, each carrying `data-wb-call` — the record page's existing confirm-then-log-then-dial path, reused rather than a second dialler that would skip the logging. *Later* takes a title, a date and time, and notes.
+- **SMS** finds the phone fields that have a number in them, offers a dropdown only when there is more than one, and takes a message and a time. **There is no Send button**, and a test refuses one: contact SMS is fail-closed and the workspace routing contract is not implemented, so Send would do nothing in production.
+- Both write to `wb_record_events`. **The migration is not applied yet**, so a scheduled call or message currently fails — and it fails LOUDLY: the database's own message is put in the dialog rather than swallowed, because a silent failure here looks exactly like a save that worked. A test pins that.
+- A hidden phone field is not offered, and a phone field this record left blank is not a number to ring.
+- Entry headroom is **2 bytes**. The `renderTaskForm` extraction bought 194 and the dialogs' ctx keys spent them. Still under the ceiling rather than on the tolerance, but the next change needs another extraction.
+- Not built yet: the activity card that reads `wb_record_events` back onto the record as a Customize-able block.
+
+## 2026-08-19 A Form field can start from a template instead of a blank page
+
+"On the setup of form field, I can set up a default form that they will use when they use this
+field, or start from blank."
+
+- `src/form/doc-templates.js` (pure, 13 tests): **Proposal, Invoice, Work order, Letter**. A
+  template is not a special kind of document -- it BUILDS an ordinary one, which is then dragged
+  around and rewritten like any other. Nothing is locked, and Undo takes a template back.
+- **The slots fill themselves in from the app.** A template cannot know an app's field ids, so it
+  says what it WANTS -- a client, a date, a total -- and the app's own fields are matched at the
+  moment it is used, three rules deep: a label match wins (an app with four text fields has
+  exactly one called "Client"); then type priority in the template's order, not the order the app
+  declared its fields in (an address wants a Location field before any old text box); and never a
+  field already used, because the same words printed twice reads as a broken template. An app
+  with nothing to bind still gets the whole layout, in words -- which is what makes these safe to
+  offer on any app at all.
+- **Where it is offered, and why not on the panel.** The picker is in the builder's rail: up front
+  while the page is empty, behind a toggle once there is something to replace. The setup panel
+  names the four templates under its button and sends you there. That is not the shape it would
+  have had with room to spare -- a picker on the panel itself needs a click handler in main.js,
+  and the entry bundle is at **0 bytes** of headroom, so this had to land entirely in the lazy
+  chunk. The builder's own rail was the only place it could go without a raise.
+- The blank page is deliberately not a button: it is what is already on screen.
+
+## 2026-08-18 Scheduled calls and messages are live, and show on the record
+
+- **`wb_record_events` is applied** to rqundirizvojpzhljtdn, so Call and SMS actually save. Verified rollback-only and left no rows: `anon` cannot read it, a `kind` outside call/sms is refused, and a row cannot claim a `completed_at` while it is still `scheduled`.
+- **A "Calls & messages" card** reads them back onto the record — a block type like any other, so Customize can move, resize or remove it. It is added to the layout the first time something is scheduled, so what was just saved is visible without going to Customize to find out where it went; adding it again is a no-op, and a card taken off deliberately is not put back by the next save.
+- **The rows are cached per record, not per render.** `undefined` means never asked and an array — even an empty one — means the answer is in, so a record with nothing scheduled does not re-fetch on every keystroke in the field beside it. A save drops that record's cache and only that record's, so the new row appears without reloading anything else.
+- A failed read caches empty rather than retrying for ever: the card says nothing is there, which is wrong but quiet, and the next Quick Create refreshes it.
+- **`ti-phone-calling` is not in the generated icon subset**, and the subset test catches exactly that — an icon referenced in source but absent from the font renders as a blank square. Swapped for `ti-calendar-event`, which is in it, rather than regenerating five font files for one glyph.
+- `WB_FIELD_ORDER` came back out of the record-page ctx: the fallback already written in quick-create.js is the `WB_FIELD_TYPES` declaration order, which is that same order in practice, so the key bought nothing and the entry bundle had no room for it. Headroom is **11 bytes**, under the ceiling rather than on the tolerance.
+
+## 2026-08-19 A placed field printed an id, and printed its own name back at you
+
+Two reports on the same element: "why does it display an ID and not the name of the field", and
+"when I'm importing data like Name, do not include the label on the data, like Name : data, just
+the data."
+
+- **`cc-91dffeeb-0787-49a8-...` on a proposal.** A `company_contact` value is an id from the
+  COMPANY'S contact directory, and the document's `recordTitle` resolver only ever searched the
+  host app's own items -- so the lookup missed and the raw id was printed. `plainFieldText` now
+  takes a `contactName` helper and tries it first, falling back to `recordTitle` and then to the
+  id itself, because a broken link is worth seeing and a blank line on a proposal is not.
+- The directory is company-wide and is not part of the workspace document, so `contactNamer` reads
+  it off `state.companyContacts`. `state` was already handed to the form path; the row and
+  record-page path did not have it, and now does.
+- **`withLabel` defaults to OFF.** A placed field prints "Acme Roofing", not "Client: Acme
+  Roofing": a document says what it says in its own words, and whoever wanted a heading has
+  already typed one above the box. The checkbox stays for the cases that read better with it, and
+  a document that had explicitly stored `true` keeps its labels -- the flip changes what is
+  placed next, never what somebody already laid out. Four assertions in `doc-model.test.mjs` were
+  re-pointed to test the default from the other direction rather than deleted.
+- **Paid for.** Handing `state` to the second entry point put the entry chunk 11 bytes over the
+  real ceiling -- passing only on the 64-byte gzip-environment tolerance, which is there to
+  absorb a zlib version difference and not to be spent as budget. The two openers named their
+  contexts twice; they share one `wbDocEditorCtx()` now, which is a simplification worth having
+  anyway and leaves **11 bytes** of honest headroom.
+
+## 2026-08-18 New Field stops making fields that cannot work
+
+- The tile made a field of any of the thirty types, with no config. Two ways that arrived broken, and both look configured:
+- **Five types are no longer offered.** `calculation` needs a formula, `rollup` and `relationship` need another app to point at, `button` needs a destination in a workspace this dialog has no picker for, and a sourced `progress` needs a checklist to fill from. Made from here they render — a warning triangle, an empty picker — and can never hold a value. They are still made the way they always were, in the app's own field editor, which can ask for those things.
+- **A choice field is refused without options.** A category with no options renders an empty dropdown on every record in the app for ever; the app-bundle test has said so since those bundles were written. Options are typed one per line, trimmed, de-duplicated case-insensitively — two options with the same label give two things nothing can tell apart, and a formula or button naming one by label would silently take the first — and coloured from a fixed palette by position, because picking eight colours is not what somebody opening this dialog came to do.
+- Money asks for a currency (defaulting to `$` rather than blank), a number for an optional unit, a checklist for its steps. Everything else asks for nothing, so the dialog stays two fields for the common case.
+- **Changing the type redraws the dialog and keeps the name already typed.** What a field needs depends on what it is, and asking for all of it at once is a form nobody reads.
+- Confirmed by mutation: removing the options guard fails two tests. Entry headroom **17 bytes**.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

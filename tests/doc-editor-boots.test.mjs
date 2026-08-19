@@ -51,6 +51,8 @@ const HOST_FIELDS = [
   { id: 'h-client', type: 'text', label: 'Client', config: {} },
   { id: 'h-total', type: 'money', label: 'Contract value', config: {} },
   { id: 'h-btn', type: 'button', label: 'Send', config: {} },
+  { id: 'h-photo', type: 'image', label: 'Roof photo', config: {} },
+  { id: 'h-doc', type: 'file', label: 'Signed scope', config: {} },
 ];
 
 /**
@@ -318,10 +320,12 @@ test('the PDF button produces a PDF, through the real writer', async () => {
   assert.ok(text.includes('(Roof Replacement Proposal) Tj'));
   // The money field went in formatted the way the record shows it -- not 42500 -- and under the
   // record's own name for it, so renaming the field renames it on the proposal.
+  // The VALUE, with no "Contract value:" in front of it -- a placed field prints what it holds.
   assert.ok(
-    text.includes('(Contract value: $42,500.00) Tj'),
-    `expected a labelled, formatted total: ${text.match(/\([^)]*\) Tj/g)}`,
+    text.includes('($42,500.00) Tj'),
+    `expected the formatted total on its own: ${text.match(/\([^)]*\) Tj/g)}`,
   );
+  assert.ok(!text.includes('(Contract value:'), 'the field name is not printed beside its value');
 });
 
 test('an uploaded PDF is handed over untouched rather than redrawn', async () => {
@@ -819,4 +823,93 @@ test('a row pointing at a record that is gone says so instead of throwing at the
     }),
     /no longer here/,
   );
+});
+
+// --- an image field is a PICTURE, not its filename ------------------------------------------------
+//
+// "When the user wants to use the image field on the form builder, do not import or display it as
+// text, make it imported as an image."
+//
+// plainFieldText prints "roof.jpg" for an image field, which is the right answer for a list of
+// attachments and the wrong one for the field somebody dragged onto a proposal to show the house.
+
+const PHOTO = 'https://files.test/roof.jpg?token=aa.bb.cc';
+
+test('a field holding a picture draws the picture, not its name', async () => {
+  const editor = await open({
+    hostValues: { 'h-photo': JSON.stringify({ name: 'roof.jpg', url: PHOTO }) },
+    doc: { elements: [{ id: 'e1', kind: 'field', from: 'h-photo', x: 10, y: 10, w: 60, h: 45 }] },
+  });
+  const page = editor.named['[data-fd-page]'].innerHTML;
+  assert.match(page, /<img class="fd-img"/, 'it was drawn as words');
+  assert.ok(page.includes(`src="${PHOTO}"`), 'the picture is not the one the record holds');
+  assert.ok(!page.includes('roof.jpg<'), 'and the filename is not printed beside it');
+});
+
+test('a picture the record has not got yet still shows the field it is waiting for', async () => {
+  // Otherwise laying out a proposal against an empty record leaves nothing to drag.
+  const editor = await open({
+    hostValues: {},
+    doc: { elements: [{ id: 'e1', kind: 'field', from: 'h-photo', x: 10, y: 10, w: 60, h: 45 }] },
+  });
+  const page = editor.named['[data-fd-page]'].innerHTML;
+  assert.match(page, /Roof photo/);
+  assert.match(page, /fd-ghost/, 'ghosted, because the printed document shows nothing there');
+  assert.ok(!page.includes('<img'), 'and no broken picture');
+});
+
+test('a file field holding a document is still words — a PDF is not a picture', async () => {
+  const editor = await open({
+    hostValues: { 'h-doc': JSON.stringify({ name: 'Signed scope.pdf', url: 'https://files.test/s.pdf' }) },
+    doc: { elements: [{ id: 'e1', kind: 'field', from: 'h-doc', x: 10, y: 10, w: 70, h: 8 }] },
+  });
+  const page = editor.named['[data-fd-page]'].innerHTML;
+  assert.match(page, /Signed scope\.pdf/, 'a document prints as its name, which is all a page can say');
+  assert.ok(!page.includes('<img'));
+});
+
+test('placing an image field gives it a picture-shaped box, not a line of text', async () => {
+  // Dropped into the 70x8 strip a line of text gets, a photo arrives as a letterbox slit.
+  const editor = await open();
+  await editor.fire('change', '[data-fd-add-field]', {}, {
+    target: {
+      matches: (want) => want === '[data-fd-add-field]', closest: () => null, value: 'h-photo', dataset: {},
+    },
+  });
+  const el = editor.doc().elements[0];
+  assert.equal(el.kind, 'field');
+  assert.equal(el.from, 'h-photo');
+  assert.ok(el.h >= 40, `expected a tall box, got h=${el.h}`);
+  assert.ok(el.w >= 40 && el.h > el.w / 2, 'and something you could recognise a photo in');
+});
+
+test('the inspector offers no typography over a picture', async () => {
+  const editor = await open({
+    hostValues: { 'h-photo': JSON.stringify({ name: 'roof.jpg', url: PHOTO }) },
+    doc: { elements: [{ id: 'e1', kind: 'field', from: 'h-photo', x: 10, y: 10, w: 60, h: 45 }] },
+  });
+  await editor.fire('pointerdown', '[data-fd-el]', { fdEl: 'e1' });
+  const side = editor.named['[data-fd-side]'].innerHTML;
+  assert.ok(!side.includes('data-fd-style="size"'), 'a font size over an image does nothing');
+  assert.ok(!side.includes('data-fd-toggle="bold"'));
+  // But which field it reads, and where it sits, still apply.
+  assert.match(side, /data-fd-from/);
+  assert.match(side, /Position/);
+});
+
+test('the PDF prints the photo as a photo, and never its filename as a line of text', async () => {
+  const editor = await open({
+    hostValues: { 'h-photo': JSON.stringify({ name: 'roof.jpg', url: PHOTO }), 'h-client': 'Acme Roofing' },
+    doc: {
+      elements: [
+        { id: 'e1', kind: 'field', from: 'h-photo', x: 14, y: 14, w: 80, h: 60 },
+        { id: 'e2', kind: 'field', from: 'h-client', x: 14, y: 80, w: 80, h: 8 },
+      ],
+    },
+  });
+  await editor.fire('click', '[data-fd-download]', { fdDownload: 'pdf' });
+  const text = Buffer.from(new Uint8Array(await editor.blobs.at(-1).arrayBuffer())).toString('latin1');
+  assert.ok(!text.includes('roof.jpg'), 'the filename must not be drawn on the page');
+  // The rest of the document is unaffected -- a text field still prints.
+  assert.ok(text.includes('(Acme Roofing) Tj'), `expected the client line: ${text.match(/\([^)]*\) Tj/g)}`);
 });

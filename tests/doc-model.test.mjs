@@ -184,29 +184,38 @@ const HOST = [
   { id: 'h-total', label: 'Total', type: 'money' },
 ];
 
-test('a field element reads the record live and keeps no copy', () => {
+test('a field element prints the VALUE, and keeps no copy of it', () => {
+  // "When I'm importing data like Name, do not include the label on the data, like Name : data.
+  // Just the data." A document says what it says in its own words, and whoever wanted a heading
+  // has already typed one above the box.
   const el = normalizeElement({ kind: 'field', from: 'h-name' }, id);
-  assert.equal(elementText(el, { fields: HOST, values: { 'h-name': 'Kim' } }), 'Client: Kim');
-  assert.equal(elementText(el, { fields: HOST, values: { 'h-name': 'Renamed Ltd' } }), 'Client: Renamed Ltd');
+  assert.equal(el.withLabel, false, 'the label is opt-IN');
+  assert.equal(elementText(el, { fields: HOST, values: { 'h-name': 'Kim' } }), 'Kim');
+  assert.equal(elementText(el, { fields: HOST, values: { 'h-name': 'Renamed Ltd' } }), 'Renamed Ltd');
   assert.ok(!('text' in el), 'a field element stores no text of its own');
 });
 
+test('a document that already asked for the label keeps it', () => {
+  // The default flipped; documents laid out before it did must not silently change what they
+  // print, so an element that stored `true` still prints the label.
+  const el = normalizeElement({ kind: 'field', from: 'h-name', withLabel: true }, id);
+  assert.equal(elementText(el, { fields: HOST, values: { 'h-name': 'Kim' } }), 'Client: Kim');
+});
+
 test('the label comes off the record, so renaming the field renames it on the document', () => {
-  const el = normalizeElement({ kind: 'field', from: 'h-total' }, id);
+  const el = normalizeElement({ kind: 'field', from: 'h-total', withLabel: true }, id);
   const renamed = [{ id: 'h-total', label: 'Contract value', type: 'money' }];
   assert.equal(elementText(el, { fields: renamed, values: { 'h-total': '$1,000' } }), 'Contract value: $1,000');
 });
 
-test('the label can be turned off, for a document that names things its own way', () => {
-  const el = normalizeElement({ kind: 'field', from: 'h-name', withLabel: false }, id);
-  assert.equal(elementText(el, { fields: HOST, values: { 'h-name': 'Kim' } }), 'Kim');
-});
-
 test('an empty field prints its fallback, or nothing at all', () => {
   const bare = normalizeElement({ kind: 'field', from: 'h-name' }, id);
-  assert.equal(elementText(bare, { fields: HOST, values: {} }), '', 'a bare label is noise on a proposal');
+  assert.equal(elementText(bare, { fields: HOST, values: {} }), '', 'an empty box prints nothing');
   const withFallback = normalizeElement({ kind: 'field', from: 'h-name', fallback: 'TBC' }, id);
-  assert.equal(elementText(withFallback, { fields: HOST, values: {} }), 'Client: TBC');
+  assert.equal(elementText(withFallback, { fields: HOST, values: {} }), 'TBC');
+  // And a labelled one still says what is missing.
+  const labelled = normalizeElement({ kind: 'field', from: 'h-name', fallback: 'TBC', withLabel: true }, id);
+  assert.equal(elementText(labelled, { fields: HOST, values: {} }), 'Client: TBC');
 });
 
 test('a field is formatted the way the record shows it, not raw', () => {
@@ -218,7 +227,7 @@ test('a field is formatted the way the record shows it, not raw', () => {
     values: { 'h-total': 12500 },
     format: (field, raw) => (field.type === 'money' ? `$${Number(raw).toLocaleString('en-US')}` : String(raw)),
   });
-  assert.equal(said, 'Total: $12,500');
+  assert.equal(said, '$12,500');
 });
 
 test('a field pointing at nothing does not throw or print undefined', () => {

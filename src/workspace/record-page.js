@@ -56,17 +56,75 @@ export function createRecordPage(ctx) {
     wbFind, wbFieldUiReady, wbLoadFieldUi, wbLogActivity, wbMountChecklistFields,
     wbMountDurationFields, wbMountFileFields, wbMountProgressFields, wbNotifyItem, wbPlainVal,
     wbReadFieldInput, wbRenderFieldInput, wbRunAutomations, wbSave, wbSyncLinkedProgress,
+    // Quick Create's dialogs: the field palette, and the session a scheduled call needs.
+    WB_FIELD_TYPES, createSupabaseClient, isLiveSupabaseSession,
   } = ctx;
 
   // Quick Create binds itself, here, rather than through main.js's action dispatcher: this
   // module is already fetched whenever a record is on screen, and the entry bundle has no room
   // for another case. One delegated listener for the module's life, so re-rendering the card --
   // which every press does -- never leaves a dead handler behind.
+  // What is scheduled on a record, fetched once and cached on state by record.
+  //
+  // `undefined` means never asked; an array -- even an empty one -- means the answer is in, so a
+  // record with nothing scheduled does not re-fetch on every keystroke in the field beside it.
+  const eventsInFlight = new Set();
+  function loadRecordEvents(key, companyId, workspaceId, appId, itemId) {
+    if (eventsInFlight.has(key)) return;
+    eventsInFlight.add(key);
+    const supabase = createSupabaseClient?.();
+    if (!supabase || !isLiveSupabaseSession?.()) {
+      state.wbEventRows = { ...(state.wbEventRows || {}), [key]: [] };
+      eventsInFlight.delete(key);
+      return;
+    }
+    supabase.from('wb_record_events')
+      .select('id, kind, title, body, to_number, scheduled_for, status')
+      .eq('company_id', companyId).eq('workspace_id', workspaceId)
+      .eq('app_id', appId).eq('item_id', itemId)
+      .eq('status', 'scheduled')
+      .order('scheduled_for', { ascending: true })
+      .then(({ data }) => {
+        state.wbEventRows = { ...(state.wbEventRows || {}), [key]: data || [] };
+        eventsInFlight.delete(key);
+        render();
+      }, () => {
+        // A failure caches empty rather than retrying for ever: the card says nothing is there,
+        // which is wrong but quiet, and pressing Quick Create again is what refreshes it.
+        state.wbEventRows = { ...(state.wbEventRows || {}), [key]: [] };
+        eventsInFlight.delete(key);
+      });
+  }
+  // Held once fetched, so a redraw can paint whichever dialog is open.
+  let quickModule = null;
   let quickBound = false;
   function bindQuickCreate() {
     if (quickBound || typeof document === 'undefined') return;
     quickBound = true;
+    // Changing the type mid-dialog redraws it, because what a field needs configuring depends on
+    // what it is: a dropdown needs options, money needs a currency, and asking for all of them at
+    // once is a form nobody reads.
+    document.addEventListener('change', (event) => {
+      const select = event.target;
+      if (!quickModule || select?.name !== 'type' || !select.closest?.('[data-wb-quick-form]')) return;
+      quickModule.setQuickType(select.value, ctx);
+    });
+    document.addEventListener('submit', (event) => {
+      const form = event.target.closest?.('[data-wb-quick-form]');
+      if (!form || !quickModule) return;
+      event.preventDefault();
+      quickModule.saveQuick(Object.fromEntries(new FormData(form).entries()), ctx);
+    });
     document.addEventListener('click', (event) => {
+      // Close on the X, on Cancel, and on the backdrop ITSELF -- not on a press that landed
+      // inside the dialog and bubbled out to it, which would make the thing unusable.
+      const shut = event.target.closest?.('[data-wb-quick-close]');
+      const back = event.target.closest?.('[data-wb-quick-backdrop]');
+      if (quickModule && (shut || (back && event.target === back))) {
+        event.preventDefault();
+        quickModule.closeQuick(ctx);
+        return;
+      }
       const button = event.target.closest?.('[data-wb-quick]');
       if (!button) return;
       event.preventDefault();
@@ -79,6 +137,7 @@ export function createRecordPage(ctx) {
       // press in between would make a second field.
       button.disabled = true;
       import('./quick-create.js')
+        .then((mod) => { quickModule = mod; return mod; })
         .then((mod) => mod.press(button.dataset.wbQuick, {
           companyId, workspaceId, appId, itemId,
         }, ctx))
@@ -545,15 +604,41 @@ export function createRecordPage(ctx) {
       ? `<ul class="wb-child-list">${rows.map((child) => childRow(companyId, app, collection, cols, child, one, canManage)).join('')}</ul>`
       : emptyState(`No ${h(collection.name.toLowerCase())} yet.`)}`;
       }
+      if (block.type === 'events') {
+        const key = [companyId, workspace.id, app.id, item.id].join('|');
+        const held = state.wbEventRows?.[key];
+        // Fetched once per record and kept, because this block redraws with everything else on
+        // the page -- a fetch per render would be one per keystroke in the field beside it.
+        if (held === undefined) {
+          loadRecordEvents(key, companyId, workspace.id, app.id, item.id);
+          return '<h3 class="wb-w-title">Calls &amp; messages</h3><p class="cc-empty">Loading…</p>';
+        }
+        const rows = held || [];
+        const body = rows.length ? rows.map((row) => `
+          <div class="wb-ev-row wb-ev-${h(row.kind)}">
+            <span class="wb-ev-ic"><i class="ti ${row.kind === 'sms' ? 'ti-message-2' : 'ti-phone'}"></i></span>
+            <span class="wb-ev-main">
+              <b>${h(row.title || (row.kind === 'sms' ? 'Message' : 'Call'))}</b>
+              ${row.body ? `<small>${h(row.body)}</small>` : ''}
+              ${row.to_number ? `<small class="wb-ev-to">${h(row.to_number)}</small>` : ''}
+            </span>
+            <span class="wb-ev-when">${h(formatDate(row.scheduled_for))}</span>
+          </div>`).join('')
+          : '<p class="cc-empty">Nothing scheduled on this record yet. Quick Create makes one.</p>';
+        return `<h3 class="wb-w-title">Calls &amp; messages</h3><div class="wb-ev-list">${body}</div>`;
+      }
       if (block.type === 'quick') {
         // Only a manager sees it: every entry either adds a field to the app or opens an editor
         // that writes to the record, and neither is a reader's to do. The press is checked again
         // in quick-create.js -- this is the paint, not the gate.
         if (!canManage) return '';
         const buttons = recordLayout.QUICK_CREATE
-          // Proposal is declared in the model but has nothing behind it yet, so it is not drawn.
-          // A button that does nothing is worse than one that is not there.
-          .filter((entry) => entry.field)
+          // Everything the model does not mark as unbuilt. It used to be `entry.field`, which
+          // drew the four that add a column and silently dropped Task -- a tile that was fully
+          // written, tested and unreachable, because a task is a row in public.tasks rather than
+          // a field on this app. A button that does nothing is worse than one that is not there;
+          // one that does something and is never drawn is worse still.
+          .filter((entry) => !entry.soon)
           .map((entry) => `
             <button type="button" class="wb-quick-btn" data-wb-quick="${h(entry.key)}"
               title="${h(entry.desc)}">
@@ -563,7 +648,8 @@ export function createRecordPage(ctx) {
         // The seat rides on the card rather than being closed over: the listener below is bound
         // once for the module's life, so it has to read which record it is on at press time.
         return `<h3 class="wb-w-title">Quick Create</h3>
-          <div class="wb-quick-grid" data-wb-quick-seat="${h([companyId, workspace.id, app.id, item.id].join('|'))}">${buttons}</div>`;
+          <div class="wb-quick-grid" data-wb-quick-seat="${h([companyId, workspace.id, app.id, item.id].join('|'))}">${buttons}</div>
+          ${quickModule ? quickModule.renderQuickModal(ctx) : ''}`;
       }
       const title = String(block.config?.title || '').trim();
       const fields = recordLayout.blockFields(app, block);

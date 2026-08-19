@@ -277,3 +277,65 @@ test('main.js hands the page the three draft helpers it destructures', () => {
     assert.ok(passed.includes(key), `main.js must pass ${key}`);
   }
 });
+
+// ---- reading the stack by its icons --------------------------------------------------------------
+//
+// "Can you add the icon of the apps here? so for easy to read."
+//
+// In flight lists every app that references the contact. Three or four of them is a column of
+// names in identical type, and the app is the thing being scanned for.
+
+test('the usage carries what the app looks like, not just what it is called', () => {
+  const doc = {
+    workspaces: [{
+      id: 'ws-1',
+      name: 'Prospecting',
+      apps: [{
+        id: 'app-1',
+        name: 'Leads',
+        icon: 'ti-target-arrow',
+        color: '#2563eb',
+        fields: [{ id: 'f-c', type: 'company_contact', label: 'Contact' }],
+        items: [{ id: 'i1', values: { 'f-c': 'c1' } }],
+      }],
+    }],
+  };
+  const [use] = contactUsage(doc, 'c1');
+  assert.equal(use.appIcon, 'ti-target-arrow');
+  assert.equal(use.appColor, '#2563eb');
+});
+
+test('an icon that is not one is dropped rather than printed into a class', () => {
+  // It goes straight into `class="ti ${...}"`, so anything that is not a Tabler name has no
+  // business travelling -- and a colour goes into a style attribute.
+  const app = (icon, color) => ({
+    workspaces: [{
+      id: 'ws-1',
+      name: 'W',
+      apps: [{
+        id: 'app-1',
+        name: 'Leads',
+        icon,
+        color,
+        fields: [{ id: 'f-c', type: 'company_contact', label: 'Contact' }],
+        items: [{ id: 'i1', values: { 'f-c': 'c1' } }],
+      }],
+    }],
+  });
+  for (const bad of ['', 'not-an-icon', 'ti-x" onload="alert(1)', undefined]) {
+    assert.equal(contactUsage(app(bad, '#fff'), 'c1')[0].appIcon, '', `${bad} should be dropped`);
+  }
+  for (const bad of ['red', 'javascript:x', 'url(x)', undefined]) {
+    assert.equal(contactUsage(app('ti-flag', bad), 'c1')[0].appColor, '', `${bad} should be dropped`);
+  }
+  assert.equal(contactUsage(app('ti-flag', '#abc'), 'c1')[0].appColor, '#abc', 'a short hex is a hex');
+});
+
+test('the panel draws the mark beside the name, and nothing when there is none', () => {
+  // Guarded on appIcon: a default here would be this panel claiming a mark the app does not have.
+  assert.match(page, /\$\{use\.appIcon \? `<span class="cc-use-ic"/);
+  assert.match(page, /style="background:\$\{h\(use\.appColor \|\| '#6b7280'\)\}"/, 'a colourless app still needs a chip');
+  assert.match(page, /<i class="ti \$\{h\(use\.appIcon\)\}"><\/i>/);
+  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+  assert.match(styles, /\.cc-use-ic \{/, 'unstyled it is a bare glyph on the page background');
+});

@@ -91,19 +91,39 @@ const EXT_MIME = {
   m4v: ['video/x-m4v', 'video/mp4', 'application/octet-stream', ''],
 };
 
+/**
+ * What a policy that re-encodes before storing allows through the door.
+ *
+ * Three of the policies below hand the file to a canvas and upload the result: an icon becomes a
+ * 192px tile, an avatar a 512px square, and any other still photo is fitted to a few megabytes by
+ * src/media/shrink-image.js. For those, the source file's weight decides nothing about what
+ * storage receives, so the cap is not a storage limit at all -- it is the point past which the
+ * browser is likelier to die decoding than to produce a picture.
+ *
+ * One number for all three, because they are the same judgement. A policy that stores what it is
+ * given keeps a real cap, and those are much smaller.
+ */
+const DECODE_GUARD = 100 * MB;
+
 // Per-context upload policies: the extension allowlist and a hard size cap.
 export const UPLOAD_POLICIES = {
-  image: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 5 * MB, label: 'image' },
+  // A phone camera produces 8-15 MB a shot and a DSLR several times that, so the old 5 MB cap was
+  // refusing ordinary photos of a roof. A still photo is now re-encoded to a few megabytes before
+  // anything is stored, so this is a decode guard rather than a storage limit.
+  //
+  // A GIF is deliberately still bound by it: drawing an animated one to a canvas returns its
+  // first frame, so it is never re-encoded and its real size is what would reach storage.
+  image: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: DECODE_GUARD, label: 'image' },
   // Dashboard image tiles upload to Storage, so they allow larger files.
   tileimage: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 25 * MB, label: 'image' },
   // Workspace/company icons are re-encoded to a 192px tile before anything is
   // stored, so the source file's weight is irrelevant — take whatever the camera
   // produced and let the client compress it. The cap is only a decode guard: past
   // this size the browser is likelier to die decoding than to produce an icon.
-  workspaceicon: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 64 * MB, label: 'image' },
+  workspaceicon: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: DECODE_GUARD, label: 'image' },
   // Profile pictures are re-encoded to a 512px square before upload, so the source
   // file's weight is irrelevant here too. Same decode-guard reasoning as above.
-  avatarimage: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 64 * MB, label: 'image' },
+  avatarimage: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: DECODE_GUARD, label: 'image' },
   // Voice notes recorded in the browser. The container is whatever MediaRecorder chose --
   // webm on Chrome and Android, mp4/m4a on Safari -- so all of them are allowed or the
   // feature silently fails on half the phones on site. 40MB is roughly an hour of Opus,

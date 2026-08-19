@@ -302,7 +302,7 @@ test('an upload says whose it is, in the toast and in Company Drive', () => {
   assert.match(mount, /const scope = zone\.dataset\.wbFileScope \|\| 'Workspaces';/);
   assert.match(mount, /const driveLabels = zone\.dataset\.wbFileDrive \? JSON\.parse\(zone\.dataset\.wbFileDrive\) : null;/);
   assert.match(mount, /wbMirrorFileToDrive\(file, objectPath, companyId, hidden\.getAttribute\('data-f'\), driveLabels\)/);
-  assert.match(mount, /guardUpload\(file, isImage \? 'image' : 'document', scope\)/, 'the size and type guard still runs');
+  assert.ok(mount.includes("guardUpload(rawFile, photo || isImage ? 'image' : 'document', scope)"), 'the size and type guard still runs');
   assert.match(page, /data-wb-file-scope="Company Contacts"/);
   assert.match(page, /root: 'Company Contacts', group: '', field: field\.label/);
   // A caller with no middle level gets two folders, not an empty one called "".

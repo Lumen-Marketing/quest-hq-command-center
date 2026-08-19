@@ -52,7 +52,10 @@ function duration(raw) {
  */
 export function plainFieldText(field, raw, helpers = {}) {
   const {
-    formatDate = (v) => str(v), memberName = (id) => str(id), recordTitle = (id) => str(id),
+    formatDate = (v) => str(v),
+    memberName = (id) => str(id),
+    recordTitle = (id) => str(id),
+    contactName = () => '',
   } = helpers;
   if (raw == null || raw === '') return '';
   const type = str(field?.type) || 'text';
@@ -100,7 +103,10 @@ export function plainFieldText(field, raw, helpers = {}) {
     case 'relationship':
       return (Array.isArray(raw) ? raw : [raw]).map((id) => recordTitle(id)).filter(Boolean).join(', ');
     case 'company_contact':
-      return recordTitle(raw);
+      // A company contact is NOT one of this app's records: its id lives in the company's own
+      // contact directory, so looking it up among the app's items finds nothing and prints
+      // "cc-91dffeeb-0787-49a8-..." on the document instead of the person's name.
+      return contactName(raw) || recordTitle(raw);
     case 'location': {
       // Stored either as a typed address or as a picked place with coordinates; the address is
       // the half a document wants.
@@ -139,4 +145,47 @@ export function plainFieldText(field, raw, helpers = {}) {
  */
 export function placeableFields(fields) {
   return (fields || []).filter((field) => field && !['button', 'form'].includes(field.type));
+}
+
+/** Extensions a browser will draw. A .pdf on a file field is a document, not a picture. */
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif'];
+
+const looksLikeImage = (value) => {
+  const url = str(value);
+  if (!url) return false;
+  if (/^data:image\//i.test(url)) return true;
+  // The query string on a signed link carries a token full of dots, so the extension is read
+  // from the path alone -- otherwise every Supabase URL ends in something like ".../token=x".
+  const path = url.split(/[?#]/)[0].toLowerCase();
+  return IMAGE_EXTS.some((ext) => path.endsWith(`.${ext}`));
+};
+
+/**
+ * The picture a field is holding, if it is holding one.
+ *
+ * A document should show the photo, not the filename. `plainFieldText` prints "roof.jpg" for an
+ * image field, which is the right answer for a field whose value is a LIST of attachments and
+ * the wrong one for the field somebody dragged onto a proposal to show the house on.
+ *
+ * Only the first picture: an element on a page is one box, and cropping four photos into it
+ * would show one of them anyway. Whoever wants four places four fields.
+ *
+ * @returns {string} a URL to draw, or '' when there is nothing to draw
+ */
+export function fieldImageUrl(field, raw) {
+  const type = str(field?.type);
+  if (type !== 'image' && type !== 'file') return '';
+  // Stored as an object, an array of them, a JSON string of either, or a bare URL.
+  const parse = (value) => {
+    if (typeof value !== 'string') return value;
+    const text = value.trim();
+    if (text.startsWith('{') || text.startsWith('[')) {
+      try { return JSON.parse(text); } catch { return value; }
+    }
+    return value;
+  };
+  const first = [parse(raw)].flat().map(parse).flat()
+    .map((one) => (one && typeof one === 'object' ? str(one.url) || str(one.src) : str(one)))
+    .find(looksLikeImage);
+  return first || '';
 }

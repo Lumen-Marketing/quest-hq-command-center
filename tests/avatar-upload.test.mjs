@@ -18,11 +18,17 @@ function fakeFile(name, bytes, type = '') {
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
 const ZIP = [0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0];
 
-test('a phone-sized photo is accepted for an avatar but not by the general image policy', async () => {
+test('a phone-sized photo is accepted wherever the picture is re-encoded', async () => {
+  // It used to be rejected as an `image` and accepted as an avatar, because only the avatar
+  // path re-encoded. Every still photo is fitted to a few megabytes before storage now, so the
+  // cap on all three is a decode guard and a 24 MB phone photo is not remarkable to any of them.
   const photo = fakeFile('selfie.png', PNG, 'image/png');
-  photo.size = 24 * 1024 * 1024;
-  assert.equal((await validateUpload(photo, 'image')).ok, false);
+  photo.size = 30 * 1024 * 1024;
+  assert.equal((await validateUpload(photo, 'image')).ok, true);
   assert.equal((await validateUpload(photo, 'avatarimage')).ok, true);
+  assert.equal((await validateUpload(photo, 'workspaceicon')).ok, true);
+  // A policy that stores what it is given keeps a real cap, and it is far smaller.
+  assert.equal((await validateUpload(photo, 'document')).ok, false);
 });
 
 test('the avatar policy keeps every content check and still guards against a runaway file', async () => {
@@ -31,7 +37,11 @@ test('the avatar policy keeps every content check and still guards against a run
   const runaway = fakeFile('huge.png', PNG, 'image/png');
   runaway.size = 200 * 1024 * 1024;
   assert.equal((await validateUpload(runaway, 'avatarimage')).ok, false);
-  assert.equal(UPLOAD_POLICIES.avatarimage.max, 64 * 1024 * 1024);
+  // The three re-encoding policies share one number, because they are the same judgement:
+  // past this the browser is likelier to die decoding than to produce a picture.
+  assert.equal(UPLOAD_POLICIES.avatarimage.max, 100 * 1024 * 1024);
+  assert.equal(UPLOAD_POLICIES.image.max, UPLOAD_POLICIES.avatarimage.max);
+  assert.equal(UPLOAD_POLICIES.workspaceicon.max, UPLOAD_POLICIES.avatarimage.max);
 });
 
 test('no byte cap survives in either host avatar path', () => {

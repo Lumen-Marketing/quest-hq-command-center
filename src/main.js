@@ -6326,7 +6326,9 @@ function loadWbViewItemPage() {
         appHref, can, companyPath, emptyState, formatDate, h, wbFieldIsEditable, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state,
         // Quick Create: it makes a field, saves the app, and opens the sheet or document editor
         // for this record. memberName is the document editor's own requirement.
-        memberName, render, showToast, wbDoc, wbSave, wbUid,
+        memberName, render, showToast, wbDoc, wbSave, wbUid, navigate,
+        // Quick Create > Task raises its own modal over the record rather than navigating.
+        openRecordTask: openRecordTaskModal,
         // The inline editor. `wbFieldUiReady` is a getter rather than the module itself: the
         // flag is a module-level `let` here, so a value read once at construction would be the
         // `null` it held before anything had been fetched, for ever.
@@ -6334,7 +6336,8 @@ function loadWbViewItemPage() {
         wbFieldUiReady: () => !!wbFieldUiModule,
         wbLoadFieldUi, wbLogActivity, wbMountChecklistFields, wbMountDurationFields,
         wbMountFileFields, wbMountProgressFields, wbNotifyItem, wbPlainVal, wbReadFieldInput,
-        wbRenderFieldInput, wbRunAutomations, wbSyncLinkedProgress
+        wbRenderFieldInput, wbRunAutomations, wbSyncLinkedProgress,
+        WB_FIELD_TYPES, createSupabaseClient, isLiveSupabaseSession
       });
       return wbViewItemPageModule;
     }).catch((error) => {
@@ -6518,8 +6521,17 @@ function navItemPipeline(route, module, companyId) {
   const count = moduleBadgeCount(kind, companyId);
   const onSection = route.name === 'company' && route.section === kind;
   const filter = kind === 'contacts' ? state.contactStageFilter : kind === 'deals' ? state.stageFilterDeals : state.stageFilter;
-  const stages = pipelineStages(kind, companyId);
-  const counts = pipelineStageCounts(kind, companyId);
+  // Jobs lists no stages in the rail. The Jobs page already carries the same filters as chips
+  // -- same stages, same counts, the same `pipeline-stage` action -- so the rail was a second
+  // copy of them: eight rows deep, mostly zeros, in the section people live in. Removing them
+  // takes nothing away, and it stops pipelineStageCounts scanning every job on a paint that
+  // happens on every route. Deals keeps its list, which is collapsed behind a chevron anyway.
+  //
+  // Emptied rather than branched in the markup: the template below maps over `stages` and an
+  // empty list renders nothing, so there is one shape for both instead of two.
+  const showStages = kind !== 'jobs';
+  const stages = showStages ? pipelineStages(kind, companyId) : [];
+  const counts = showStages ? pipelineStageCounts(kind, companyId) : {};
   return `
     <div class="side-pipe ${expanded ? 'expanded' : ''}">
       <div class="side-pipe-head">
@@ -12503,6 +12515,7 @@ function renderEmbeddedTasksPage(route, companyId) {
   //   ?task_id=X -> #/task/X      ?new=1 / ?edit=1 -> #/new
   const taskId = route.params.get('task_id');
   const wantsNew = route.params.get('new') === '1' || route.params.get('edit') === '1';
+
   const hash = taskId ? `#/task/${encodeURIComponent(taskId)}` : (wantsNew ? '#/new' : '');
   const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}${hash}`;
   // No workspace header: the task module carries its own toolbar, so CC's header
@@ -12757,36 +12770,6 @@ function recurrenceSelectOptions(current) {
   return base;
 }
 
-function renderTaskForm(companyId, job, task) {
-  const edit = task || blankTask(companyId, job?.id || '');
-  const returnContactId = state.route?.params?.get('return_contact_id') || '';
-  return `
-    <form class="task-form" data-task-form>
-      <input type="hidden" name="id" value="${h(task ? edit.id : '')}" />
-      <input type="hidden" name="return_contact_id" value="${h(returnContactId)}" />
-      <div class="section-head">
-        <div><h2>${task ? 'Edit task' : 'New task'}</h2><p>Writes company_id and optional project_id directly to Quest tasks.</p></div>
-      </div>
-      ${field('Task title', 'title', edit.title, true)}
-      ${selectField('Job', 'project_id', edit.project_id || '', [['', 'Company-level task']].concat(companyJobs(companyId).map((item) => [item.id, item.name])))}
-      ${selectField('Contact', 'contact_id', edit.contact_id || returnContactId, [['', 'No linked contact']].concat(companyContacts(companyId).map((item) => [item.id, item.name])))}
-      ${selectField('Quote', 'deal_id', edit.deal_id || '', [['', 'No linked quote']].concat(companyDeals(companyId).map((item) => [item.id, item.name])))}
-      ${selectField('Status', 'status', edit.status, TASK_STATUSES.map((item) => [item, statusLabel(item)]))}
-      ${selectField('Priority', 'priority', edit.priority, TASK_PRIORITIES.map((item) => [item, titleCase(item)]))}
-      ${selectField('Type', 'type', edit.type, TASK_TYPES.map((item) => [item, taskTypeLabel(item)]))}
-      ${selectField('Assignee', 'assignee_id', edit.assignee_id, companyTaskAssignees(companyId).map((item) => [item.id, item.name]))}
-      ${field('Due date', 'due', edit.due || isoDate(1), true, 'date')}
-      ${field('Due time', 'due_time', edit.due_time || '', false, 'time')}
-      ${selectField('Repeat', 'recurrence', edit.recurrence || '', recurrenceSelectOptions(edit.recurrence))}
-      ${textareaField('Description', 'description', edit.description)}
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Save task</button>
-        ${task ? `<button class="btn danger" type="button" data-action="delete-task" data-task-id="${h(task.id)}">Delete</button>` : ''}
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `;
-}
 
 function renderFilesPage(route, companyId) {
   const folder = route.params.get('folder') || state.driveFolder || 'home';
@@ -15249,6 +15232,63 @@ async function wbCreateTaskFromActivity(companyId, actId, { title, assigneeId, d
   render();
 }
 
+/**
+ * Quick Create > Task: filled in ON the record, not on another page.
+ *
+ * The tile sits on a record somebody is reading. Sending them to the Tasks section to type two
+ * fields loses their place and their scroll, and brings them back by the browser's back button
+ * if at all. This is the same modal shape as New task from activity, for the same reason: three
+ * fields is a form, not a page.
+ *
+ * It is NOT a second task model. The write goes through wbCreateTaskFromPost, which is the
+ * shared one -- permission check, the single normalizeTask/taskPayload shape ADR-0001 requires,
+ * the insert into public.tasks, and notifyTaskChange telling the assignee. That is what puts it
+ * in My Tasks; nothing here knows how a task is stored.
+ */
+function openRecordTaskModal(seed) {
+  state.wbRecordTask = {
+    companyId: seed?.companyId || activeCompanyId(),
+    title: String(seed?.title || ''),
+    contactId: String(seed?.contactId || ''),
+    appName: String(seed?.appName || ''),
+  };
+  state.modal = 'wb-record-task';
+  render();
+}
+
+function renderRecordTaskModal(companyId) {
+  const seed = state.wbRecordTask || {};
+  const members = wbMembers(companyId);
+  const about = seed.title ? `${seed.title}${seed.appName ? ` · ${seed.appName}` : ''}` : '';
+  return renderModalShell('Workspaces', 'New task', `
+    <form class="compact-tool-form" data-wb-record-task-form>
+      ${about ? `<p class="form-note">${h(`For ${about}`)}</p>` : ''}
+      ${field('Task title', 'title', seed.title || '', true)}
+      <label><span>Assign to</span><select name="assignee_id"><option value="">Me</option>${members.map((member) => `<option value="${h(member.id)}">${h(member.name)}</option>`).join('')}</select></label>
+      ${field('Due date', 'due', '', false, 'date')}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-circle-check"></i>Create task</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+
+async function wbCreateTaskFromRecord(companyId, { title, assigneeId, due }) {
+  const seed = state.wbRecordTask || {};
+  // The record's name rides along as the description as well as the title, because the title is
+  // the user's to rewrite and the task should still say where it came from if they do.
+  const saved = await wbCreateTaskFromPost(companyId, {
+    title, assigneeId, due, contactId: seed.contactId,
+    body: seed.title ? `From ${seed.title}${seed.appName ? ` in ${seed.appName}` : ''}` : '',
+  });
+  if (!saved) return;
+  state.modal = '';
+  state.wbRecordTask = null;
+  showToast('Task created. It is in My Tasks now.', isLiveSupabaseSession() ? 'live' : 'local', 'Tasks');
+  render();
+}
+
 // The log text is markup built at write time; a task title has to be words.
 function wbActivityPlainText(entry) {
   return String(entry?.text || '').replace(/<[^>]*>/g, '').trim();
@@ -15271,6 +15311,19 @@ function wbNotifyFeed(companyId, workspace, post) {
     sourceType: 'workspace_feed', sourceId: post.id, excludeActor: true,
   });
 }
+
+/**
+ * A photo, small enough to store, on its way past.
+ *
+ * Everything is in ./media/shrink-image.js and fetched on demand -- the budget, the "already
+ * small enough" case, the canvas and the encode ladder. Most sessions never upload an image and
+ * the entry bundle has no room for any of it. A failure returns the original rather than
+ * blocking: the cap has already been checked, so the worst case is a bigger file, not a wrong
+ * one.
+ */
+const shrinkUpload = (file) => import('./media/shrink-image.js')
+  .then((mod) => mod.shrinkForUpload(file))
+  .catch((error) => { console.warn('Image compression failed', error); return file; });
 
 // Central client-side upload guard — runs the shared 3-layer check (extension +
 // MIME + magic bytes). Returns true when the file is safe to proceed; otherwise
@@ -15340,7 +15393,7 @@ function wbMirrorFeedFileToDrive(attachment, companyId, workspaceName) {
 }
 
 // Create a real, assignable task from a post (shows up under "My tasks").
-async function wbCreateTaskFromPost(companyId, { title, assigneeId, due, body }) {
+async function wbCreateTaskFromPost(companyId, { title, assigneeId, due, body, contactId = '' }) {
   if (!requirePermission('tasks.manage', companyId, 'Your role cannot create tasks.', 'Workspaces')) return null;
   const creatorId = activeTaskCreatorId(companyId);
   if (!creatorId) { showToast('Your profile is missing a task creator ID.', 'error', 'Tasks'); return null; }
@@ -15352,6 +15405,9 @@ async function wbCreateTaskFromPost(companyId, { title, assigneeId, due, body })
     description: body || '',
     creator_id: creatorId,
     assignee_id: assigneeId || creatorId,
+    // Only when there is one: blankTask already supplies '', and writing an empty string over
+    // it would be the same value with a worse name.
+    ...(contactId ? { contact_id: contactId } : {}),
     ...(due ? { due } : {}),
   });
   const client = createSupabaseClient();
@@ -16219,7 +16275,15 @@ function wbFmtVal(ctx, field, value) {
     }
     case 'location': return `<a class="wb-loc" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(value))}" target="_blank" rel="noreferrer" title="Open in Google Maps"><i class="ti ti-map-pin"></i>${h(value)}</a>`;
     case 'duration': return h(wbFmtDuration(value));
-    case 'image': { const fv = wbFileValue(value); return fv && fv.url ? `<img class="wb-img-avatar" src="${h(fv.url)}" alt="${h(fv.name || 'image')}" loading="lazy">` : '<span class="wb-cell-empty">—</span>'; }
+    case 'image': {
+      // Read through wbFileValues, not wbFileValue: a field switched to multiple holds an
+      // ARRAY, and reading only the first would quietly hide every photo after it.
+      const shots = wbFileValues(value).filter((one) => one.url);
+      if (!shots.length) return '<span class="wb-cell-empty">—</span>';
+      // No wrapper: the overlap is `img + img` in the stylesheet, which costs nothing in the
+      // entry bundle and there is nowhere else two of these sit side by side.
+      return shots.map((one) => `<img class="wb-img-avatar" src="${h(one.url)}" alt="${h(one.name || 'image')}" loading="lazy">`).join('');
+    }
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
     case 'rating': return wbRatingStars(value);
     case 'tags': return wbTagsChips(field, value) || '<span class="wb-cell-empty">—</span>';
@@ -17774,23 +17838,27 @@ function wbOpenSheetRow(fieldId, seat) {
 // would put the lookup in every session that never opens a document.
 // From a row, or from the record page: there is no hidden input to read, so the module goes to
 // the record itself and writes back through the app’s own save.
+// Both ways into the builder want almost the same things, so they are named once. `state` is in
+// there for the company contact directory: a placed contact field holds an id that lives outside
+// the workspace document, and without it the document prints the id.
+const wbDocEditorCtx = () => ({
+  state, wbDoc, wbFind, wbSave, render, can, formatDate, memberName, wbItemTitle,
+});
+const wbOpenDoc = (open) => import('./form/doc-editor.js').then(open)
+  .catch((error) => showToast(error.message || 'The document could not be opened.', 'local', 'Workspaces'));
+
 function wbOpenFormRow(fieldId, seat) {
-  import('./form/doc-editor.js')
-    .then((mod) => mod.openForRecord(fieldId, seat, {
-      wbDoc, wbSave, render, can, formatDate, memberName, wbItemTitle,
-    }))
-    .catch((error) => showToast(error.message || 'The document could not be opened.', 'local', 'Workspaces'));
+  wbOpenDoc((mod) => mod.openForRecord(fieldId, seat, wbDocEditorCtx()));
 }
 
 function wbOpenForm(fieldId) {
-  import('./form/doc-editor.js')
-    .then((mod) => mod.openFor(fieldId, {
-      state, wbFind, render, formatDate, memberName, wbItemTitle,
-      // What Save means over an open panel -- write the field back to the app, or say which
-      // button finishes the job -- lives in the chunk, not here.
-      wbSave, wbCollectModalDraft, fieldTypeLabel: (type) => WB_FIELD_TYPES[type]?.label || type,
-    }))
-    .catch((error) => showToast(error.message || 'The document could not be opened.', 'local', 'Workspaces'));
+  wbOpenDoc((mod) => mod.openFor(fieldId, {
+    ...wbDocEditorCtx(),
+    // What Save means over an open panel -- write the field back to the app, or say which
+    // button finishes the job -- lives in the chunk, not here.
+    wbCollectModalDraft,
+    fieldTypeLabel: (type) => WB_FIELD_TYPES[type]?.label || type,
+  }));
 }
 
 // ---- the app's recycle bin ---------------------------------------------------------------
@@ -19018,11 +19086,15 @@ function wbMountFileFields(overlay) {
     const paintList = () => {
       const files = readAll();
       label.innerHTML = files.length
-        ? `<strong>Add another file</strong><small>${files.length} attached</small>`
+        ? `<strong>Add another</strong><small>${files.length} attached</small>`
         : '<strong>Click or drop files</strong><small>Several at once is fine</small>';
       openBtn.classList.toggle('has-file', files.length > 0);
+      // A photo is its own label. Showing a generic file glyph beside eight filenames is the one
+      // arrangement that makes a gallery harder to read than a single picture was.
       list.innerHTML = files.map((fv, i) => `<li class="wb-file-row">
-        <i class="ti ${h(wbFileIcon(fileTypeKind({ file_name: fv.name })))}" aria-hidden="true"></i>
+        ${isImage && fv.url
+    ? `<img class="wb-img-thumb" src="${h(fv.url)}" alt="${h(fv.name || 'photo')}" loading="lazy">`
+    : `<i class="ti ${h(wbFileIcon(fileTypeKind({ file_name: fv.name })))}" aria-hidden="true"></i>`}
         <span class="wb-file-row-name" title="${h(fv.name)}">${h(fv.name)}</span>
         ${fv.url ? `<a class="btn btn-mini" href="${h(fv.url)}" target="_blank" rel="noreferrer" title="View"><i class="ti ti-eye"></i></a>` : ''}
         <button type="button" class="btn btn-mini danger" data-wb-file-drop-one="${i}" title="Remove ${h(fv.name)}" aria-label="Remove ${h(fv.name)}"><i class="ti ti-x"></i></button>
@@ -19055,9 +19127,11 @@ function wbMountFileFields(overlay) {
         actions.hidden = true;
       }
     };
-    const upload = async (file) => {
-      if (!file) return;
-      if (!(await guardUpload(file, isImage ? 'image' : 'document', scope))) return;
+    const upload = async (rawFile) => {
+      if (!rawFile) return;
+      const photo = /.(png|jpe?g|webp)$/i.test(rawFile.name || '');
+      if (!(await guardUpload(rawFile, photo || isImage ? 'image' : 'document', scope))) return;
+      const file = photo ? await shrinkUpload(rawFile) : rawFile;
       openBtn.disabled = true;
       progress.hidden = false;
       bar.style.width = '20%';
@@ -19274,7 +19348,13 @@ function wbCollectModalDraft() {
     m.draft.required = !!checked('wbFReq');
     const t = m.draft.type; m.draft.config = m.draft.config || {};
     if (t === 'category' || t === 'status' || t === 'tags') m.draft.config.options = [...document.querySelectorAll('.wb-opt-item')].map((r) => ({ id: r.dataset.oid, label: r.querySelector('.wb-opt-label').value.trim() || 'Untitled', color: r.querySelector('.wb-dot-pick').value })).filter((o) => o.label);
-    if (t === 'file') m.draft.config.multiple = !!checked('wbFileMulti');
+    if (t === 'file' || t === 'image') {
+      // Only when the control is on screen. Reading a missing element gives undefined, and the
+      // old `!!checked(...)` turned that into false -- so collecting the draft before the field
+      // UI chunk had arrived silently reset a field that was set to multiple.
+      const mode = val('wbFileMode');
+      if (mode !== undefined) m.draft.config.multiple = mode === 'multiple';
+    }
     if (t === 'relationship') {
       const prevTarget = m.draft.config.targetApp;
       const prevCompany = m.draft.config.targetCompany || canonicalCompanyId(state.builderModal.companyId);
@@ -25192,6 +25272,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'chat-leave-confirm') return renderLeaveConversationModal(activeCompanyId(), state.leavingConversationId);
   if (state.modal === 'remove-member-confirm') return renderRemoveMemberModal(state.removingMemberId);
   if (state.modal === 'wb-activity-task') return renderActivityTaskModal(activeCompanyId(), state.wbTaskFromActivityId);
+  if (state.modal === 'wb-record-task') return renderRecordTaskModal(activeCompanyId());
   if (state.modal === 'delete-workspace') return renderDeleteWorkspaceModal(activeCompanyId(), state.deletingWorkspaceId);
   if (state.modal === 'message-search') return renderMessageSearchModal(activeCompanyId());
   if (state.modal === 'calendar-event-detail') return renderCalendarEventDetailModal(activeCompanyId());
@@ -26434,16 +26515,33 @@ function openTaskComposerForJob(job) {
   navigate(companyPath('tasks', { new: '1', job_id: job.id }, job.company_id));
 }
 
+// The form body lives in ./tasks/task-form.js and is fetched the first time a task is opened.
+let taskFormModule = null;
+function loadTaskForm() {
+  if (taskFormModule) return Promise.resolve(taskFormModule);
+  return import('./tasks/task-form.js').then((mod) => {
+    taskFormModule = mod.createTaskForm({
+      TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES,
+      blankTask, companyContacts, companyDeals, companyJobs, companyTaskAssignees, field, h,
+      isoDate, recurrenceSelectOptions, selectField, state, statusLabel, taskTypeLabel,
+      textareaField, titleCase,
+    });
+    return taskFormModule;
+  });
+}
+
 function renderTaskRouteModal(route, companyId) {
   const job = route.jobId ? jobById(route.jobId) : null;
   const taskId = route.params.get('task_id') || '';
   const task = taskId ? taskById(taskId) : null;
-  if (route.params.get('new') === '1') {
-    return renderModalShell('Tasks', 'New task', renderTaskForm(companyId, job, null), 'task-modal');
-  }
-  if (route.params.get('edit') === '1' && task) {
-    return renderModalShell('Tasks', 'Edit task', renderTaskForm(companyId, job, task), 'task-modal');
-  }
+  // Fetched on the first open. Until it lands the shell is drawn with a loader in it rather
+  // than nothing, so the modal appears on the press that asked for it.
+  const form = (title, of) => (taskFormModule
+    ? renderModalShell('Tasks', title, taskFormModule.renderTaskForm(companyId, job, of), 'task-modal')
+    : (loadTaskForm().then(() => render()).catch(() => showToast('The task form could not be loaded. Reload and try again.', 'error', 'Tasks')),
+      renderModalShell('Tasks', title, questLoader('Loading'), 'task-modal')));
+  if (route.params.get('new') === '1') return form('New task', null);
+  if (route.params.get('edit') === '1' && task) return form('Edit task', task);
   if (task) return renderDrawerShell('Task detail', task.title, renderTaskDetail(companyId, task));
   return '';
 }
@@ -30734,6 +30832,20 @@ function onDocumentSubmit(event) {
     if (!done) return;
     deleteOperationalWorkspace(event.target, String(data.workspace_id || ''), password)
       .catch((error) => { state.deleteWorkspaceError = error.message || 'The workspace could not be deleted.'; render(); })
+      .finally(done);
+    return;
+  }
+
+  if (event.target.matches('[data-wb-record-task-form]')) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target).entries());
+    const done = beginSubmitting(event.target, 'Creating…');
+    if (!done) return;
+    wbCreateTaskFromRecord(activeCompanyId(), {
+      title: String(data.title || '').trim(),
+      assigneeId: String(data.assignee_id || ''),
+      due: String(data.due || ''),
+    }).catch((error) => showToast(error.message || 'Task could not be created.', 'local', 'Tasks'))
       .finally(done);
     return;
   }

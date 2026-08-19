@@ -19,7 +19,8 @@ import {
   styleElement,
 } from './doc-model.js';
 import { MM_TO_PT, jpegInfo, textWidth, wrapText, writePdf } from './doc-pdf.js';
-import { placeableFields, plainFieldText } from './host-values.js';
+import { fieldImageUrl, placeableFields, plainFieldText } from './host-values.js';
+import { DOC_TEMPLATES, buildTemplate } from './doc-templates.js';
 
 /** A point in millimetres. Font sizes are chosen in points and drawn in millimetres. */
 const PT_TO_MM = 25.4 / 72;
@@ -69,6 +70,8 @@ export function openDocEditor({
   let scale = 3;
   let versionsOpen = false;
   let iconsOpen = false;
+  // Whether the template list is showing over a page that already has something on it.
+  let templatesOpen = false;
   let iconList = null;
   let objectUrls = [];
   // Undo and redo, kept as whole-document snapshots rather than as a log of reversible
@@ -181,11 +184,42 @@ export function openDocEditor({
   // --- what a field element says ----------------------------------------------------------------
 
   function wordsFor(el) {
+    // A field element resolving to a PICTURE has no words. Printing "roof.jpg" next to the
+    // photo -- or worse, instead of it -- is exactly the thing this stopped doing.
+    if (imageFor(el)) return '';
     return elementText(el, {
       fields,
       values: hostValues,
       format: (field, raw) => plainFieldText(field, raw, helpers),
     });
+  }
+
+  /**
+   * The picture a placed field is holding, if it is holding one.
+   *
+   * An image field dragged onto a proposal is the house, the damage or the logo: it is put there
+   * to be LOOKED at. A filename is the right answer for a list of attachments and the wrong one
+   * for a document, so a field that resolves to an image is drawn as one everywhere -- on the
+   * page, in the PDF and in the exported picture, from this one function.
+   */
+  function imageFor(el) {
+    if (!el || el.kind !== 'field' || !el.from) return '';
+    const field = fields.find((entry) => entry.id === el.from);
+    return field ? fieldImageUrl(field, hostValues[el.from]) : '';
+  }
+
+  /**
+   * Whether a placed field is drawn as a picture.
+   *
+   * True the moment it resolves to one, and true for an Image field even on a record that has
+   * not got one yet -- an empty Image field is a picture slot, and should read as one while a
+   * proposal is being laid out. A FILE field is not: it usually holds a signed scope or a
+   * workbook, and only becomes a picture when what it is holding actually is one.
+   */
+  function drawsAsImage(el) {
+    if (!el || el.kind !== 'field' || !el.from) return false;
+    if (imageFor(el)) return true;
+    return fields.find((entry) => entry.id === el.from)?.type === 'image';
   }
 
   /**
@@ -234,6 +268,17 @@ export function openDocEditor({
       }
       const radius = el.shape === 'ellipse' ? '50%' : `${(el.style.radius * scale).toFixed(2)}px`;
       return `<div ${common}><span class="fd-shape" style="background:${fill};${stroke}border-radius:${radius}"></span>${grips}</div>`;
+    }
+
+    // A placed field holding a picture is drawn as the picture, not as its filename. Checked
+    // before the text path below, which is the one that used to print "roof.jpg" on a proposal.
+    if (drawsAsImage(el)) {
+      const src = imageFor(el);
+      const field = fields.find((entry) => entry.id === el.from);
+      const body = src
+        ? `<img class="fd-img" src="${esc(src)}" alt="${esc(field?.label || 'Image')}" draggable="false" />`
+        : `<span class="fd-ghost">${esc(field ? field.label : 'Pick a field')}</span>`;
+      return `<div ${common}>${body}${grips}</div>`;
     }
 
     if (el.kind === 'image') {
@@ -292,6 +337,31 @@ export function openDocEditor({
     host.innerHTML = `<div class="fd-margin" style="inset:${margin.toFixed(2)}px"></div>${doc.elements.map(elementMarkup).join('')}`;
   }
 
+  /**
+   * Start from something, or start from nothing.
+   *
+   * Offered up front while the page is empty -- which is when it is wanted and when it can do no
+   * harm -- and behind a toggle afterwards, because replacing a layout somebody has been working
+   * on is a decision, not a mis-click. The blank page is not a button here: it is what is already
+   * on screen.
+   */
+  function templatesMarkup() {
+    const empty = !doc.elements.length;
+    if (!empty && !templatesOpen) {
+      return `<div class="fd-group"><button class="btn btn-sm fd-w" type="button" data-fd-templates><i class="ti ti-layout-board-split"></i>Start from a template</button></div>`;
+    }
+    const cards = DOC_TEMPLATES.map((template) => `<button type="button" class="fd-tpl" data-fd-template="${esc(template.id)}">
+      <b>${esc(template.name)}</b><span>${esc(template.hint)}</span>
+    </button>`).join('');
+    return `<div class="fd-group"><div class="fd-group-t">${empty ? 'Start from' : 'Replace with'}</div>
+      <div class="fd-tpls">${cards}</div>
+      <div class="fd-sub">${empty
+    ? 'Or just start dragging things on -- a blank page is a fine place to begin.'
+    : 'This replaces what is on the page. Undo puts it back.'}</div>
+      ${empty ? '' : '<button class="btn btn-sm fd-w" type="button" data-fd-templates>Never mind</button>'}
+    </div>`;
+  }
+
   function railMarkup() {
     if (readOnly) return '<div class="fd-rail-note">You can look at this document but not change it.</div>';
     if (doc.source === 'upload') {
@@ -303,6 +373,7 @@ export function openDocEditor({
       ? fields.map((field) => `<option value="${esc(field.id)}">${esc(field.label)}</option>`).join('')
       : '<option value="">This app has no fields yet</option>';
     return `
+      ${templatesMarkup()}
       <div class="fd-group"><div class="fd-group-t">Put on the page</div>
         <button class="btn btn-sm fd-w" type="button" data-fd-add="text"><i class="ti ti-letter-case"></i>Text</button>
         <label class="fd-pick"><span><i class="ti ti-database"></i>A field from this record</span>
@@ -345,7 +416,9 @@ export function openDocEditor({
     }
     const num = (label, key, min, max, step = 1) => `<label class="fd-num"><span>${label}</span><input type="number" class="wb-input" data-fd-geo="${key}" value="${el[key]}" min="${min}" max="${max}" step="${step}" /></label>`;
     const [pw, ph] = pageMm(doc.page);
-    const isWords = el.kind === 'text' || el.kind === 'field';
+    // A field holding a picture has no typography to set. Offering Size, Bold and Colour over
+    // an image is three controls that do nothing.
+    const isWords = el.kind === 'text' || (el.kind === 'field' && !drawsAsImage(el));
     const swatch = (key, value, label) => `<label class="fd-color"><span>${label}</span>
       <input type="color" data-fd-style="${key}" value="${value === 'none' ? '#ffffff' : value}" />
       ${key !== 'color' ? `<button type="button" class="fd-none ${value === 'none' ? 'on' : ''}" data-fd-none="${key}" title="No ${label.toLowerCase()}">None</button>` : ''}
@@ -586,6 +659,22 @@ export function openDocEditor({
       return;
     }
 
+    if (hit('templates')) { templatesOpen = !templatesOpen; paint(); return; }
+
+    const template = hit('template');
+    if (template) {
+      const built = buildTemplate(template.dataset.fdTemplate, fields);
+      if (!built) return;
+      // The page and what is on it, and nothing else: the document's name, its saved versions and
+      // any uploaded PDF beside the design are the document's, not the template's.
+      commit({ ...doc, page: built.page, elements: built.elements });
+      templatesOpen = false;
+      sel = '';
+      paint();
+      say('Template placed. Everything on it can be moved, retyped or deleted — and Undo takes it back.');
+      return;
+    }
+
     const add = hit('add');
     if (add) { place({ kind: add.dataset.fdAdd, text: 'New text', w: 80, h: 10 }); return; }
 
@@ -698,10 +787,30 @@ export function openDocEditor({
     // whose host input was replaced by a repaint underneath has not.
     write(doc);
     try {
-      say(onSave ? (onSave(doc) || 'Saved.') : 'Saved.');
+      const said = (onSave ? onSave(doc) : '') || 'Saved.';
+      say(said);
+      // On the button as well as in the status line. The line lives at the foot of a
+      // full-screen modal and is easy to press Save and never see, which reads as a button
+      // that did nothing -- and sends people to the Versions panel to save it "properly".
+      flashSaved();
     } catch (error) {
       say(`That could not be saved — ${error.message}`, 'bad');
     }
+  }
+
+  /** The Save button answers for a moment, then goes back to being a button. */
+  function flashSaved() {
+    const button = $('[data-fd-save]');
+    if (!button) return;
+    button.classList.add('ok');
+    button.innerHTML = '<i class="ti ti-check"></i>Saved';
+    setTimeout(() => {
+      // Only if this is still the same button: a repaint in between has already drawn a fresh
+      // one, and writing into a detached node would do nothing but look like a leak.
+      if (!button.isConnected) return;
+      button.classList.remove('ok');
+      button.innerHTML = '<i class="ti ti-device-floppy"></i>Save';
+    }, 1800);
   }
 
   /**
@@ -791,7 +900,12 @@ export function openDocEditor({
       // Sized to what the value is likely to need: a paragraph field gets a tall box, a number a
       // short one, so a freshly-placed field does not have to be resized before it reads properly.
       const tall = ['textarea', 'location', 'checklist'].includes(field?.type);
-      place({ kind: 'field', from, w: tall ? 90 : 70, h: tall ? 24 : 8 });
+      // A picture needs a picture-shaped box. Dropped into the 70x8 strip a line of text gets,
+      // an image field arrives as a letterbox slit and has to be resized before it is even
+      // recognisable.
+      const picture = field?.type === 'image';
+      if (picture) place({ kind: 'field', from, w: 60, h: 45 });
+      else place({ kind: 'field', from, w: tall ? 90 : 70, h: tall ? 24 : 8 });
       target.value = '';
       return;
     }
@@ -889,6 +1003,11 @@ export function openDocEditor({
   function toJpeg(src, wMm, hMm) {
     return new Promise((resolve) => {
       const img = new Image();
+      // A record's image field holds a link to the file bucket, not the bytes. Reading a
+      // cross-origin picture back off a canvas taints it, and the taint throws at toDataURL --
+      // so the fetch asks for CORS up front. Storage answers it; anything that does not simply
+      // fails to load and the element is left off, which is what the catch below is for.
+      if (!String(src || '').startsWith('data:')) img.crossOrigin = 'anonymous';
       img.onload = () => {
         // 200 dpi: past that the file grows faster than anything visible improves.
         const dpi = 200;
@@ -901,7 +1020,9 @@ export function openDocEditor({
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(dataUrlBytes(canvas.toDataURL('image/jpeg', 0.9)));
+        // A canvas that was tainted anyway throws here rather than returning anything. One
+        // picture that will not convert must not take the whole PDF with it.
+        try { resolve(dataUrlBytes(canvas.toDataURL('image/jpeg', 0.9))); } catch { resolve(null); }
       };
       img.onerror = () => resolve(null);
       img.src = src;
@@ -938,9 +1059,13 @@ export function openDocEditor({
 
   /** The document as PDF bytes: every element resolved, every picture converted. */
   async function buildPdfBytes() {
-    const items = doc.elements.map((el) => ({ ...el, text: wordsFor(el) }));
+    // A field holding a picture is handed to the writer AS an image element. The writer draws
+    // by `kind`, so telling it the truth here is all it takes -- no second branch in the PDF.
+    const items = doc.elements.map((el) => (imageFor(el)
+      ? { ...el, kind: 'image', src: imageFor(el), text: '' }
+      : { ...el, text: wordsFor(el) }));
     const images = [];
-    for (const el of doc.elements) {
+    for (const el of items) {
       if (el.kind !== 'image' && el.kind !== 'icon') continue;
       try {
         // Sequential on purpose: twenty images decoded at once is where a phone runs out of
@@ -998,9 +1123,9 @@ export function openDocEditor({
           ctx.textBaseline = 'middle';
           ctx.fillText(glyph, x + w / 2, y + h / 2);
         }
-      } else if (el.kind === 'image' && el.src) {
+      } else if ((el.kind === 'image' && el.src) || imageFor(el)) {
         // eslint-disable-next-line no-await-in-loop
-        const img = await loadImage(el.src).catch(() => null);
+        const img = await loadImage(el.src || imageFor(el)).catch(() => null);
         if (img) ctx.drawImage(img, x, y, w, h);
       } else {
         const text = wordsFor(el);
@@ -1030,7 +1155,11 @@ export function openDocEditor({
       }
       ctx.restore();
     }
-    return new Promise((done) => canvas.toBlob(done, 'image/png'));
+    // toBlob throws on a tainted canvas rather than calling back, so the failure is turned
+    // into a message instead of an unhandled rejection with no page behind it.
+    return new Promise((done, fail) => {
+      try { canvas.toBlob(done, 'image/png'); } catch { fail(new Error('a picture on the page could not be read back — it may be hosted somewhere that does not allow it')); }
+    });
   }
 
   function fileName(extension) {
@@ -1100,6 +1229,9 @@ export function openDocEditor({
   function loadImage(src) {
     return new Promise((done, reject) => {
       const img = new Image();
+      // Same reason as toJpeg: the exported PNG is read back off a canvas, and a picture
+      // fetched without CORS taints it.
+      if (!String(src || '').startsWith('data:')) img.crossOrigin = 'anonymous';
       img.onload = () => done(img);
       img.onerror = () => reject(new Error('the image could not be decoded'));
       img.src = src;
@@ -1148,6 +1280,21 @@ export function openDocEditor({
 }
 
 /**
+ * The name behind a company-contact id.
+ *
+ * The contact directory is company-wide and is NOT part of the workspace document, so it is read
+ * off the app state the host handed over. Falls back to nothing, which lets the caller try its
+ * other resolvers before giving up and printing the id.
+ */
+function contactNamer(state) {
+  return (id) => {
+    if (!id) return '';
+    const found = (state?.companyContacts || []).find((contact) => contact && contact.id === id);
+    return found ? String(found.name || '') : '';
+  };
+}
+
+/**
  * Open the document a hidden input on the page is holding.
  *
  * Finding the field, working out which record's values the document should read, and reading its
@@ -1187,12 +1334,19 @@ export function openFor(fieldId, ctx = {}) {
    * Save button is one click away on the form behind -- half-submitting a form nobody finished
    * would be worse than saying so plainly.
    */
-  function saveHost() {
+  function saveHost(doc) {
     const open = state?.builderModal;
     if (open?.kind === 'item') return 'Kept on the form — press Save on the record to store it.';
     if (open?.kind !== 'field' || !wbCollectModalDraft || !wbFind || !wbSave) {
       return 'Kept on the panel — press Save there to store it.';
     }
+    // The document's name is typed in TWO places -- the box at the top of the builder and the
+    // one on the panel behind it -- and the panel's is the one that gets stored. So a name
+    // typed in the builder, which is the box that is actually on screen, was collected straight
+    // over and lost: press Save, nothing you renamed survived. The builder's wins by being
+    // written into the panel's box before it is read back.
+    const named = document.getElementById?.('wbFormTitle');
+    if (named && doc?.title && named.value !== doc.title) named.value = doc.title;
     // Reads the hidden input, and the rest of the panel with it, back into the draft -- so what
     // was just laid out is what gets stored, and a repaint after this draws the new document
     // rather than the one the panel opened with.
@@ -1244,6 +1398,7 @@ export function openFor(fieldId, ctx = {}) {
         const linked = (app.items || []).find((entry) => entry.id === id);
         return linked ? wbItemTitle(modal.companyId, app, linked) : String(id ?? '');
       },
+      contactName: contactNamer(state),
       emailTo: emailField ? String(hostValues[emailField.id] || '') : '',
       who: state?.session?.profile?.id || '',
     },
@@ -1271,7 +1426,7 @@ export function openFor(fieldId, ctx = {}) {
  */
 export function openForRecord(fieldId, seat, ctx = {}) {
   const {
-    wbDoc, wbSave, render, can, formatDate, memberName, wbItemTitle,
+    wbDoc, wbSave, render, can, formatDate, memberName, wbItemTitle, state,
   } = ctx;
   const [companyId, workspaceId, appId, itemId] = String(seat || '').split('|');
   const workspace = (wbDoc(companyId)?.workspaces || []).find((entry) => entry.id === workspaceId);
@@ -1297,6 +1452,7 @@ export function openForRecord(fieldId, seat, ctx = {}) {
         const linked = (app.items || []).find((entry) => entry.id === id);
         return linked && wbItemTitle ? wbItemTitle(companyId, app, linked) : String(id ?? '');
       },
+      contactName: contactNamer(state),
       emailTo: emailField ? String(values[emailField.id] || '') : '',
     },
     // A record whose document has never been opened starts from the field’s own layout, which is

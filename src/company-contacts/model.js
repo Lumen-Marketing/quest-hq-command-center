@@ -258,6 +258,11 @@ export function contactUsage(doc, contactId, { nameValue = null } = {}) {
       workspaceName: workspace.name,
       appId: app.id,
       appName: app.name,
+      // What the app looks like in the rail, carried so a list of apps can be read by its
+      // icons rather than by reading every name. Blank when the app has none: the caller
+      // draws nothing rather than a default that would claim to be this app's mark.
+      appIcon: /^ti-[a-z0-9-]+$/.test(String(app.icon || '')) ? app.icon : '',
+      appColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(app.color || '')) ? app.color : '',
       recordName: app.recordName || '',
       count: items.length,
       balance: appBalanceFor(app, items),

@@ -23347,6 +23347,29 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-img-preview { width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center; overflow: hidden; background: var(--surface-3, #eef1f5); color: var(--text-muted, #72695d); font-size: 22px; }
 .wb-img-preview img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Several photos on one field. The single-image field stays a circular avatar -- that is what
+   it is for -- and a gallery is squares, because a row of circles crops faces and corners off
+   pictures that were chosen for what is in them. */
+.wb-img-list { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 8px 0 0; list-style: none; }
+.wb-img-list .wb-file-row {
+  position: relative; width: 72px; height: 72px; padding: 0; border-radius: 10px;
+  overflow: hidden; border: 1px solid var(--border);
+}
+.wb-img-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* On the picture rather than beside it: at this size a row of name-plus-buttons is wider than
+   the thumbnail it belongs to. */
+.wb-img-list .wb-file-row-name { display: none; }
+.wb-img-list .wb-file-row .btn-mini {
+  position: absolute; top: 3px; right: 3px; opacity: 0; transition: opacity .12s ease;
+}
+.wb-img-list .wb-file-row:hover .btn-mini,
+.wb-img-list .wb-file-row:focus-within .btn-mini { opacity: 1; }
+
+/* A cell showing more than one: they overlap, so eight photos still read as one value rather
+   than pushing every other column off the row. No wrapper element -- adjacent siblings only
+   occur in that cell. */
+.wb-img-avatar + .wb-img-avatar { margin-left: -12px; }
+
 .wb-activity { border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); padding: 8px 18px; }
 .wb-act-item { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border, #e2d5bf); }
 /* Without this the flex child refuses to go narrower than its longest word, and one unbroken
@@ -33291,6 +33314,15 @@ a.wb-cal-more:hover { color: var(--orange); }
   margin-bottom: 4px;
 }
 
+/* The app's own mark, so a stack of connected apps is read by its icons rather than by reading
+   every name. Sized to the line it sits on rather than to the record page's larger tile: this is
+   a label, not a header. Drawn only when the app HAS an icon -- a default here would be this
+   panel claiming a mark the app does not have. */
+.cc-use-ic {
+  width: 20px; height: 20px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; color: #fff; font-size: 12px;
+}
 .cc-use-head em {
   color: var(--muted);
   font-size: 11.5px;
@@ -35226,6 +35258,9 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
    it that only read it. */
 .fd-save { border-color: var(--accent); color: var(--accent); font-weight: 650; }
 .fd-save:hover { background: var(--accent-soft); }
+/* For a moment after it works. The status line is at the foot of a full-screen modal and is
+   easy to press Save and never see, which reads as a button that did nothing. */
+.fd-save.ok { border-color: var(--success, #16a34a); color: var(--success, #16a34a); background: var(--success-soft, #dcfce7); }
 
 /* Design, or the uploaded PDF. A segmented control rather than two buttons, because they are two
    states of one thing and only one of them can be true. */
@@ -35444,6 +35479,25 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 .fd-grip-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
 .fd-grip-w { left: -5px; top: calc(50% - 4.5px); cursor: ew-resize; }
 
+/* The template list. Cards rather than a dropdown: the names alone do not say what you are
+   choosing, and a line of explanation under each one is the difference between picking and
+   guessing. */
+.fd-tpls { display: grid; gap: 6px; }
+.fd-tpl {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e2d5bf);
+  border-radius: 10px;
+  background: var(--surface, #fffaf0);
+  cursor: pointer;
+  font: inherit;
+}
+.fd-tpl:hover { border-color: var(--accent, #e0552d); background: var(--accent-soft); }
+.fd-tpl > b { font-size: .82rem; color: var(--text, #17130f); }
+.fd-tpl > span { font-size: .72rem; color: var(--text-2, #473f34); line-height: 1.3; }
+
 .fd-status {
   min-height: 0;
   padding: 0 12px;
@@ -35619,3 +35673,54 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
   font-size: 11.5px; color: var(--muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ---- Quick Create's dialogs -----------------------------------------------------------------
+   New Field, Call and SMS each open one of these over the record. Fixed to the viewport rather
+   than to the card: the card is inside a panel that scrolls itself, and a dialog that scrolls
+   away from its own backdrop is worse than no dialog. */
+.wb-quick-modal {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+.wb-quick-dialog {
+  width: min(460px, 100%); max-height: 100%; overflow: auto;
+  background: var(--card, #fff); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .28);
+}
+.wb-quick-dialog > header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 13px 14px 11px; border-bottom: 1px solid var(--border);
+}
+.wb-quick-dialog > header h4 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 7px; flex: 1; }
+.wb-quick-dialog form { padding: 14px; display: flex; flex-direction: column; gap: 11px; }
+.wb-quick-field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; }
+.wb-quick-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wb-quick-row label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; }
+.wb-quick-sec { display: flex; flex-direction: column; gap: 9px; padding-top: 4px; }
+.wb-quick-sec > b { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+/* One button per number, so a record with a mobile and an office line offers both rather than
+   guessing which one was meant. */
+.wb-quick-now { display: flex; flex-wrap: wrap; gap: 8px; }
+.wb-quick-now .btn { display: inline-flex; align-items: center; gap: 7px; }
+.wb-quick-now .btn small { opacity: .65; font-weight: 400; }
+.wb-quick-acts { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+
+/* ---- what is scheduled on a record ----------------------------------------------------------
+   Calls and messages made through Quick Create. A card of its own rather than lines in the
+   activity feed: that feed records what HAS happened, and these have not happened yet. */
+.wb-ev-list { display: flex; flex-direction: column; gap: 7px; }
+.wb-ev-row {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px;
+}
+.wb-ev-ic {
+  width: 26px; height: 26px; flex: none; display: grid; place-items: center;
+  border-radius: 8px; font-size: 14px; color: #fff; background: var(--info, #0891b2);
+}
+.wb-ev-sms .wb-ev-ic { background: var(--warning, #d97706); }
+.wb-ev-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.wb-ev-main b { font-size: 13px; }
+.wb-ev-main small { font-size: 11.5px; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-ev-to { font-variant-numeric: tabular-nums; }
+.wb-ev-when { font-size: 12px; opacity: .7; flex-shrink: 0; }

@@ -178,6 +178,7 @@ function formConfigUI(h, fd) {
       <div class="wb-sheet-card">
         ${formMiniPreview(h, doc)}
         <button class="btn btn-sm" type="button" data-wb-form-open="wbFormDoc"><i class="ti ti-file-text"></i>${filled ? 'Edit the starting document' : 'Design the document'}</button>
+        ${filled ? '' : '<div class="wb-sub">Opens on a blank page with <b>Proposal</b>, <b>Invoice</b>, <b>Work order</b> and <b>Letter</b> to start from — or just start dragging things on.</div>'}
       </div>
       <div class="wb-sub">Every record starts from this layout and can then be changed on its own, so one design serves the whole app. Place text, shapes, pictures and <b>fields from the record</b> \u2014 a placed field is read live, so a document is never out of date. Export it as a PDF or an image, or upload a PDF and use that instead.</div>
     </div>`;
@@ -246,9 +247,19 @@ export function renderFieldConfig(fd, app, ctx) {
       <div class="wb-field"><label>Summarize</label><select class="wb-input" id="wbRollAgg" data-wb-rel-refresh>${AGGS.map(([v, l]) => `<option value="${h(v)}" ${agg === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>
       ${agg !== 'count' ? `<div class="wb-field"><label>Field to summarize</label><select class="wb-input" id="wbRollField"><option value="">— Select field —</option>${numTargets.map((f) => `<option value="${h(f.id)}" ${fd.config.targetField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select>${ta && !numTargets.length ? '<div class="wb-sub" style="color:var(--warning,#d97706)">The linked app has no number or date fields to summarize.</div>' : ''}</div>` : ''}`;
   }
-  if (t === 'file') {
-    return `<div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbFileMulti" ${fd.config.multiple ? 'checked' : ''}><span class="wb-slider"></span></label>
-      <div><b>Allow multiple files</b><div class="wb-sub">Attach several files to one record. Turning this off later keeps every file that is already attached — it only stops new ones being added.</div></div></div>`;
+  if (t === 'file' || t === 'image') {
+    // Two named options rather than a switch. "Allow multiple photos" told you what ON meant
+    // and left OFF to be inferred, and the setting reads as a question with two answers --
+    // which is how the Display style control directly above this one is already written.
+    const noun = t === 'image' ? 'photos' : 'files';
+    const one = t === 'image' ? 'photo' : 'file';
+    const multiple = !!fd.config.multiple;
+    return `<div class="wb-field"><label>How many ${noun}</label>
+      <select class="wb-input" id="wbFileMode">
+        <option value="single" ${multiple ? '' : 'selected'}>Single — one ${one} on this field</option>
+        <option value="multiple" ${multiple ? 'selected' : ''}>Multiple — several ${noun} on this field</option>
+      </select>
+      <div class="wb-sub">A single ${one} is replaced when a new one is uploaded. Switching back to single later keeps every ${one} already attached — it only stops new ones being added.</div></div>`;
   }
   if (t === 'relationship') {
     const sourceCompany = canonicalCompanyId(state.builderModal.companyId);
@@ -867,17 +878,19 @@ export function createFieldInput(ctx) {
         </div>`; break;
       }
       case 'image': input = `
-        <div class="wb-file-field wb-image-field" data-wb-file data-wb-image>
+        <div class="wb-file-field wb-image-field" data-wb-file data-wb-image ${f.config.multiple ? 'data-wb-file-multi' : ''}>
           <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
-          <input type="file" hidden accept="${acceptAttr('image')}" data-wb-file-input />
+          <input type="file" hidden accept="${acceptAttr('image')}" data-wb-file-input ${f.config.multiple ? 'multiple' : ''} />
           <button type="button" class="wb-image-drop" data-wb-file-open>
             <span class="wb-img-preview" data-wb-img-preview><i class="ti ti-photo" data-wb-file-ico></i></span>
             <span class="wb-file-label" data-wb-file-label></span>
           </button>
-          <div class="wb-file-actions" data-wb-file-actions hidden>
+          <!-- Several photos get a grid of thumbnails with a remove on each; one photo keeps the
+               single preview it always had, because a gallery of one is just a picture. -->
+          ${f.config.multiple ? '<ul class="wb-file-list wb-img-list" data-wb-file-list></ul>' : `<div class="wb-file-actions" data-wb-file-actions hidden>
             <a class="btn btn-mini" data-wb-file-view target="_blank" rel="noreferrer"><i class="ti ti-eye"></i>View</a>
             <button type="button" class="btn btn-mini danger" data-wb-file-remove><i class="ti ti-x"></i>Remove</button>
-          </div>
+          </div>`}
           <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
         </div>`; break;
       case 'rating': input = wbRatingStars(val, true, f.id); break;

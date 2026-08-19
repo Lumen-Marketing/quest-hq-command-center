@@ -36,17 +36,24 @@ test('Quick Create is offered as a card like any other', () => {
 });
 
 // ---- which field it writes into -----------------------------------------------------------------
+//
+// No TILE makes a field any more -- Spreadsheet, Form, Image and File were removed because each
+// one added a column to the APP the first time it was pressed, so a spreadsheet made for one job
+// put an empty box on every other record for ever. The helper stays: "New Field" is the tile that
+// replaces them, and finding-or-making a field is what it will do. Driven by a literal entry now
+// rather than through quickEntry, so these guard the helper rather than a tile that has gone.
+
+const sheetEntry = { key: 'sheet', field: 'sheet', name: 'Spreadsheet' };
 
 test('the field is made once and reused, not once per press', () => {
-  const entry = quickEntry('sheet');
   const app = { fields: [] };
-  const first = quickCreateField(app, entry, ids());
+  const first = quickCreateField(app, sheetEntry, ids());
   assert.equal(first.created, true);
   assert.equal(first.field.type, 'sheet');
   assert.equal(first.field.label, 'Spreadsheet');
 
   app.fields.push(first.field);
-  const second = quickCreateField(app, entry, ids());
+  const second = quickCreateField(app, sheetEntry, ids());
   assert.equal(second.created, false, 'a second press must not grow a second column');
   assert.equal(second.field, first.field);
 });
@@ -54,7 +61,7 @@ test('the field is made once and reused, not once per press', () => {
 test('it matches on type, so a renamed field is still the same one', () => {
   // Somebody who renames "Spreadsheet" to "Takeoff" has not asked for a second spreadsheet.
   const app = { fields: [{ id: 'f1', label: 'Takeoff', type: 'sheet' }] };
-  const found = quickCreateField(app, quickEntry('sheet'), ids());
+  const found = quickCreateField(app, sheetEntry, ids());
   assert.equal(found.created, false);
   assert.equal(found.field.id, 'f1');
 });
@@ -62,19 +69,19 @@ test('it matches on type, so a renamed field is still the same one', () => {
 test('a hidden field of that type is not reused', () => {
   // Hidden means it is not on the page, so opening it would open nothing anybody can see.
   const app = { fields: [{ id: 'f1', label: 'Spreadsheet', type: 'sheet', hidden: true }] };
-  assert.equal(quickCreateField(app, quickEntry('sheet'), ids()).created, true);
+  assert.equal(quickCreateField(app, sheetEntry, ids()).created, true);
 });
 
-test('every entry either names a field type or a module, never neither', () => {
+test('no tile makes a field any more', () => {
   QUICK_CREATE.forEach((entry) => {
     assert.ok(entry.key && entry.label, `${entry.key} needs a key and a label`);
-    assert.ok(entry.field || entry.module, `${entry.key} does nothing`);
+    assert.ok(entry.module, `${entry.key} does nothing`);
+    assert.equal(entry.field, undefined, `${entry.key} must not add a column to the app`);
   });
-  assert.deepEqual(
-    QUICK_CREATE.filter((entry) => entry.field).map((entry) => entry.field),
-    ['sheet', 'form', 'image', 'file'],
-  );
   assert.equal(quickEntry('nonsense'), null);
+  for (const gone of ['sheet', 'form', 'image', 'file']) {
+    assert.equal(quickEntry(gone), null, `${gone} was removed on request`);
+  }
 });
 
 // ---- a new field has to be visible --------------------------------------------------------------
@@ -119,9 +126,14 @@ test('a layout with no field group at all is left alone', () => {
 test('the card draws only what actually works', () => {
   // Proposal is declared in the model -- it is next -- but nothing creates one yet, and a button
   // that does nothing is worse than one that is not there.
-  assert.match(page, /\.filter\(\(entry\) => entry\.field\)/);
+  //
+  // The card selects on the model own `soon` flag rather than on `entry.field`. Selecting on
+  // the field dropped Task as well, which is a row in public.tasks rather than a column on the
+  // app -- written, tested, and unreachable, with every one of its own tests passing.
+  assert.match(page, /\.filter\(\(entry\) => !entry\.soon\)/);
   assert.match(page, /data-wb-quick="\$\{h\(entry\.key\)\}"/);
-  assert.ok(QUICK_CREATE.some((entry) => entry.key === 'proposal' && !entry.field));
+  assert.ok(QUICK_CREATE.some((entry) => entry.key === 'proposal' && entry.soon));
+  assert.ok(QUICK_CREATE.some((entry) => entry.key === 'task' && !entry.soon), 'Task works, so it is drawn');
 });
 
 test('only a manager sees the card, and the press is checked again anyway', () => {
@@ -156,23 +168,33 @@ test('main.js hands over every key the press needs', () => {
   // Missing one is a ReferenceError on the first press and on no earlier code path.
   const at = main.indexOf('createRecordPage({');
   const passed = main.slice(at, main.indexOf('});', at));
-  for (const key of ['wbDoc', 'wbSave', 'wbUid', 'render', 'showToast', 'can', 'memberName']) {
+  for (const key of ['wbDoc', 'wbSave', 'wbUid', 'render', 'showToast', 'can', 'memberName',
+    // The Task tile opens the record's own task modal rather than writing a second one.
+    'openRecordTask']) {
     assert.ok(passed.includes(key), `main.js must pass ${key}`);
   }
 });
 
-test('the sheet and the document are opened by the seat they already understand', () => {
-  // Both editors take one string of four ids; building a second shape here would be a second
-  // thing to keep in step with them.
+test('the seat is one string of four ids, the shape everything else already takes', () => {
+  // Built once on the card and read back at press time; a second shape here would be a second
+  // thing to keep in step.
   assert.match(quick, /\[companyId, workspaceId, appId, itemId\]\.join\('\|'\)/);
-  assert.match(quick, /import\('\.\.\/sheet\/sheet-editor\.js'\)/);
-  assert.match(quick, /import\('\.\.\/form\/doc-editor\.js'\)/);
-  // An image and a file have no modal of their own -- the cell is the control.
-  assert.match(quick, /data-wb-inline="\$\{escape\}"/);
+});
+
+test('the tiles that make a column on every record are gone for good', () => {
+  // Spreadsheet, Form, Image and File each added a field to the APP on first press. Pressing one
+  // for a single job put an empty box on every other record for ever, so they were removed. If
+  // one comes back it must come back deliberately, not by a stray import.
+  for (const dead of ['sheet-editor.js', 'doc-editor.js', 'data-wb-inline=']) {
+    assert.ok(!quick.includes(dead), `${dead} belongs to a tile that was removed`);
+  }
 });
 
 test('every class the card uses is styled', () => {
-  ['wb-quick-grid', 'wb-quick-btn', 'wb-quick-ic', 'wb-quick-label'].forEach((name) => {
+  ['wb-quick-grid', 'wb-quick-btn', 'wb-quick-ic', 'wb-quick-label',
+    // ...and the dialog all four tiles now open.
+    'wb-quick-modal', 'wb-quick-dialog', 'wb-quick-field', 'wb-quick-row', 'wb-quick-acts',
+    'wb-quick-sec', 'wb-quick-now'].forEach((name) => {
     assert.ok(styles.includes(`.${name}`), `.${name} has no rule`);
   });
 });
