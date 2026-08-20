@@ -7905,6 +7905,14 @@ input[type="file"]::file-selector-button:active {
   object-fit: contain;
 }
 
+.asset-icon.ti {
+  display: grid;
+  place-items: center;
+  color: var(--orange);
+  font-size: 24px;
+  line-height: 1;
+}
+
 .file-type small {
   display: none;
 }
@@ -7930,6 +7938,10 @@ input[type="file"]::file-selector-button:active {
   height: 52px;
 }
 
+.file-doc-icon .asset-icon.ti {
+  font-size: 42px;
+}
+
 .file-doc-icon small {
   color: var(--muted);
   font-size: 9px;
@@ -7950,6 +7962,10 @@ input[type="file"]::file-selector-button:active {
 .file-doc-icon.large .asset-icon {
   width: 72px;
   height: 72px;
+}
+
+.file-doc-icon.large .asset-icon.ti {
+  font-size: 58px;
 }
 
 .file-detail-preview {

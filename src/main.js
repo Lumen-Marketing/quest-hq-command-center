@@ -1551,7 +1551,6 @@ const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
 const CALENDAR_EVENT_TYPES = ['Company event', 'Job visit / inspection', 'Estimate appointment', 'Install / field work', 'Internal meeting', 'Personal reminder'];
 const CALENDAR_FILTER_TYPES = ['Task due', 'Invoice due', 'Approval', 'Time'].concat(CALENDAR_EVENT_TYPES);
-const FILE_ICON_ASSET_BASE = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons/';
 const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
 // 'Delivery' is the one the v1 design asks for that was missing. The rest keep their stored
 // spelling -- job_files already holds these values, and renaming would orphan existing rows.
@@ -46753,68 +46752,17 @@ function folderIdFromCategory(category) {
 }
 
 function folderIconAsset(folder, label = 'Folder') {
-  return iconAsset('default_folder.svg', label || 'Folder');
+  return iconFontAsset(folder?.icon, 'ti-folder');
 }
 
 function fileIconAsset(file, label = 'File') {
-  return iconAsset(fileIconAssetName(file), label || fileTypeLabel(file));
+  return iconFontAsset(wbFileIcon(fileTypeKind(file)), 'ti-file');
 }
 
-function iconAsset(asset, label) {
-  return `<img class="asset-icon" src="${h(FILE_ICON_ASSET_BASE + asset)}" alt="${h(label)}" loading="lazy" draggable="false" referrerpolicy="no-referrer" />`;
-}
-
-function fileIconAssetName(file) {
-  const ext = fileExtension(file);
-  const exact = {
-    pdf: 'file_type_pdf.svg',
-    doc: 'file_type_word.svg',
-    docx: 'file_type_word.svg',
-    odt: 'file_type_word.svg',
-    rtf: 'file_type_word.svg',
-    xls: 'file_type_excel.svg',
-    xlsx: 'file_type_excel.svg',
-    xlsm: 'file_type_excel.svg',
-    ods: 'file_type_excel.svg',
-    csv: 'file_type_excel.svg',
-    ppt: 'file_type_powerpoint.svg',
-    pptx: 'file_type_powerpoint.svg',
-    pps: 'file_type_powerpoint.svg',
-    odp: 'file_type_powerpoint.svg',
-    zip: 'file_type_zip.svg',
-    rar: 'file_type_zip.svg',
-    '7z': 'file_type_zip.svg',
-    tar: 'file_type_zip.svg',
-    gz: 'file_type_zip.svg',
-    tgz: 'file_type_zip.svg',
-    txt: 'file_type_text.svg',
-    log: 'file_type_text.svg',
-    md: 'file_type_markdown.svg',
-    json: 'file_type_json.svg',
-    html: 'file_type_html.svg',
-    htm: 'file_type_html.svg',
-    css: 'file_type_css.svg',
-    scss: 'file_type_css.svg',
-    js: 'file_type_js.svg',
-    jsx: 'file_type_js.svg',
-    ts: 'file_type_js.svg',
-    tsx: 'file_type_js.svg',
-    xml: 'file_type_xml.svg',
-    yml: 'file_type_yaml.svg',
-    yaml: 'file_type_yaml.svg',
-    svg: 'file_type_svg.svg',
-    ai: 'file_type_ai.svg',
-    psd: 'file_type_photoshop.svg',
-  };
-  if (exact[ext]) return exact[ext];
-  const kind = fileTypeKind(file);
-  if (kind === 'image') return 'file_type_image.svg';
-  if (kind === 'video') return 'file_type_video.svg';
-  if (kind === 'audio') return 'file_type_audio.svg';
-  if (kind === 'text') return 'file_type_text.svg';
-  if (kind === 'code') return 'file_type_js.svg';
-  if (kind === 'archive') return 'file_type_zip.svg';
-  return 'default_file.svg';
+function iconFontAsset(icon, fallback = 'ti-file') {
+  const candidate = String(icon || '').trim();
+  const safeIcon = /^ti-[a-z0-9-]+$/i.test(candidate) ? candidate : fallback;
+  return `<i class="ti ${h(safeIcon)} asset-icon" aria-hidden="true"></i>`;
 }
 
 function titleCase(value) {

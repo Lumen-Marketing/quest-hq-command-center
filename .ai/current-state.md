@@ -4,6 +4,7 @@ Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational s
 
 ## 2026-08-21 release hardening
 
+- Company Drive folder and document glyphs now use Questbase's bundled icon pack instead of the third-party vscode-icons CDN, so the enforced image policy cannot turn Drive rows into broken-image alt text.
 - Read-only sample sessions now receive visibly disabled mutation controls after every shell render, including controls submitted through an external `form` attribute. Existing click and submit authorization guards remain the enforcement backstop.
 - The RingCentral calls runtime is lazy-loaded outside the main entry bundle. Missing sessions and unavailable or forbidden integrations now render a terminal status and release their polling interval instead of leaving the board on an endless loading state.
 - Status, read-only, and role-preview notices occupy their own shell row. On narrow screens the notice row and settings tabs scroll or wrap independently rather than covering the active workspace.
