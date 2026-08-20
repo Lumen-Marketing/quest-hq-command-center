@@ -55,11 +55,11 @@ test('new owners see required setup over their workspace rather than being stran
   }
 });
 
-test('Settings opens the dismissible setup modal and still lazy-loads its interface', () => {
+test('Setup > Workspaces opens the dismissible setup modal and still lazy-loads its interface', () => {
   assert.match(main, /import\('\.\/onboarding\/company-setup-runtime\.js'\)/);
   assert.match(runtime, /import '\.\/company-setup\.css'/);
   assert.match(runtime, /from '\.\/company-setup-panel\.js'/);
-  assert.match(main, /companyPath\('settings', \{ tab: 'setup' \}/);
+  assert.match(main, /companyPath\('setup', \{ tab: 'workspaces' \}/);
   assert.match(main, /renderCompanySetupSettings\(companyId, route\)/);
   assert.match(main, /data-action="open-workspace-setup"/);
   assert.match(main, /state\.modal = required \? 'workspace-setup-required' : 'workspace-setup'/);

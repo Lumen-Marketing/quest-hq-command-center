@@ -13,13 +13,13 @@ test('command center uses the approved IBM Plex typography system', () => {
 });
 
 test('navigation follows the approved job center information architecture', () => {
-  assert.match(source, /const NAVIGATION_LABELS = \{[\s\S]*dashboard:\s*'Home'[\s\S]*messages:\s*'Inbox'[\s\S]*underwriter:\s*'Estimator'[\s\S]*analytics:\s*'Reports'[\s\S]*users:\s*'People'[\s\S]*calendar:\s*'Meetings'/);
+  assert.match(source, /const NAVIGATION_LABELS = \{[\s\S]*dashboard:\s*'Home'[\s\S]*workspaces:\s*'Workspace Builder'[\s\S]*messages:\s*'Inbox'[\s\S]*underwriter:\s*'Estimator'[\s\S]*analytics:\s*'Reports'[\s\S]*users:\s*'People & Access'[\s\S]*calendar:\s*'Meetings'/);
   assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   // Company Contacts moved OUT of Work and into its own Company group, above Workspace and
   // first in the Company tab. A contact belongs to the company -- that is the whole point of
   // the directory, and why the table has no workspace_id -- so sitting under Work, beside a
   // person's own tasks and inbox, said the opposite of what it is.
-  assert.match(source, /\{ label: 'Company', ids: \['company-contacts'\] \},\n\s*\{ label: 'Workspace',/, 'Company sits directly above Workspace');
+  assert.match(source, /\{ label: 'Company', ids: \['company-contacts', 'users', 'analytics'\] \},\n\s*\{ label: 'Workspace',/, 'Company sits directly above Workspace');
   assert.match(source, /company: new Set\(\['Company', 'Workspace', 'Operations', 'Control'\]\)/, 'and shows in the Company tab, not My work');
   assert.ok(
     !/'my-work': new Set\(\[[^\]]*'Company'/.test(source),
@@ -28,7 +28,7 @@ test('navigation follows the approved job center information architecture', () =
   assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
   assert.match(source, /\{ label: 'Tools', ids: \['underwriter', 'proposals'\] \}/);
-  assert.match(source, /\{ label: 'Review', ids: \['analytics', 'users', 'calendar'\] \}/);
+  assert.match(source, /\{ label: 'Review', ids: \['calendar'\] \}/);
   assert.match(source, /\{ label: 'Build', ids: \['templates', 'automations'\] \}/);
   assert.match(source, /function navigationLabel\(moduleId, fallbackLabel\)/);
   assert.match(source, /navigationLabel\(module\.id, module\.label\)/);
@@ -68,12 +68,11 @@ test('sidebar scope is interactive without weakening module permissions', () => 
   assert.match(source, /if \(module\.id === 'jobs' \|\| module\.id === 'deals'\) return navItemPipeline/);
 });
 
-test('settings is reachable from the nav, and not twice over', () => {
-  // The footer used to carry a Settings cog beside the account card. It sat directly beneath
-  // the Settings nav item, pointing at the same route -- two controls, one destination, and
-  // the cog was the one nobody could name. Settings is a first-class module; that is the
-  // entry point.
-  assert.match(source, /\{ id: 'settings', group: 'Company', label: 'Settings',[^}]*permission: 'settings\.view' \}/);
+test('setup and admin replace the catch-all settings entry without adding a duplicate footer link', () => {
+  assert.match(source, /\{ id: 'setup', group: 'Company', label: 'Setup',[^}]*permission: 'settings\.view' \}/);
+  assert.match(source, /\{ id: 'admin', group: 'Company', label: 'Admin',[^}]*permission: 'settings\.view' \}/);
+  assert.match(source, /\{ label: 'Control', ids: \['setup', 'admin', 'help', 'tickets'\] \}/);
+  assert.match(source, /canonicalSettingsDestination\(route\.params\.get\('tab'\) \|\| 'company'\)/, 'old Settings links retain a compatibility redirect');
   assert.doesNotMatch(source, /class="deck-settings-link/, 'the duplicate cog must not come back');
   // The row it lived in is a single column now, or the card would sit against a dead 40px gap.
   const row = styles.slice(styles.indexOf('.quest-nav-v2 .deck-footer-row {'));

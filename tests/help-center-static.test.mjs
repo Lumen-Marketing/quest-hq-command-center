@@ -18,7 +18,7 @@ test('Help Center is a real company route loaded outside subscription and plugin
 test('desktop, account, and mobile navigation all expose Help Center links', () => {
   assert.match(main, /class="btn help-center-trigger"[^>]*href="\$\{appHref\(companyPath\('help'/);
   assert.match(main, /class="account-help-link"[^>]*href="\$\{appHref\(companyPath\('help'/);
-  assert.match(main, /\{ label: 'Control', ids: \['settings', 'help', 'tickets'\] \}/);
+  assert.match(main, /\{ label: 'Control', ids: \['setup', 'admin', 'help', 'tickets'\] \}/);
   assert.match(main, /navigationLabel\(module\.id, module\.label\)/);
 });
 

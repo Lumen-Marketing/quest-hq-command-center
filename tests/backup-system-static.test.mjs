@@ -28,7 +28,7 @@ test('settings exposes backup controls for manual automatic import export and re
   assert.match(source, /data-action="download-workspace-backup"/);
   assert.match(source, /data-action="open-restore-backup"/);
   assert.match(source, /data-action="mark-workspace-backup-deleted"/);
-  assert.match(source, /companyPath\('settings', \{ tab: 'backups' \}/);
+  assert.match(source, /tab === 'data-recovery'[\s\S]*renderBackupsSettings\(companyId\)[\s\S]*renderRecycleBinSettings\(companyId\)/);
 });
 
 test('backup exports are real zip payloads and restore through validated workspace snapshots', () => {

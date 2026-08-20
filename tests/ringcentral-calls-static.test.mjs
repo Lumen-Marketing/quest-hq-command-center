@@ -32,7 +32,7 @@ test('the calls module appears in the Operations navigation group', () => {
   // stakeholder-approved IA by sidebar-navigation-static.test.mjs, and the
   // module registry already files Calls under Operations.
   assert.match(main, /\{ label: 'Operations', ids: \[[^\]]*'calls'\] \}/);
-  assert.match(main, /\{ label: 'Review', ids: \['analytics', 'users', 'calendar'\] \}/);
+  assert.match(main, /\{ label: 'Review', ids: \['calendar'\] \}/);
 });
 
 test('team.view resolves to the calls plugin in the browser as well as the database', () => {

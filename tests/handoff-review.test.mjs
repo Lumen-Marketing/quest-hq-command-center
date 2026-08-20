@@ -65,7 +65,7 @@ test('the screen reports only — it never repairs', () => {
 });
 
 test('the panel is admin-gated and lazily loaded', () => {
-  assert.match(main, /if \(can\('crm\.manage', companyId\)\) \{\s*\n\s*settingsTabs\.push/);
+  assert.match(main, /tab === 'handoffs' \? \(can\('crm\.manage', companyId\) \? renderHandoffReviewPanel\(companyId\)/);
   assert.match(main, /import\('\.\/crm\/handoff-review\.js'\)/);
   assert.doesNotMatch(main, /^import .*crm\/handoff-review/m);
 });

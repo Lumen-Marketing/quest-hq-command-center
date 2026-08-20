@@ -19,10 +19,10 @@ Saved Contacts, Quotes, Jobs, and Tasks have a separate shared record-history le
 | Work | Home/Dashboard, My Tasks, Inbox/Messages |
 | Pipeline and production | Contacts with live stages, Jobs with live stages |
 | Tools | Estimator/Underwriter, Proposals |
-| Review and build | Reports/Analytics, People/Users, Meetings/Calendar, Templates, Automations |
+| Review and build | Meetings/Calendar, Templates, Automations |
 | Company workspace | Workspace App Builder, Workday, Quotes/Deals, Files, Forms, Client Portals, Knowledge |
 | Company operations | Price Book, Finance, Team Chart, Team Workload, Time, Approvals, Clock |
-| Control and help | Guided setup, company, roles, access, billing, plugins, workspace settings, and the Questbase Help Center |
+| Company and control | Company Contacts, Reports, People & Access; Setup for profile/brand/workspaces/modules/pipelines/handoffs/integrations/launch; Admin for billing/recovery/audit/diagnostics; Questbase Help Center |
 
 Tickets and Templates appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
 
@@ -49,5 +49,5 @@ Tickets and Templates appear as future/planned areas. Confirm current implementa
 - Operational workspace: a configurable child environment for a team, pipeline, or role inside one company account.
 - Workspace setup plan: the owner-reviewed, editable apps, pipeline stages, and non-elevated role templates produced for one selected operational workspace by its searchable work-type questionnaire or a ready-made blueprint. It never creates or rewrites sibling workspaces.
 - Workspace App Builder: the configurable custom-app module available inside an operational workspace; it is not the tenancy object itself.
-- Plugin: a company-level entitlement with separate activation and configuration per operational workspace; disabling it preserves data.
+- Module: the customer-facing tool enabled for a workspace. Internally it remains backed by the existing company plugin entitlement plus workspace plugin activation; disabling it preserves data.
 

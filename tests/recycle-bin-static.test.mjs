@@ -14,12 +14,11 @@ const hardeningMigration = readFileSync(new URL('../supabase/migrations/20260710
 const historyMigrationName = migrations.find((name) => /record_history_and_recent_delete_undo/.test(name));
 const historyMigration = historyMigrationName ? readFileSync(new URL(`../supabase/migrations/${historyMigrationName}`, import.meta.url), 'utf8') : '';
 
-test('settings exposes a recycle bin for 30 day safe deletes', () => {
+test('admin data and recovery exposes a recycle bin for 30 day safe deletes', () => {
   assert.match(source, /const RECYCLE_BIN_RETENTION_DAYS = 30;/);
   assert.match(source, /const RECYCLE_BIN_CACHE_KEY = 'quest-hq-recycle-bin-cache-v1';/);
   assert.match(source, /recycleBinItems: readSeededList\(RECYCLE_BIN_CACHE_KEY, \[\]\)\.map\(normalizeRecycleBinItem\)/);
-  assert.match(source, /\[companyPath\('settings', \{ tab: 'recycle-bin' \}, companyId\), 'Recycle Bin', 'recycle-bin'\]/);
-  assert.match(source, /tab === 'recycle-bin' \? renderRecycleBinSettings\(companyId\) : ''/);
+  assert.match(source, /tab === 'data-recovery'[\s\S]*renderBackupsSettings\(companyId\)[\s\S]*renderRecycleBinSettings\(companyId\)/);
   assert.match(source, /function renderRecycleBinSettings\(companyId\)/);
   assert.match(source, /data-recycle-filter="type"/);
   assert.match(source, /data-recycle-filter="status"/);

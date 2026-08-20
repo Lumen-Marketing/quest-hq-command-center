@@ -69,6 +69,9 @@ import {
   appCoverage, buildPermissionDependencies, coverageSummary, unreachablePermissions,
 } from './team/permission-coverage.js';
 import { formatCurrencyDraft, parseCurrencyAmount } from './ui/currency-input.js';
+import {
+  ADMIN_TABS, SETUP_TABS, canonicalSettingsDestination, normalizeSettingsSurfaceTab,
+} from './settings/navigation-model.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -1242,6 +1245,8 @@ const MODULE_REGISTRY = [
   { id: 'users', group: 'Company', label: 'Users', icon: 'ti-users', symbol: 'q-symbol-users', status: 'live', permission: 'users.view' },
   { id: 'messages', group: 'Communication', label: 'Messages', icon: 'ti-messages', symbol: 'q-symbol-messages', status: 'live', permission: 'messages.view' },
   { id: 'settings', group: 'Company', label: 'Settings', icon: 'ti-settings', symbol: 'q-symbol-settings', status: 'live', permission: 'settings.view' },
+  { id: 'setup', group: 'Company', label: 'Setup', icon: 'ti-adjustments-horizontal', symbol: 'q-symbol-settings', status: 'live', permission: 'settings.view' },
+  { id: 'admin', group: 'Company', label: 'Admin', icon: 'ti-shield-lock', symbol: 'q-symbol-settings', status: 'live', permission: 'settings.view' },
   { id: 'team-chart', group: 'Company', label: 'Team chart', icon: 'ti-hierarchy-3', symbol: 'q-symbol-team-chart', status: 'live', permission: 'team.view' },
   { id: 'time', group: 'Operations', label: 'My time', icon: 'ti-clock', symbol: 'q-symbol-time', status: 'live', permission: 'time.track' },
   { id: 'calendar', group: 'Operations', label: 'Calendar', icon: 'ti-calendar', symbol: 'q-symbol-calendar', status: 'live', permission: 'calendar.view' },
@@ -1256,11 +1261,11 @@ const NAVIGATION_LABELS = {
   dashboard: 'Home',
   // 'Workspaces' sat inside the group already called WORKSPACE, so the rail read as though
   // it repeated itself. What the module actually holds is the apps you build.
-  workspaces: 'Apps',
+  workspaces: 'Workspace Builder',
   messages: 'Inbox',
   underwriter: 'Estimator',
   analytics: 'Reports',
-  users: 'People',
+  users: 'People & Access',
   calendar: 'Meetings',
 };
 
@@ -1269,15 +1274,15 @@ const NAV_GROUPS = [
   { label: 'Pipeline', ids: ['contacts'] },
   { label: 'Production', ids: ['jobs'] },
   { label: 'Tools', ids: ['underwriter', 'proposals'] },
-  { label: 'Review', ids: ['analytics', 'users', 'calendar'] },
+  { label: 'Review', ids: ['calendar'] },
   { label: 'Build', ids: ['templates', 'automations'] },
   // Above Workspace, and first in the Company tab. A contact belongs to the COMPANY -- that is
   // the whole point of the directory, and why it has no workspace_id -- so listing it under
   // Work, beside a person's own tasks and inbox, said the opposite of what it is.
-  { label: 'Company', ids: ['company-contacts'] },
+  { label: 'Company', ids: ['company-contacts', 'users', 'analytics'] },
   { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
   { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload', 'eod', 'calls'] },
-  { label: 'Control', ids: ['settings', 'help', 'tickets'] },
+  { label: 'Control', ids: ['setup', 'admin', 'help', 'tickets'] },
 ];
 
 const SIDEBAR_SCOPE_GROUPS = {
@@ -3386,7 +3391,7 @@ function renderAccountThemeControls() {
   const accent = getAccent();
   return `
     <div class="account-theme-panel" aria-label="Theme chooser">
-      <div class="account-theme-title"><i class="ti ti-palette"></i><span>Theme</span></div>
+      <div class="account-theme-title"><i class="ti ti-palette"></i><span>Appearance</span></div>
       <div class="account-theme-options" role="group" aria-label="Color mode">
         ${THEME_OPTIONS.map(([id, label, icon]) => `
           <button class="${mode === id ? 'active' : ''}" type="button" data-action="set-theme" data-theme="${h(id)}" aria-pressed="${mode === id ? 'true' : 'false'}">
@@ -5504,7 +5509,7 @@ function shellTemplate(route, workspace) {
               ` : ''}
               ${renderAccountThemeControls()}
               <button type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
-              <button type="button" data-action="open-settings"><i class="ti ti-settings"></i>Settings</button>
+              <button type="button" data-action="open-settings"><i class="ti ti-adjustments-horizontal"></i>Company Setup</button>
               <a class="account-help-link" href="${appHref(companyPath('help', {}, companyId))}" data-router><i class="ti ti-help-circle"></i>Help Center</a>
               <button type="button" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</button>
             </div>
@@ -5536,7 +5541,7 @@ function renderMobileStatusRail(companyId) {
   const health = subscriptionAllowsCompany(companyId) ? 'Good' : 'Pending';
   return `
     <div class="mobile-status-rail" aria-label="Workspace status">
-      <a href="${appHref(companyPath('settings', { tab: 'billing' }, companyId))}" data-router>
+      <a href="${appHref(companyPath('admin', { tab: 'billing' }, companyId))}" data-router>
         ${svgIcon('q-symbol-approvals')}<span>${h(subscriptionLabel(companyId))}</span>
       </a>
       <a href="${appHref(companyPath('users', {}, companyId))}" data-router>
@@ -5545,7 +5550,7 @@ function renderMobileStatusRail(companyId) {
       <a href="${appHref(companyPath('tasks', {}, companyId))}" data-router>
         ${svgIcon('q-symbol-tasks')}<span>${h(String(overdueTasks))} overdue</span>
       </a>
-      <a href="${appHref(companyPath('settings', {}, companyId))}" data-router>
+      <a href="${appHref(companyPath('admin', { tab: 'diagnostics' }, companyId))}" data-router>
         ${svgIcon('q-symbol-settings')}<span>Health: ${h(health)}</span>
       </a>
     </div>
@@ -5948,7 +5953,7 @@ function loadRenderWorkspaceSettings() {
   if (!renderWorkspaceSettingsPending) {
     renderWorkspaceSettingsPending = import('./settings/workspace-settings.js').then((mod) => {
       renderWorkspaceSettingsModule = mod.createWorkspaceSettings({
-        activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, renderAppearanceControls, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state, isCompanyOwner,
+        activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state, isCompanyOwner,
       });
       return renderWorkspaceSettingsModule;
     }).catch((error) => {
@@ -5962,6 +5967,12 @@ function loadRenderWorkspaceSettings() {
 function renderWorkspaceSettings(companyId) {
   if (renderWorkspaceSettingsModule) return renderWorkspaceSettingsModule.renderWorkspaceSettings(companyId);
   loadRenderWorkspaceSettings().then(() => render()).catch((error) => console.error('renderWorkspaceSettings failed to load', error));
+  return questLoader('Loading');
+}
+
+function renderWorkspaceSettingsSurface(method, companyId) {
+  if (renderWorkspaceSettingsModule?.[method]) return renderWorkspaceSettingsModule[method](companyId);
+  loadRenderWorkspaceSettings().then(() => render()).catch((error) => console.error(`${method} failed to load`, error));
   return questLoader('Loading');
 }
 
@@ -6780,7 +6791,7 @@ function canViewModule(module, companyId = activeCompanyId()) {
   if (module.id === 'dashboard' || module.id === 'help') return true;
   if (module.status === 'planned') return false;
   if (!isModuleInstalled(module.id, companyId)) return false;
-  if (!subscriptionAllowsCompany(companyId) && !['settings', 'users'].includes(module.id)) return false;
+  if (!subscriptionAllowsCompany(companyId) && !['settings', 'setup', 'admin', 'users'].includes(module.id)) return false;
   return can(module.permission || `${module.id}.view`, companyId);
 }
 
@@ -6989,7 +7000,7 @@ function renderWorkspace(route) {
   if (route.section === 'dashboard') return renderCompanyDashboard(companyId);
   if (route.section === 'help') return renderHelpCenterPage(route, companyId);
   if (moduleMeta?.status !== 'planned') {
-    if (!subscriptionAllowsCompany(companyId) && route.section !== 'settings') return renderSubscriptionBlockedPage(companyId);
+    if (!subscriptionAllowsCompany(companyId) && !['settings', 'setup', 'admin', 'users'].includes(route.section)) return renderSubscriptionBlockedPage(companyId);
     if (!isModuleInstalled(route.section, companyId)) return renderPluginBlockedPage(companyId, moduleMeta);
     if (moduleMeta?.permission && !can(moduleMeta.permission, companyId)) return renderPermissionBlockedPage(companyId, moduleMeta.permission);
   }
@@ -7001,6 +7012,8 @@ function renderWorkspace(route) {
   if (route.section === 'price-book') return renderPriceBookPage(route, companyId);
   if (route.section === 'workspaces') return renderWorkspaceBuilderPage(route, companyId);
   if (route.section === 'users') return renderUsersPage(route, companyId);
+  if (route.section === 'setup') return renderSetupPage(route, companyId);
+  if (route.section === 'admin') return renderAdminPage(route, companyId);
   if (route.section === 'settings') return renderSettingsPage(route, companyId);
   if (route.section === 'forms') return renderFormsPage(companyId);
   if (route.section === 'analytics') return renderAnalyticsPage(route, companyId);
@@ -7948,7 +7961,7 @@ function renderSubscriptionBlockedPage(companyId) {
   return `
     ${workspaceHeader(pendingReview ? 'Workspace awaiting approval' : 'Subscription required', pendingReview ? 'Your company workspace is created. Quest needs to approve billing/access before live company data opens.' : 'This company workspace needs an active subscription before paid modules can open.', `
       <button class="btn" type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
-      <a class="btn btn-primary" href="${appHref(companyPath('settings', { tab: 'billing' }, companyId))}" data-router><i class="ti ti-credit-card"></i>${pendingReview ? 'Review status' : 'Billing'}</a>
+      <a class="btn btn-primary" href="${appHref(companyPath('admin', { tab: 'billing' }, companyId))}" data-router><i class="ti ti-credit-card"></i>${pendingReview ? 'Review status' : 'Billing'}</a>
     `)}
     <section class="panel">
       ${contractRows([
@@ -7969,7 +7982,7 @@ function renderPluginBlockedPage(companyId, moduleMeta) {
   const installablePlugins = plugins.filter((item) => !item.comingSoon && companyPluginStatus(companyId, item.id) === 'installed');
   return `
     ${workspaceHeader(`${plugin?.label || moduleMeta?.label || 'Plugin'} not installed`, 'This workspace has not enabled the plugin required for this module.', `
-      <a class="btn" href="${appHref(companyPath('settings', { tab: 'plugins' }, companyId))}" data-router><i class="ti ti-plug"></i>${canManagePlugins ? 'Manage plugins' : 'View plugins'}</a>
+      <a class="btn" href="${appHref(companyPath('setup', { tab: 'modules' }, companyId))}" data-router><i class="ti ti-plug"></i>${canManagePlugins ? 'Manage modules' : 'View modules'}</a>
       ${canManagePlugins ? installablePlugins.map((item) => `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(item.id)}" data-status="installed"><i class="ti ti-download"></i>Activate ${h(item.label)}</button>`).join('') : ''}
     `)}
     <section class="panel">
@@ -7987,7 +8000,7 @@ function renderPluginBlockedPage(companyId, moduleMeta) {
 function renderPermissionBlockedPage(companyId, permission) {
   return `
     ${workspaceHeader('Access denied', 'Your role does not include the permission required for this module.', `
-      <a class="btn" href="${appHref(companyPath('settings', { tab: 'roles' }, companyId))}" data-router><i class="ti ti-shield-lock"></i>Roles</a>
+      <a class="btn" href="${appHref(companyPath('users', { tab: 'roles' }, companyId))}" data-router><i class="ti ti-shield-lock"></i>Roles</a>
     `)}
     <section class="panel">
       ${contractRows([
@@ -8041,8 +8054,8 @@ function renderPilotLaunchChecklist(companyId) {
       taskCount: companyTasks(companyId).length,
     },
     links: {
-      workspace: companyPath('settings', { tab: 'company' }, companyId),
-      apps: companyPath('settings', { tab: 'plugins' }, companyId),
+      workspace: companyPath('setup', { tab: 'workspaces' }, companyId),
+      apps: companyPath('setup', { tab: 'modules' }, companyId),
       team: companyPath('users', {}, companyId),
       customer: companyPath('contacts', {}, companyId),
       task: companyPath('tasks', {}, companyId),
@@ -8074,7 +8087,7 @@ function renderEmptyWorkspacePrompt(companyId) {
         <strong>${h(workspace.name)} has no apps yet</strong>
         <span>Answer four short questions and Questbase will set up this workspace's apps, pipeline stages and roles. Nothing is deleted by doing it.</span>
       </div>
-      <a class="btn btn-primary" href="${appHref(companyPath('settings', { tab: 'setup' }, companyId))}" data-router>
+      <a class="btn btn-primary" href="${appHref(companyPath('setup', { tab: 'workspaces' }, companyId))}" data-router>
         <i class="ti ti-sparkles"></i>Set up this workspace
       </a>
     </div>
@@ -13240,7 +13253,7 @@ function loadUsersPage() {
         CONFIG, appHref, can, compactTabs, companyAccessUsers, companyInvites,
         companyPath, companyRoles, contractRows, emptyState, h, metricCard,
         isProtectedOwner,
-        renderAvatar, renderInviteRow, renderJoinRequestRow, renderUserAccessRow, roleForCompany, state,
+        renderAvatar, renderInviteRow, renderJoinRequestRow, renderRolesSettings, renderUserAccessRow, roleForCompany, state,
         titleCase, userDisplayMeta, userDisplayName, workspaceAccessSummaryForUser, workspaceHeader,
       });
       return usersPageModule;
@@ -13376,7 +13389,7 @@ function renderTeamChartPage(companyId) {
     <section class="tool-page team-chart-page">
       ${workspaceHeader('Team chart', 'Reporting lines, roles, and company coverage for this workspace.', `
         <a class="btn" href="${appHref(companyPath('users', {}, companyId))}" data-router><i class="ti ti-users"></i>Users</a>
-        <a class="btn btn-primary" href="${appHref(companyPath('settings', { tab: 'team' }, companyId))}" data-router><i class="ti ti-settings"></i>Worker settings</a>
+        <a class="btn btn-primary" href="${appHref(companyPath('users', { tab: 'members' }, companyId))}" data-router><i class="ti ti-settings"></i>People & Access</a>
       `)}
       <section class="metric-grid operations-metrics">
         ${metricCard('Members', members.length)}
@@ -21283,75 +21296,171 @@ function renderWorkspaceSetupModal(companyId, route) {
 
 // ---- Settings ----------------------------------------------------------------
 function renderSettingsPage(route, companyId) {
-  const company = companyById(companyId);
-  const backupSettingsPath = companyPath('settings', { tab: 'backups' });
-  const settingsTabs = [
-    [companyPath('settings', { tab: 'company' }, companyId), 'Company', 'company'],
-    [companyPath('settings', { tab: 'billing' }, companyId), 'Billing', 'billing'],
-    [companyPath('settings', { tab: 'plugins' }, companyId), 'Plugins', 'plugins'],
-    [companyPath('settings', { tab: 'roles' }, companyId), 'Roles', 'roles'],
-    [companyPath('settings', { tab: 'access' }, companyId), 'Access', 'access'],
-    [backupSettingsPath, 'Backups', 'backups'],
-    [companyPath('settings', { tab: 'recycle-bin' }, companyId), 'Recycle Bin', 'recycle-bin'],
-    [companyPath('settings', { tab: 'team' }, companyId), 'Workers', 'team'],
-  ];
-  if (canManageCompanyAppearance(companyId)) {
-    settingsTabs.splice(1, 0, [companyPath('settings', { tab: 'setup' }, companyId), 'Setup', 'setup']);
-  }
-  if (can('crm.manage', companyId)) {
-    settingsTabs.push([companyPath('settings', { tab: 'handoff-review' }, companyId), 'Data review', 'handoff-review']);
-  }
-  if (isQuestDeveloper()) settingsTabs.push([companyPath('settings', { tab: 'master' }, companyId), 'Master', 'master']);
-  const allowedTabs = settingsTabs.map((item) => item[2]);
-  const tab = allowedTabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'company';
+  const destination = canonicalSettingsDestination(route?.params?.get('tab') || 'company');
+  return workspaceHeader('Settings moved', 'This bookmark now opens the matching Setup, People & Access, or Admin page.', `
+    <a class="btn btn-primary" href="${appHref(companyPath(destination.section, { tab: destination.tab }, companyId))}" data-router>Continue</a>
+  `);
+}
+
+function settingsSurfaceTabs(section, tabs, activeTab, companyId) {
+  return compactTabs(`${navigationLabel(section, titleCase(section))} sections`, tabs.map(({ id, label }) => [
+    companyPath(section, { tab: id }, companyId), label, activeTab === id,
+  ]));
+}
+
+function renderSetupPipelineSettings(companyId) {
+  const canManageCrm = can('crm.manage', companyId);
+  const canManageJobs = can('jobs.manage', companyId);
   return `
-    ${workspaceHeader('Settings', 'Company settings, roles, approvals, and admin controls.', '')}
-    ${compactTabs('Settings sections', settingsTabs.map(([href, label, id]) => [href, label, tab === id]))}
-    <section class="dashboard-grid compact-settings-grid">
-      ${tab === 'company' ? renderWorkspaceSettings(companyId) : ''}
-      ${tab === 'setup' ? renderCompanySetupSettings(companyId, route) : ''}
-      ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
-      ${tab === 'plugins' ? renderPluginsSettings(companyId) : ''}
-      ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
-      ${tab === 'backups' ? renderBackupsSettings(companyId) : ''}
-      ${tab === 'recycle-bin' ? renderRecycleBinSettings(companyId) : ''}
-      ${tab === 'handoff-review' ? renderHandoffReviewPanel(companyId) : ''}
-      ${tab === 'access' ? `
-      <article class="panel">
-        <div class="section-head"><div><h2>Access</h2><p>Memberships, invites, and join requests.</p></div></div>
-        ${contractRows([
-          ['Auth switch', CONFIG.questAuthEnabled ? 'Enabled' : 'Disabled'],
-          ['Local login', CONFIG.localLoginEnabled ? 'Enabled' : 'Disabled'],
-          ['Isolation', CONFIG.questAuthEnabled ? 'Server-enforced when migration is applied' : 'Client-filtered only'],
-          ['Active memberships', String(state.memberships.filter((item) => item.company_id === companyId && item.status === 'active').length)],
-          ['Disabled/left', String(state.memberships.filter((item) => item.company_id === companyId && ['disabled', 'left'].includes(item.status)).length)],
-          ['Invites', String(state.companyInvites.filter((item) => item.company_id === companyId && item.status === 'pending').length)],
-        ])}
-      </article>
-      <article class="panel">
-        <div class="section-head"><div><h2>Join requests</h2><p>Hybrid onboarding queue for this company.</p></div></div>
-        <div class="finance-compact-list">
-          ${state.joinRequests.filter((item) => item.company_id === companyId).map((request) => compactFinanceRow(request.requested_email || request.profile_id, request.message || 'Access request', titleCase(request.status), request.created_at)).join('') || emptyState('No pending company approvals.')}
-        </div>
-      </article>
-      <article class="panel span-3">
-        <div class="section-head"><div><h2>Access history</h2><p>Recent membership, invite, and role changes for this company.</p></div></div>
-        <div class="access-audit-list">
-          ${companyAuditEvents(companyId).slice(0, 8).map(renderAuditEventRow).join('') || emptyState('No access audit events yet.')}
-        </div>
-      </article>
+    <article class="panel span-3 setup-pipeline-surface">
+      <div class="section-head">
+        <div><h2>Pipelines</h2><p>Packaged Quest CRM stages and custom Workspace Builder pipelines are managed from their real records.</p></div>
+        <a class="btn btn-primary" href="${appHref(companyPath('workspaces', {}, companyId))}" data-router><i class="ti ti-layout-grid-add"></i>Open Workspace Builder</a>
+      </div>
+      <div class="setup-action-grid">
+        <button class="btn" type="button" data-action="open-stage-manager" data-module="contacts" ${canManageCrm ? '' : 'disabled'}><i class="ti ti-address-book"></i>Contact stages</button>
+        <button class="btn" type="button" data-action="open-stage-manager" data-module="deals" ${canManageCrm ? '' : 'disabled'}><i class="ti ti-briefcase"></i>Quote stages</button>
+        <button class="btn" type="button" data-action="open-stage-manager" data-module="jobs" ${canManageJobs ? '' : 'disabled'}><i class="ti ti-hammer"></i>Job stages</button>
+      </div>
+      <p class="form-note">Quest CRM keeps its ready-made lifecycle. Regular CRM and Workspace Builder apps stay customizable per workspace.</p>
+    </article>
+  `;
+}
+
+function renderSetupIntegrations(companyId) {
+  const callsEnabled = isPluginInstalled(companyId, 'calls');
+  const messagesEnabled = isPluginInstalled(companyId, 'messages');
+  return `
+    <article class="panel span-2">
+      <div class="section-head"><div><h2>Integrations</h2><p>Connection entry points and their current module availability. Secrets remain on the server.</p></div></div>
+      ${contractRows([
+        ['Cloud data', state.sync.mode === 'live' ? 'Connected' : state.sync.label],
+        ['RingCentral calls', callsEnabled ? 'Module enabled — verify in Calls' : 'Module not enabled'],
+        ['Company messaging', messagesEnabled ? 'Module enabled' : 'Module not enabled'],
+        ['SMS readiness', 'Checked on each contact before sending'],
+      ])}
+    </article>
+    <article class="panel">
+      <div class="section-head"><div><h2>Manage connection surfaces</h2><p>Enable the workspace module first, then finish its connection from that module.</p></div></div>
+      <div class="form-actions">
+        <a class="btn btn-primary" href="${appHref(companyPath('setup', { tab: 'modules' }, companyId))}" data-router>Open Modules</a>
+        ${callsEnabled ? `<a class="btn" href="${appHref(companyPath('calls', {}, companyId))}" data-router>Open Calls</a>` : ''}
+      </div>
+    </article>
+  `;
+}
+
+function renderSetupLaunchCheck(companyId) {
+  const workspace = activeWorkspace();
+  const installed = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length;
+  const checks = [
+    ['Company profile', Boolean(companyName(companyId)), companyName(companyId) || 'Company name required'],
+    ['Active workspace', Boolean(workspace), workspace?.name || 'Create or select a workspace'],
+    ['Live data connection', state.sync.mode === 'live', state.sync.mode === 'live' ? 'Connected' : state.sync.label],
+    ['Workspace modules', installed > 0, `${installed} enabled`],
+    ['People access', companyAccessUsers(companyId).some((user) => user.status === 'active'), `${companyAccessUsers(companyId).filter((user) => user.status === 'active').length} active`],
+  ];
+  const ready = checks.filter(([, passed]) => passed).length;
+  return `
+    <article class="panel span-3 setup-launch-check">
+      <div class="section-head"><div><h2>Launch Check</h2><p>${ready} of ${checks.length} workspace readiness checks are passing.</p></div></div>
+      <div class="launch-check-list">
+        ${checks.map(([label, passed, detail]) => `<div class="launch-check-row ${passed ? 'passed' : 'attention'}"><i class="ti ${passed ? 'ti-circle-check-filled' : 'ti-alert-circle'}"></i><span><strong>${h(label)}</strong><small>${h(detail)}</small></span><b>${passed ? 'Ready' : 'Check'}</b></div>`).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function renderSetupPageLegacyUnused(route, companyId) {
+  const tab = normalizeSettingsSurfaceTab('setup', route.params.get('tab'));
+  return `
+    ${workspaceHeader('Setup', 'Configure company identity, workspaces, modules, pipelines, and launch readiness.', '')}
+    ${settingsSurfaceTabs('setup', SETUP_TABS, tab, companyId)}
+    <section class="dashboard-grid compact-settings-grid settings-surface settings-surface-setup">
+      ${tab === 'company-profile' ? renderWorkspaceSettingsSurface('renderCompanyProfileSettings', companyId) : ''}
+      ${tab === 'company-brand' ? `
+        <article class="panel span-3">
+          <div class="section-head"><div><h2>Company Brand</h2><p>Preview with your personal appearance, then save it as the default for members who have not chosen their own.</p></div></div>
+          <div class="theme-toggle-row">${renderAppearanceControls()}</div>
+        </article>
       ` : ''}
-      ${tab === 'team' ? `
-      <article class="panel span-3">
-        <div class="section-head"><div><h2>Workers and roles</h2><p>Company users stay here, not inside TaskManagement.</p></div></div>
-        <div class="team-chart">
-          ${companyMembers(companyId).map((member) => `<div><strong>${h(member.full_name)}</strong><span>${h(roleForMember(companyId, member.id))}</span></div>`).join('') || emptyState('No workers assigned.')}
-        </div>
-      </article>
-      ` : ''}
-      ${tab === 'master' && isQuestDeveloper() ? renderPlatformMasterPanel(companyId) : ''}
+      ${tab === 'workspaces' ? `${renderWorkspaceSettingsSurface('renderWorkspaceDirectorySettings', companyId)}${renderCompanySetupSettings(companyId, route)}` : ''}
+      ${tab === 'modules' ? renderPluginsSettings(companyId) : ''}
+      ${tab === 'pipelines' ? renderSetupPipelineSettings(companyId) : ''}
+      ${tab === 'handoffs' ? (can('crm.manage', companyId) ? renderHandoffReviewPanel(companyId) : `
+        <article class="panel span-3"><div class="section-head"><div><h2>Handoffs</h2><p>Your role can view company setup but cannot review or change CRM handoffs.</p></div></div>
+          ${contractRows([['Required permission', 'crm.manage'], ['Your role', roleForCompany(companyId)]])}
+        </article>
+      `) : ''}
+      ${tab === 'integrations' ? renderSetupIntegrations(companyId) : ''}
+      ${tab === 'launch-check' ? renderSetupLaunchCheck(companyId) : ''}
     </section>
   `;
+}
+
+function renderAdminAuditHistory(companyId) {
+  const events = companyAuditEvents(companyId).slice(0, 50);
+  return `
+    <article class="panel span-3">
+      <div class="section-head"><div><h2>Audit History</h2><p>Recent access, role, membership, and company administration changes.</p></div></div>
+      <div class="access-audit-list">${events.map(renderAuditEventRow).join('') || emptyState('No audit events yet.')}</div>
+    </article>
+  `;
+}
+
+function renderAdminPageLegacyUnused(route, companyId) {
+  const tabs = ADMIN_TABS.filter((item) => !item.developerOnly || isQuestDeveloper());
+  const tab = normalizeSettingsSurfaceTab('admin', route.params.get('tab'), { isDeveloper: isQuestDeveloper() });
+  return `
+    ${workspaceHeader('Admin', 'Billing, recovery, audit history, and technical diagnostics.', '')}
+    ${settingsSurfaceTabs('admin', tabs, tab, companyId)}
+    <section class="dashboard-grid compact-settings-grid settings-surface settings-surface-admin">
+      ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
+      ${tab === 'data-recovery' ? `<div class="settings-recovery-stack span-3">${renderBackupsSettings(companyId)}${renderRecycleBinSettings(companyId)}</div>` : ''}
+      ${tab === 'audit-history' ? renderAdminAuditHistory(companyId) : ''}
+      ${tab === 'diagnostics' ? renderWorkspaceSettingsSurface('renderDiagnosticsSettings', companyId) : ''}
+      ${tab === 'platform' && isQuestDeveloper() ? renderPlatformMasterPanel(companyId) : ''}
+    </section>
+  `;
+}
+
+let settingsSurfacesModule = null;
+let settingsSurfacesPending = null;
+
+function loadSettingsSurfaces() {
+  if (settingsSurfacesModule) return Promise.resolve(settingsSurfacesModule);
+  if (!settingsSurfacesPending) {
+    settingsSurfacesPending = import('./settings/settings-surfaces.js').then((mod) => {
+      settingsSurfacesModule = mod.createSettingsSurfaces({
+        activeWorkspace, appHref, availableWorkspacePlugins, can, companyAccessUsers,
+        companyAuditEvents, companyName, companyPath, compactTabs, contractRows, emptyState, h,
+        isPluginInstalled, isQuestDeveloper, navigationLabel, renderAdminAuditEventRow: renderAuditEventRow,
+        renderAppearanceControls, renderBackupsSettings, renderBillingSettings,
+        renderCompanySetupSettings, renderHandoffReviewPanel, renderPlatformMasterPanel,
+        renderPluginsSettings, renderRecycleBinSettings, renderWorkspaceSettingsSurface,
+        roleForCompany, state, titleCase, workspaceHeader,
+      });
+      return settingsSurfacesModule;
+    }).catch((error) => {
+      settingsSurfacesPending = null;
+      throw error;
+    });
+  }
+  return settingsSurfacesPending;
+}
+
+function renderSettingsSurface(method, route, companyId) {
+  if (settingsSurfacesModule?.[method]) return settingsSurfacesModule[method](route, companyId);
+  loadSettingsSurfaces().then(() => render()).catch((error) => console.error(`${method} failed to load`, error));
+  return questLoader('Loading');
+}
+
+function renderSetupPage(route, companyId) {
+  return renderSettingsSurface('renderSetupPage', route, companyId);
+}
+
+function renderAdminPage(route, companyId) {
+  return renderSettingsSurface('renderAdminPage', route, companyId);
 }
 
 
@@ -27032,7 +27141,7 @@ function commandPaletteRecords() {
 
 function commandPaletteCommands(query) {
   const companyId = activeCompanyId();
-  const modules = MODULE_REGISTRY.filter((module) => canViewModule(module, companyId));
+  const modules = MODULE_REGISTRY.filter((module) => module.id !== 'settings' && canViewModule(module, companyId));
   const allowed = new Set(allowedCompanyIds());
   const companies = state.companies
     .filter((company) => allowed.has(company.id))
@@ -28763,7 +28872,7 @@ function handleAction(event, node) {
   if (action === 'open-settings') {
     event.preventDefault();
     state.accountMenuOpen = false;
-    navigate(companyPath('settings', {}, activeCompanyId()));
+    navigate(companyPath('setup', { tab: 'company-profile' }, activeCompanyId()));
     return;
   }
   if (action === 'open-workspace-icon-modal') {
@@ -32093,7 +32202,7 @@ async function createPlatformWorkspace(formNode) {
   if (ownerEmail) applyPlatformCreatedWorkspace(workspace.data, companyName, iconKey);
   else applyCreatedWorkspace(workspace.data, companyName, iconKey);
   showToast(`${companyName} workspace created.`, 'live', 'Master panel');
-  navigate(companyPath('settings', { tab: 'master' }, state.activeCompanyId), { replace: true });
+  navigate(companyPath('admin', { tab: 'platform' }, state.activeCompanyId), { replace: true });
 }
 
 async function saveWorkspaceSettings(formNode) {
@@ -32438,7 +32547,7 @@ async function startCheckout() {
       body: JSON.stringify({
         company_id: companyId,
         request_id: state.checkoutRequestId,
-        return_url: `${window.location.origin}${appHref(companyPath('settings', { tab: 'billing' }, companyId))}`,
+        return_url: `${window.location.origin}${appHref(companyPath('admin', { tab: 'billing' }, companyId))}`,
       }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -32756,7 +32865,7 @@ async function saveInvite(formNode) {
       state.sync = { label: 'Invite created locally. Copy its link to share it.', mode: 'local' };
     }
 
-    notifyLocalEvent('access.invite', 'Teammate invited', `${actorName()} invited ${invite.email}.`, companyPath('settings', { tab: 'access' }, invite.company_id), 'invite', invite.id, invite.company_id);
+    notifyLocalEvent('access.invite', 'Teammate invited', `${actorName()} invited ${invite.email}.`, companyPath('users', { tab: 'invites' }, invite.company_id), 'invite', invite.id, invite.company_id);
     state.modal = '';
     render();
   } finally {
@@ -32896,7 +33005,7 @@ async function revokeInvite(inviteId) {
   // was only ever live state.
   state.companyInvites = state.companyInvites.filter((item) => item.id !== invite.id);
   recordAuditEvent(invite.company_id, 'invite.revoked', 'company_invite', invite.id, { email: invite.email });
-  notifyLocalEvent('access.invite', 'Invite revoked', `${actorName()} revoked the invite for ${invite.email}.`, companyPath('settings', { tab: 'access' }, invite.company_id), 'invite', invite.id, invite.company_id);
+  notifyLocalEvent('access.invite', 'Invite revoked', `${actorName()} revoked the invite for ${invite.email}.`, companyPath('users', { tab: 'invites' }, invite.company_id), 'invite', invite.id, invite.company_id);
   persistAll();
   render();
 }
@@ -33324,7 +33433,7 @@ async function persistUserAccess(formNode, { companyId, profileId, role, status,
   const identityChanged = previousMembership?.role !== membership.role
     || previousMembership?.status !== membership.status;
   if (identityChanged) {
-    notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId, [profileId].concat(usersWithAnyPermission(companyId, ['users.manage', 'settings.manage'])));
+    notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('users', { tab: 'access' }, companyId), 'membership', profileId, companyId, [profileId].concat(usersWithAnyPermission(companyId, ['users.manage', 'settings.manage'])));
     // The audit row is written by update_company_member_access, inside the same statement
     // that makes the change. Recording a second one here is what produced two audit entries
     // for every single access save.
@@ -33368,7 +33477,7 @@ async function updateJoinRequest(requestId, status) {
 
   state.joinRequests = state.joinRequests.map((item) => (item.id === request.id ? nextRequest : item));
   recordAuditEvent(request.company_id, status === 'approved' ? 'join.approved' : 'join.rejected', 'join_request', request.id, { email: request.requested_email });
-  notifyLocalEvent('access.request', status === 'approved' ? 'Access approved' : 'Access rejected', `${actorName()} ${status === 'approved' ? 'approved' : 'rejected'} ${request.requested_email || 'a join request'}.`, companyPath('settings', { tab: 'access' }, request.company_id), 'join_request', request.id, request.company_id, [request.profile_id].concat(usersWithAnyPermission(request.company_id, ['users.manage', 'settings.manage'])));
+  notifyLocalEvent('access.request', status === 'approved' ? 'Access approved' : 'Access rejected', `${actorName()} ${status === 'approved' ? 'approved' : 'rejected'} ${request.requested_email || 'a join request'}.`, companyPath('users', { tab: 'invites' }, request.company_id), 'join_request', request.id, request.company_id, [request.profile_id].concat(usersWithAnyPermission(request.company_id, ['users.manage', 'settings.manage'])));
   persistAll();
   render();
 }
@@ -37630,7 +37739,7 @@ function normalizeLegacyLocation() {
   if (path === '/finance') target = companyPath('finance', copyParams(params, ['invoice', 'expense', 'vendor', 'report']), companyId);
   if (path === '/messages') target = companyPath('messages', copyParams(params, ['conversation']), companyId);
   if (path === '/calendar') target = companyPath('calendar', {}, companyId);
-  if (path === '/admin') target = companyPath('settings', {}, companyId);
+  if (path === '/admin') target = companyPath('admin', { tab: 'billing' }, companyId);
   if (path === '/time') target = companyPath('time', {}, companyId);
   if (path === '/team') target = companyPath('team-chart', {}, companyId);
   if (path === '/team-chart') target = companyPath('team-chart', {}, companyId);
@@ -37671,6 +37780,16 @@ function routeRedirect(route) {
   if (route.section === 'home') return companyPath('dashboard', Object.fromEntries(route.params.entries()), route.companyId);
   if (route.section === 'dashboard' && /^\/company\/[^/]+\/?$/.test(route.path)) {
     return companyPath('dashboard', {}, route.companyId);
+  }
+  if (route.section === 'settings') {
+    const destination = canonicalSettingsDestination(route.params.get('tab') || 'company');
+    const tab = destination.section === 'admin' && destination.tab === 'platform' && !isQuestDeveloper()
+      ? 'billing'
+      : destination.tab;
+    return companyPath(destination.section, {
+      ...Object.fromEntries(route.params.entries()),
+      tab,
+    }, route.companyId);
   }
   const allowed = allowedCompanyIds();
   if (state.session?.auth === 'supabase' && !allowed.length) return null;
@@ -40784,7 +40903,7 @@ function approvalItems(companyId = activeCompanyId()) {
       owner: 'Quest admin',
       status: titleCase(membership.status),
       updatedAt: new Date().toISOString(),
-      href: companyPath('settings', { tab: 'access' }, companyId),
+      href: companyPath('users', { tab: 'access' }, companyId),
     }));
   return formApprovals.concat(taskApprovals, accessApprovals)
     .sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));

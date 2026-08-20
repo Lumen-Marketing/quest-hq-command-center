@@ -22,7 +22,7 @@ A company is the market customer, subscription, and outer security tenant. The d
 
 ## Guided setup produces an editable plan, not a hardcoded company type
 
-Company registration creates only the account and its safe default Main workspace, then sends an owner to Settings > Setup. Guide me, ready-made blueprints, and Start from scratch all produce the same versioned plan shape, which the owner can review before applying. The server owns app/role allowlists and role permission templates, caps the plan size, rejects CRM conflicts, preserves populated pipelines, and maps generated workspace/role keys to stable ids so a retry cannot duplicate them. Questionnaire reset clears only answers and the draft; it intentionally retains the last applied plan and every company or business record. This keeps onboarding easy without making one roofing/CRM layout mandatory for every market customer.
+Company registration creates only the account and its safe default Main workspace, then opens that workspace's required Setup modal. Guide me, ready-made blueprints, and Start from scratch all produce the same versioned plan shape, which the owner can review before applying. The server owns app/role allowlists and role permission templates, caps the plan size, rejects CRM conflicts, preserves populated pipelines, and maps generated workspace/role keys to stable ids so a retry cannot duplicate them. Questionnaire reset clears only answers and the draft; it intentionally retains the last applied plan and every company or business record. This keeps onboarding easy without making one roofing/CRM layout mandatory for every market customer.
 
 ## Worker invites are non-elevated and workspace-explicit
 
@@ -175,11 +175,11 @@ Contacts, Jobs, Quotes, and the Underwriter keep an expiring same-browser copy w
 
 ## Sidebar scopes organize navigation without bypassing access rules
 
-The desktop command rail separates daily modules into My work and administrative/tooling modules into Company. Both scopes are derived from the existing module registry, installed-plugin checks, and permission gates; the mobile More sheet continues to expose the complete allowed module set.
+The desktop command rail separates daily modules into My work and company-wide/configuration modules into Company. Company now exposes People & Access, Setup, and Admin instead of one catch-all Settings destination. Setup owns company profile/brand, workspaces, modules, pipelines, handoffs, integrations, and launch checks; People & Access owns members, roles, access, and invites; Admin owns billing, recovery, audit history, and diagnostics. These are presentation and route-composition boundaries over the existing stores, RPCs, permission checks, and RLS—not new copies of the data. Old Settings URLs redirect to the equivalent new page. The mobile More sheet continues to expose the complete allowed module set.
 
 ## Job Center navigation uses stakeholder language at the presentation layer
 
-The desktop rail groups daily work as Work, Pipeline, Production, Tools, Review, and Build, with user-facing aliases such as Home, Inbox, Estimator, Reports, People, and Meetings. Internal module IDs, registry labels, routes, plugin entitlements, and permission names remain unchanged so the information-architecture redesign does not fork authorization or data behavior. The rail and dense estimator screens use IBM Plex Sans for interface copy and IBM Plex Mono for labels and numeric data.
+The desktop rail groups daily work as Work, Pipeline, Production, Tools, Review, and Build, with user-facing aliases such as Home, Inbox, Estimator, Reports, People & Access, Workspace Builder, and Meetings. Compatibility module IDs and permission names remain unchanged where existing links or authorization depend on them; new Setup and Admin sections use the existing `settings.view` permission. The rail and dense estimator screens use IBM Plex Sans for interface copy and IBM Plex Mono for labels and numeric data.
 
 ## Underwriter is a decision workbench, not a guidance dashboard
 
@@ -1429,10 +1429,10 @@ a modal that cannot be cancelled, closed from the backdrop, or dismissed with Es
 does not force a preset: **Start from scratch** remains the explicit skip and applies the
 bounded blank plan. Once a plan is applied, the modal closes through the shared modal cleanup.
 
-Settings > Setup is deliberately different. It is a small launcher for the same lazy-loaded
+Setup > Workspaces is deliberately different. It is a small launcher for the same lazy-loaded
 interface, but the reopened modal has Cancel because the workspace already exists and the
 owner is choosing to review it. Keeping one panel for both entry points prevents creation and
-Settings from drifting into two setup systems.
+Setup from drifting into two setup systems.
 
 The workspace work-type question uses a searchable catalog of more than forty common trades
 and business types. Those choices are presentation detail, not new server authorities: each
