@@ -47,6 +47,52 @@ function wbAppReportOptions(app) {
         ${permanent && isLiveSupabaseSession() ? reauthPasswordField('wbConfirmPw') : ''}`,
         `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-confirm><i class="ti ti-trash"></i>${permanent ? 'Delete for good' : 'Delete'}</button>`);
     }
+    // Bringing a field setup in from another app. The list is the whole dialog: it is
+    // somebody else's app, so "which of these do I want" is a real question, and ticking
+    // eight of twelve beats importing all twelve and deleting four.
+    if (m.kind === 'field-import') {
+      const picks = new Set(m.picks || []);
+      const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
+      const present = m.present || [];
+      const rows = m.fields.map((field, i) => {
+        const meta = WB_FIELD_TYPES[field.type];
+        // Already here: same label, so this app is not MISSING it. The chip names the type it is
+        // here AS where that differs -- an Amount that is text here and money there reads
+        // identically in a list, and that difference is the whole reason to tick one anyway.
+        const mine = present[i];
+        const asType = mine && mine.type !== field.type ? ` as ${h(WB_FIELD_TYPES[mine.type]?.label || mine.type)}` : '';
+        return `<label class="wb-fi-row${picks.has(i) ? ' is-picked' : ''}${mine ? ' is-here' : ''}">
+          <input type="checkbox" data-wb-fi-pick="${i}" ${picks.has(i) ? 'checked' : ''} aria-label="Bring in ${h(field.label)}" />
+          <span class="wb-field-ic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span>
+          <span class="wb-fi-meta"><b>${h(field.label)}${field.required ? '<span class="wb-req">*</span>' : ''}</b><small>${h(meta.label)}</small></span>
+          ${mine ? `<span class="wb-fi-has${asType ? ' differs' : ''}"><i class="ti ti-check" aria-hidden="true"></i>Already here${asType}</span>` : ''}
+        </label>`;
+      }).join('');
+      const stamp = m.source.exportedAt ? new Date(m.source.exportedAt) : null;
+      const origin = [
+        m.source.app ? `<b>${h(m.source.app)}</b>` : 'a field export',
+        m.source.workspace ? h(m.source.workspace) : '',
+        stamp && !Number.isNaN(stamp.getTime()) ? `exported ${h(stamp.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}` : '',
+      ].filter(Boolean).join(' · ');
+      const mineCount = app ? app.fields.length : 0;
+      const already = present.filter(Boolean).length;
+      const alreadyWord = already === m.fields.length ? 'Every field' : `${already} of them`;
+      // "Every field ... exists", "1 of them ... exists", "2 of them ... exist".
+      const alreadyVerb = already === 1 || already === m.fields.length ? 'exists' : 'exist';
+      const all = picks.size === m.fields.length;
+      return wbModalShell('Fields', 'wb-modal-md',
+        '<div class="wb-modal-ic" style="background:#0891b2"><i class="ti ti-file-import"></i></div><h3>Import fields</h3>',
+        `<p class="wb-sub">From ${origin}.</p>
+        <p class="wb-sub">These are <b>added to</b> the ${mineCount} field${mineCount === 1 ? '' : 's'} ${h(app ? app.name : 'this app')} already has. Nothing already here is changed or removed, and no records come with them.</p>
+        ${already ? `<p class="wb-sub">${alreadyWord} in that file <b>already ${alreadyVerb} here</b> under the same name, so ${already === 1 ? 'it starts' : 'they start'} unticked — what this app is MISSING is what comes across. Tick one anyway and it arrives numbered (<i>Amount 2</i>) rather than touching the field already holding values.</p>` : ''}
+        ${m.dropped ? `<p class="wb-sub">${m.dropped} field${m.dropped === 1 ? '' : 's'} in that file ${m.dropped === 1 ? 'is a type' : 'are types'} this version does not have, so ${m.dropped === 1 ? 'it is' : 'they are'} not offered.</p>` : ''}
+        <div class="wb-fi-bar">
+          <button class="btn btn-sm" type="button" data-wb-fi-all>${all ? 'Clear all' : 'Select all'}</button>
+          <span class="wb-sub">${picks.size} of ${m.fields.length} selected${already ? ` · ${already} already here` : ''}</span>
+        </div>
+        <div class="wb-fi-list">${rows}</div>`,
+        `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" type="button" data-wb-fi-go ${picks.size ? '' : 'disabled'}><i class="ti ti-plus"></i>Add ${picks.size} field${picks.size === 1 ? '' : 's'}</button>`);
+    }
     if (m.kind === 'call') {
       // Ours, not the browser's. The native prompt talks about opening an application; this
       // talks about ringing a person, which is what is actually about to happen.

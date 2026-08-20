@@ -29,12 +29,44 @@ function defaultWhen(now = new Date()) {
   return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: '09:00' };
 }
 
-/** Every phone field on the app that this record actually has a number in. */
+/**
+ * Every phone field on the app that this record actually has a number in.
+ *
+ * `hidden` is NOT a filter here, and reading it as one is what made Call say "This record has no
+ * phone number" over a record showing the number three inches away. Hidden means hidden from the
+ * ITEMS TABLE -- the builder's own tooltip says "still editable on each record" -- so the record
+ * page draws it, the person is looking at it, and a phone field is very often the first thing
+ * somebody hides to get a crowded table under control. A number you can see is a number you can
+ * ring.
+ */
 export function phoneChoices(app, item) {
   return (app?.fields || [])
-    .filter((field) => field.type === 'phone' && !field.hidden)
+    .filter((field) => field.type === 'phone')
     .map((field) => ({ id: field.id, label: field.label, value: String(item?.values?.[field.id] || '').trim() }))
     .filter((one) => one.value);
+}
+
+/**
+ * How long a scheduled call or message waits before it gives up and says so.
+ *
+ * Twenty seconds is well past a working insert and well short of the patience anybody has for a
+ * button that says "Saving…". The point is not the number -- it is that there IS one.
+ */
+export const SAVE_TIMEOUT_MS = 20000;
+
+/**
+ * A clock that rejects, so the caller's catch is what handles a stall -- and that can be STOPPED.
+ *
+ * Cancelling matters as much as the timeout does: a pending setTimeout holds the event loop open,
+ * so a timer left running after a save that worked keeps the page -- and a test run -- alive for
+ * the full twenty seconds with nothing left to wait for.
+ */
+function timeout(ms) {
+  let timer = null;
+  const promise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('That took too long to save. Check your connection and try again.')), ms);
+  });
+  return { promise, cancel: () => clearTimeout(timer) };
 }
 
 /**
@@ -256,8 +288,9 @@ export function renderQuickModal(ctx) {
         <label class="wb-quick-field">Title<input class="wb-input" name="title" value="${esc(h, v.title)}" placeholder="Follow up" required></label>
         ${whenRows(h, v)}
         <label class="wb-quick-field">Notes<textarea class="wb-input" name="body" rows="3" placeholder="What this call is for">${esc(h, v.body)}</textarea></label>
-        <p class="wb-sub">Kept on the record so it shows on the Calls &amp; messages card. Nothing rings
-          on its own yet — there is no reminder job — so it is a note of when, not an alarm.</p>
+        <p class="wb-sub">Kept on the record so it shows on the Calls &amp; messages card, on the app
+          calendar and on the contact's. It speaks up when the time comes, as long as Questbase is
+          open in a tab.</p>
       </div>`, v.busy);
   }
 
@@ -512,7 +545,9 @@ export async function saveQuick(values, ctx) {
   const numbers = targetNumbers(values.to, v.phones);
   if (v.kind === 'sms' && !numbers.length) { ctx.state.wbQuick = { ...v, ...values, error: 'This record has no number to send to.' }; ctx.render(); return 'invalid'; }
 
-  ctx.state.wbQuick = { ...v, busy: true, error: '' };
+  // `...values` as well as `...v`: the busy repaint rebuilds the form, and without what was
+  // typed it comes back with the boxes emptied under somebody mid-save.
+  ctx.state.wbQuick = { ...v, ...values, busy: true, error: '' };
   ctx.render();
   // The doc keys its workspaces as `ws-<uuid>`; the column is that uuid, and it is also what
   // the row's permission is decided from. A legacy document keying the company instead has no
@@ -543,10 +578,44 @@ export async function saveQuick(values, ctx) {
     ctx.render();
     return 'offline';
   }
-  const { error } = await supabase.from('wb_record_events').insert(rows);
+  // Every way this can end has to put `busy` back, including the ways that THROW.
+  //
+  // It did not, and that is the bug behind a dialog stuck on "Saving…" for ever: the insert was
+  // awaited bare, so an offline fetch rejecting -- or a token refresh throwing inside the client
+  // -- escaped as an unhandled rejection with `busy: true` still on state. Nothing repainted,
+  // Save stayed disabled, and pressing it again hit the `if (v.busy) return 'idle'` guard at the
+  // top and did nothing. The dialog was dead until it was closed, and it never said why.
+  //
+  // The timeout is the other half. A request that never settles is not an error the client will
+  // ever report, so without a clock of its own "Saving…" is simply where the dialog stops.
+  let error = null;
+  try {
+    const insert = supabase.from('wb_record_events').insert(rows);
+    // Aborting actually cancels the request, so a retry cannot land a second row for the call
+    // that was already on its way. Older clients without abortSignal still get the race.
+    const signalled = typeof insert.abortSignal === 'function' && typeof AbortSignal?.timeout === 'function'
+      ? insert.abortSignal(AbortSignal.timeout(SAVE_TIMEOUT_MS))
+      : insert;
+    const clock = timeout(SAVE_TIMEOUT_MS);
+    try {
+      ({ error } = await Promise.race([signalled, clock.promise]));
+    } finally {
+      clock.cancel();
+    }
+  } catch (thrown) {
+    error = thrown instanceof Error ? thrown : new Error(String(thrown || 'That could not be saved.'));
+  }
   if (error) {
     // Said rather than swallowed: a silent failure here looks exactly like a save that worked.
-    ctx.state.wbQuick = { ...v, ...values, busy: false, error: error.message || 'That could not be saved.' };
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    ctx.state.wbQuick = {
+      ...v,
+      ...values,
+      busy: false,
+      error: offline
+        ? 'You are offline, so this could not be saved. It is still in the form — try again once you are back.'
+        : (error.message || 'That could not be saved.'),
+    };
     ctx.render();
     return 'failed';
   }
@@ -562,7 +631,26 @@ export async function saveQuick(values, ctx) {
     `Scheduled ${v.kind === 'sms' ? 'a message' : 'a call'} to <b>${ctx.h(aimed)}</b> — <b>${ctx.h(base.title)}</b>`
     + ` for ${ctx.h(ctx.formatDate?.(values.date) || values.date)} at ${ctx.h(values.time || '09:00')}`);
   // Saved whether or not the card was added: the line above is in the document too.
-  await ctx.wbSave(companyId);
+  // NOT awaited, and this is the whole answer to "it takes time saving just this record".
+  //
+  // The call is already saved. It went into wb_record_events above -- one small row in its own
+  // table, durable the moment the insert returned. What wbSave writes is the BUILDER DOCUMENT:
+  // every workspace, every app and every record in this company, serialised whole and sent as a
+  // single JSON payload, after a synchronous JSON.stringify of the same thing into localStorage.
+  // On a company whose records carry photos, spreadsheets and laid-out documents that is
+  // megabytes, and the dialog was holding "Saving…" over all of it.
+  //
+  // What that write actually carries here is two pieces of bookkeeping: the Calls & messages
+  // card being added to the layout, and the activity line. Neither is what somebody pressed Save
+  // for, and neither is worth a frozen dialog. It goes on in the background, where it keeps its
+  // own retry, its own three-way merge and its own failure toast.
+  //
+  // New Field, up at the other wbSave, still awaits its own: there the document write IS the
+  // durable save, and closing before it lands would report a field that might not exist.
+  //
+  // Caught rather than left floating: wbSave already swallows per-write failures, but a bare
+  // promise here would be one refactor away from an unhandled rejection.
+  Promise.resolve(ctx.wbSave(companyId)).catch(() => {});
   // Drop the cached rows for this record so the card re-reads them, and the company-wide set
   // the calendars draw from -- a reminder that does not appear until a reload reads as lost.
   if (ctx.state.wbEvents) delete ctx.state.wbEvents[companyId];

@@ -376,31 +376,57 @@ export function createButtonPush(ctx) {
     // before the save, so anything it changes is persisted by the same write.
     wbRunAutomations?.(target.companyId, target.workspace, target.app, target.app.items[0], 'created', null);
 
-    // The doc resolveTarget handed back IS the one in state, so the merge above already
-    // landed; this persists it, for the target's company rather than for the one we are in.
-    await wbSave(target.companyId);
-    // 4. "Send it and take it off this app." The record moves on rather than being copied:
-    //    its FIELDS stay exactly as they are here -- this app keeps its shape and its other
-    //    records -- and only the one that was sent is gone. Done after the target is saved, so
-    //    a failure to write there cannot lose the record from both.
+    // 4. Persist, and "send it and take it off this app" where that was asked for.
+    //
+    // Source and target are usually the SAME document. Prospect to Leads inside one workspace is
+    // the ordinary case, and there is exactly one company row behind both -- so saving the target
+    // and then saving the source was serialising and uploading the WHOLE company document twice
+    // for one press. That is what made a button feel slow: not the push, the second write of
+    // everything the company owns. It also handed the optimistic-revision check a collision to
+    // resolve against a write this same function had just made, which is how a press could come
+    // back "could not be saved while others are editing" with nobody else editing.
+    //
+    // One document also retires the careful ordering below. That ordering exists so a failure to
+    // write the target cannot leave the record removed from the source and landed nowhere -- but
+    // when both live in one row, the arrival and the removal ARE one write. They land together or
+    // not at all, which is the guarantee the ordering was approximating.
+    //
+    // Across companies there really are two documents, and then the order still matters: target
+    // first, source only once the target has taken it.
+    const sourceCompany = canonicalCompanyId(sourceCompanyId);
+    const oneDocument = sourceCompany === target.companyId;
     const moved = moving && (sourceApp.items || []).some((row) => row.id === item.id);
-    if (moved) {
+
+    const takeOffSource = () => {
       sourceApp.items = sourceApp.items.filter((row) => row.id !== item.id);
-      if (sourceWorkspace) {
-        // No appId/itemId: the record is not here any more, so an entry keyed to it would sit
-        // in this app's feed pointing at something nobody here can open. This is a note about
-        // the APP -- one of its records left -- and belongs in the workspace's own history.
-        wbLogActivity(sourceWorkspace, {
-          icon: 'ti-arrow-right', color: '#dc2626',
-          text: `<b>${h(title)}</b> moved from <b>${h(sourceApp.name)}</b> to <b>${h(target.app.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>`,
-        });
+      if (!sourceWorkspace) return;
+      // No appId/itemId: the record is not here any more, so an entry keyed to it would sit
+      // in this app's feed pointing at something nobody here can open. This is a note about
+      // the APP -- one of its records left -- and belongs in the workspace's own history.
+      wbLogActivity(sourceWorkspace, {
+        icon: 'ti-arrow-right', color: '#dc2626',
+        text: `<b>${h(title)}</b> moved from <b>${h(sourceApp.name)}</b> to <b>${h(target.app.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>`,
+      });
+    };
+
+    if (oneDocument) {
+      // Both halves of the move, then one write. Removing BEFORE the save also sidesteps a
+      // hazard the two-write order had: a save that merges a newer server copy can replace the
+      // document objects in state, leaving `sourceApp` a reference into the one that was thrown
+      // away -- and a removal written to a discarded object is a record that comes back.
+      if (moved) takeOffSource();
+      await wbSave(target.companyId);
+    } else {
+      await wbSave(target.companyId);
+      if (moved) {
+        takeOffSource();
+        // Awaited: this is the write that REMOVES the record from here. Returning before it
+        // lands means the next reload can bring it back, so the same record sits in two apps.
+        await wbSave(sourceCompany);
       }
-      // Awaited: this is the write that REMOVES the record from here. Returning before it
-      // lands means the next reload can bring it back, so the same record sits in two apps.
-      await wbSave(canonicalCompanyId(sourceCompanyId));
-      // The record it was open on no longer exists, so the form cannot stay on it.
-      if (state.builderModal?.editId === item.id) state.builderModal = null;
     }
+    // The record it was open on no longer exists, so the form cannot stay on it.
+    if (moved && state.builderModal?.editId === item.id) state.builderModal = null;
 
     showToast(`${moved ? 'Moved' : 'Sent'} to ${target.app.name}.${grew}`, 'local', 'Workspaces');
     // Reading the record when it left: go with it.

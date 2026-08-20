@@ -32,6 +32,15 @@ test('a row draws one photo and counts the rest; the record draws them all', () 
   assert.match(imageCell, /wbFileValues\(value\)/);
 });
 
+test('the count is a badge ON the photo, not a second circle beside it', () => {
+  // A "+2" chip standing next to the thumbnail is another circle the same size, and in a narrow
+  // column it wrapped under the first one -- so the thing standing in for "two more photos"
+  // looked exactly like one of them. On the corner it costs no width at all.
+  assert.match(imageCell, /\$\{more \? ' has-more' : ''\}/);
+  assert.match(styles, /\.wb-img-cell\.has-more \{ position: relative; flex-wrap: nowrap; gap: 0; \}/);
+  assert.match(styles, /\.wb-img-more \{\s*position: absolute; right: -2px; bottom: -2px;/);
+});
+
 test('detail is what separates the record from a row of it', () => {
   // One flag on the context object, set by the two surfaces that show a record whole.
   assert.match(recordPage, /const valueCtx = \{ companyId, workspace, app, values: item\.values, item, canManage: false, detail: true \};/);

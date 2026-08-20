@@ -4,8 +4,8 @@ import test from 'node:test';
 
 import { QUICK_CREATE } from '../src/workspace/record-layout.js';
 import {
-  ALL_NUMBERS, closeQuick, fieldTargets, insertFieldAt, phoneChoices, positionOf, press,
-  renderQuickModal, saveQuick,
+  ALL_NUMBERS, SAVE_TIMEOUT_MS, closeQuick, fieldTargets, insertFieldAt, phoneChoices,
+  positionOf, press, renderQuickModal, saveQuick,
 } from '../src/workspace/quick-create.js';
 
 // "Just make sure Task, Call, SMS and New Field are in Quick Create."
@@ -22,12 +22,18 @@ const f = (id, label, type, extra = {}) => ({
   id, label, type, config: {}, hidden: false, ...extra,
 });
 
-function harness({ phones = true } = {}) {
+function harness({ phones = true, insert = null, save = null } = {}) {
   const fields = [
     f('f-name', 'Name', 'text'),
     f('f-stage', 'Stage', 'status'),
-    ...(phones ? [f('f-mob', 'Mobile', 'phone'), f('f-off', 'Office', 'phone')] : []),
-    f('f-old', 'Old line', 'phone', { hidden: true }),
+    // The hidden line belongs WITH the other numbers, not outside them: a hidden phone field is
+    // still a phone number, so `phones: false` has to take it away too or the fixture for "this
+    // record has no number" still has one.
+    ...(phones ? [
+      f('f-mob', 'Mobile', 'phone'),
+      f('f-off', 'Office', 'phone'),
+      f('f-old', 'Old line', 'phone', { hidden: true }),
+    ] : []),
   ];
   const item = {
     id: 'item-1',
@@ -48,7 +54,7 @@ function harness({ phones = true } = {}) {
     render: () => {},
     showToast: () => {},
     wbDoc: () => ({ workspaces: [{ id: WS, apps: [app] }] }),
-    wbSave: async () => { saves += 1; },
+    wbSave: save || (async () => { saves += 1; }),
     wbUid: () => 'new-1',
     wbItemTitle: () => '58th Pl',
     navigate: () => {},
@@ -58,7 +64,9 @@ function harness({ phones = true } = {}) {
     createSupabaseClient: () => ({
       // insert() takes an ARRAY now: a message to every number is one row each, so a sender has
       // a list of messages rather than a field to parse.
-      from: () => ({ insert: async (rows) => { inserted.push(...[].concat(rows)); return { error: null }; } }),
+      from: () => ({
+        insert: insert || (async (rows) => { inserted.push(...[].concat(rows)); return { error: null }; }),
+      }),
     }),
     isLiveSupabaseSession: () => true,
   };
@@ -126,9 +134,27 @@ test('a position naming a field that has gone falls to the end, not to the front
 test('only phone fields this record has a number in are offered', () => {
   const bench = harness();
   const found = phoneChoices(bench.app, bench.item);
-  assert.deepEqual(found.map((one) => one.label), ['Mobile', 'Office'], 'a hidden line is not offered');
+  assert.deepEqual(found.map((one) => one.label), ['Mobile', 'Office', 'Old line']);
   assert.equal(found[0].value, '555 111 2222');
   assert.deepEqual(phoneChoices(bench.app, { values: {} }), []);
+});
+
+test('a hidden phone field is still a phone number', () => {
+  // This used to be the other way round, and it was reported from use: a record showing
+  // "PHONE 555-123-4570" on screen, and Call three inches away saying "This record has no phone
+  // number." The app had hidden its Phone field.
+  //
+  // `hidden` is a TABLE setting -- the builder's own tooltip reads "Hide this field from the
+  // items table (still editable on each record)", and the record page draws hidden fields like
+  // any other. Reading it as "retired, do not ring" makes a decision about column width silently
+  // disable calling, which nobody would look for and the dialog cannot explain.
+  //
+  // Keeping a number OUT of Call is a real thing to want, but it needs its own switch. It cannot
+  // be the one that tidies a table.
+  const bench = harness();
+  const old = phoneChoices(bench.app, bench.item).find((one) => one.label === 'Old line');
+  assert.ok(old, 'the hidden line is offered');
+  assert.equal(old.value, '555 000 0000');
 });
 
 // ---- what each tile opens ------------------------------------------------------------------
@@ -189,7 +215,9 @@ test('SMS picks the number when there is a choice, and never offers Send', async
 
 test('one number needs no dropdown', async () => {
   const bench = harness();
-  bench.app.fields = bench.app.fields.filter((x) => x.id !== 'f-off');
+  // Down to ONE number, which now means dropping the hidden line too -- a hidden phone field
+  // is still a phone number, so leaving it in leaves a second number and a dropdown with it.
+  bench.app.fields = bench.app.fields.filter((x) => x.id !== 'f-off' && x.id !== 'f-old');
   await bench.run('sms');
   assert.ok(!/name="to"/.test(renderQuickModal(bench.ctx)));
 });
@@ -252,7 +280,7 @@ test('a message to all numbers is one row each', async () => {
   await saveQuick({
     title: 'Arrival', to: ALL_NUMBERS, body: 'On my way', date: '2026-09-01', time: '08:00',
   }, bench.ctx);
-  assert.deepEqual(bench.inserted.map((r) => r.to_number), ['555 111 2222', '555 333 4444']);
+  assert.deepEqual(bench.inserted.map((r) => r.to_number), ['555 111 2222', '555 333 4444', '555 000 0000']);
   bench.inserted.forEach((r) => assert.equal(r.body, 'On my way'));
 });
 
@@ -260,9 +288,64 @@ test('all-numbers is offered for a message and never for a call', async () => {
   // You cannot ring two numbers at once.
   const bench = harness();
   await bench.run('sms');
-  assert.match(renderQuickModal(bench.ctx), /All 2 numbers/);
+  assert.match(renderQuickModal(bench.ctx), /All 3 numbers/);
   await bench.run('call');
-  assert.ok(!/All 2 numbers/.test(renderQuickModal(bench.ctx)));
+  assert.ok(!/All 3 numbers/.test(renderQuickModal(bench.ctx)));
+});
+
+test('the dialog closes on the row, not on the whole-document write', async () => {
+  // "fix it, it takes time saving just this record."
+  //
+  // The call is durable the moment wb_record_events accepts it. wbSave writes the BUILDER
+  // DOCUMENT -- every app and every record in the company, photos and spreadsheets and laid-out
+  // pages included -- and holding "Saving…" over that is what made scheduling one call feel like
+  // a freeze. Here wbSave never settles at all, and the dialog still finishes.
+  const bench = harness({ save: () => new Promise(() => {}) });
+  await bench.run('call');
+  const out = await saveQuick({
+    title: 'Follow up', to: '555 111 2222', date: '2026-09-01', time: '08:00',
+  }, bench.ctx);
+
+  assert.equal(out, 'call');
+  assert.equal(bench.state.wbQuick, null, 'the dialog is closed, not still saving');
+  assert.equal(bench.inserted.length, 1, 'and the row that matters did land');
+});
+
+test('a save that THROWS still lets go of the dialog', async () => {
+  // The bug this guards, reported from use: a Call dialog stuck on "Saving…" with Save disabled
+  // and no way forward. The insert was awaited bare, so an offline fetch rejecting -- or a token
+  // refresh throwing inside the client -- escaped as an unhandled rejection with `busy: true`
+  // still on state. Nothing repainted, and pressing Save again hit the `if (v.busy) return`
+  // guard at the top and did nothing. The dialog was dead until it was closed, and it never
+  // said why.
+  const bench = harness({
+    insert: async () => { throw new TypeError('Failed to fetch'); },
+  });
+  await bench.run('call');
+  const out = await saveQuick({
+    title: 'Follow up', to: '555 111 2222', date: '2026-09-01', time: '08:00',
+  }, bench.ctx);
+
+  assert.equal(out, 'failed');
+  assert.equal(bench.state.wbQuick.busy, false, 'the dialog can be used again');
+  assert.match(bench.state.wbQuick.error, /Failed to fetch|offline/);
+  // And what was typed is still in it, so the retry is one press rather than a re-fill.
+  assert.equal(bench.state.wbQuick.title, 'Follow up');
+});
+
+test('a save that never answers gives up rather than saying Saving for ever', async () => {
+  // The other half. A request that never settles is not an error the client will ever report,
+  // so without a clock of its own "Saving…" is simply where the dialog stops.
+  assert.ok(SAVE_TIMEOUT_MS > 0 && SAVE_TIMEOUT_MS <= 60000, 'there is a bound, and it is a sane one');
+  const bench = harness({ insert: () => new Promise(() => {}) });
+  await bench.run('call');
+  bench.ctx.state.wbQuick = { ...bench.ctx.state.wbQuick };
+  // Not run to the wall clock -- the point under test is that the race exists and that whatever
+  // wins it, `busy` is put back. saveQuick's finally is what guarantees the second part.
+  const source = readFileSync(new URL('../src/workspace/quick-create.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('Promise.race([signalled, clock.promise])'), 'the insert races a clock');
+  assert.ok(source.includes('clock.cancel();'), 'and the clock is always stopped');
+  assert.ok(source.includes('} catch (thrown) {'), 'a throw is caught rather than escaping');
 });
 
 test('an empty message is refused before anything is written', async () => {

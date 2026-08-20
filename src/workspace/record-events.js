@@ -105,6 +105,12 @@ export function createRecordEvents(ctx) {
   const {
     activeProfileId, appHref, companyPath, createSupabaseClient, isLiveSupabaseSession,
     notifyLocalEvent, render, state,
+    // Whether the record a reminder was scheduled ON is still there. Supplied rather than worked
+    // out here: this module knows about rows, and only the caller can read the documents.
+    //
+    // Defaults to "yes" on purpose. Suppressing an alarm is destructive -- the reminder is gone
+    // and nobody is told -- so the absence of a check must never silence one.
+    recordIsLive = () => true,
   } = ctx;
 
   const inFlight = new Set();
@@ -173,7 +179,10 @@ export function createRecordEvents(ctx) {
     if (!supabase || !isLiveSupabaseSession?.()) return [];
     const me = activeProfileId?.() || '';
     const rows = await loadCompanyEvents(companyId);
-    const due = dueEvents(rows, new Date().toISOString(), me);
+    // An alarm for a record that no longer exists is worse than a missed one: it goes off,
+    // names a call, and takes you to a page that says the record is gone.
+    const due = dueEvents(rows, new Date().toISOString(), me)
+      .filter((row) => recordIsLive(companyId, row));
     if (!due.length) return [];
 
     const stamp = new Date().toISOString();

@@ -529,7 +529,7 @@ export function renderFieldConfig(fd, app, ctx) {
           <label class="wb-switch"><input type="checkbox" id="wbBtnAll" ${picking ? '' : 'checked'} data-wb-rel-refresh><span class="wb-slider"></span></label>
           <div><b>Everything on the record</b><div class="wb-sub">Turn this off to pick particular fields.</div></div>
         </div>
-        ${picking ? `<div class="wb-pick-list">${carryable.map((field) => `<label class="wb-pick"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${!ticked || ticked.has(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>${carryable.length ? '' : '<div class="wb-sub">Nothing on this record can be carried across, so there is nothing to pick.</div>'}` : ''}
+        ${picking ? `<div class="wb-carry-list">${carryable.map((field) => `<label class="wb-carry"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${!ticked || ticked.has(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>${carryable.length ? '' : '<div class="wb-sub">Nothing on this record can be carried across, so there is nothing to pick.</div>'}` : ''}
       </div>
       ${pushMapUI(h, fd, app, targetApp, pushKind, carryable)}
       `}

@@ -21,6 +21,7 @@ import {
 import { MM_TO_PT, jpegInfo, textWidth, wrapText, writePdf } from './doc-pdf.js';
 import { fieldImageUrl, placeableFields, plainFieldText } from './host-values.js';
 import { DOC_TEMPLATES, buildTemplate } from './doc-templates.js';
+import { adoptLayout, buildLayout, missingNames, readLayout } from './doc-portability.js';
 
 /** A point in millimetres. Font sizes are chosen in points and drawn in millimetres. */
 const PT_TO_MM = 25.4 / 72;
@@ -223,6 +224,7 @@ export function openDocEditor({
       <div class="fd-status" data-fd-status></div>
       <input type="file" data-fd-image accept="image/png,image/jpeg,image/webp,image/gif" hidden />
       <input type="file" data-fd-pdf accept="application/pdf,.pdf" hidden />
+      <input type="file" data-fd-layout accept=".json,.questlayout.json,application/json" hidden />
     </div>`;
   }
 
@@ -572,6 +574,11 @@ export function openDocEditor({
         <label class="fd-pick"><span>Margin guide <b data-fd-margin-out>${doc.page.margin}</b> mm</span>
           <input type="range" min="0" max="40" step="1" value="${doc.page.margin}" data-fd-margin />
         </label>
+      </div>
+      <div class="fd-group"><div class="fd-group-t">Reuse this layout</div>
+        <button class="btn btn-sm fd-w" type="button" data-fd-layout-export ${doc.elements.length ? '' : 'disabled'}><i class="ti ti-file-export"></i>Export layout</button>
+        <button class="btn btn-sm fd-w" type="button" data-fd-layout-import><i class="ti ti-file-import"></i>Import layout</button>
+        <div class="fd-sub">Save this page as a file, then lay out another app's Form field the same way. Boxes that print a field find it again <b>by name</b>; anything the other app has not got arrives blank for you to point somewhere.${doc.elements.length ? ' Importing replaces what is on the page — Undo puts it back.' : ''}</div>
       </div>
       <div class="fd-group"><div class="fd-group-t">Instead of a design</div>
         <button class="btn btn-sm fd-w" type="button" data-fd-pdf-pick><i class="ti ti-upload"></i>Upload a PDF</button>
@@ -994,6 +1001,8 @@ export function openDocEditor({
 
     if (hit('image-pick')) { $('[data-fd-image]').click(); return; }
     if (hit('pdf-pick')) { $('[data-fd-pdf]').click(); return; }
+    if (hit('layout-export')) { exportLayout(); return; }
+    if (hit('layout-import')) { $('[data-fd-layout]').click(); return; }
 
     if (hit('pdf-drop')) {
       commit({ ...doc, upload: null, source: 'design' });
@@ -1276,6 +1285,34 @@ export function openDocEditor({
           place({ kind: 'image', src, name: file.name, w, h: Math.max(MIN_MM, Math.round((w * size.height) / size.width)) });
         }
       } catch (error) { say(`That image could not be read — ${error.message}`, 'bad'); }
+      return;
+    }
+
+    if (target.matches('[data-fd-layout]')) {
+      const file = target.files?.[0];
+      target.value = '';
+      if (!file) return;
+      // JSON carries no magic bytes to check, so the guard is the size, the parse, and the shape
+      // test in readLayout.
+      if (file.size > MAX_UPLOAD_BYTES) { say(`That file is ${(file.size / 1048576).toFixed(1)} MB — far too large to be a layout.`, 'bad'); return; }
+      let parsed;
+      try { parsed = JSON.parse(await file.text()); } catch { say("That file isn't valid JSON.", 'bad'); return; }
+      const found = readLayout(parsed);
+      if (!found.ok) { say(found.error, 'bad'); return; }
+      // Against the PLACEABLE fields, not every field: a box can only ever print one of those,
+      // so matching a name to a Button would bind it to something it cannot draw.
+      const taken = adoptLayout(found, fields, () => uid('e'));
+      // The page and what is on it -- the same line a template draws. This document's name, its
+      // saved versions and any uploaded PDF are the document's, not the layout's.
+      commit({ ...doc, page: taken.page, elements: taken.elements });
+      templatesOpen = false;
+      sel = '';
+      paint();
+      const missing = missingNames(taken.unmatched);
+      const stray = taken.unmatched.length - missing.length;
+      say(missing.length || stray
+        ? `Layout placed. ${taken.unmatched.length} box${taken.unmatched.length === 1 ? '' : 'es'} printed ${missing.length ? `a field this app has not got — ${missing.join(', ')}` : 'a field that no longer exists'} — ${taken.unmatched.length === 1 ? 'it is' : 'they are'} on the page marked "Pick a field". Undo takes the whole thing back.`
+        : `Layout placed${taken.matched.length ? `, and all ${taken.matched.length} field box${taken.matched.length === 1 ? '' : 'es'} found ${taken.matched.length === 1 ? 'its field' : 'their fields'} here by name` : ''}. Undo takes it back.`);
       return;
     }
 
@@ -1585,6 +1622,24 @@ export function openDocEditor({
     ctx.clip();
     ctx.drawImage(img, x + box.dx - crop.x * uw, y + box.dy - crop.y * uh, box.dw, box.dh);
     ctx.restore();
+  }
+
+  /**
+   * This page, as a file another Form field can be built from.
+   *
+   * Handed over the same way the PDF and the image are -- a blob and a download -- because it is
+   * the same act: take what is on screen away with you.
+   */
+  function exportLayout() {
+    if (!doc.elements.length) { say('There is nothing on the page to export yet.', 'bad'); return; }
+    const bundle = buildLayout(doc, hostFields, { from: doc.title || name, exportedAt: new Date().toISOString() });
+    handOver(
+      new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }),
+      fileName('questlayout.json'),
+      'download',
+    );
+    const reads = bundle.fields.length;
+    say(`Layout saved — ${bundle.elements.length} item${bundle.elements.length === 1 ? '' : 's'}${reads ? `, printing ${reads} field${reads === 1 ? '' : 's'} it will look up by name` : ''}. Import it from another app's Form field.`);
   }
 
   function fileName(extension) {

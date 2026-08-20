@@ -9,7 +9,7 @@
 
 import { boardColumns } from './pipeline-core.js';
 import { memosByDay } from './calendar-memos.js';
-import { eventTime, eventTitle, eventsByDay, heldEvents } from './record-events.js';
+import { eventTime, eventTitle, eventsByDay, eventsForItems, heldEvents } from './record-events.js';
 import { addDays, iso, monthGrid, mondayIndex, startOfWeek } from '../jobs/job-calendar.js';
 import {
   COLLECTION_FIELD_PREFIX, dashboardFor, metricValue, numberFields, optionFields, widgetMeta,
@@ -46,6 +46,36 @@ export function calendarSources(app) {
       collection: c,
     })));
   return [...own, ...sub];
+}
+
+/**
+ * Is this value a date the calendar can place?
+ *
+ * The one test, used by both the placing and the offering below, so the picker can never list a
+ * field the grid then refuses to plot.
+ */
+const hasDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? '').slice(0, 10));
+
+/**
+ * The sources a record has actually put a date in.
+ *
+ * "on the workspace app calendar only shows all the event or date fields with date that is in
+ * the app record."
+ *
+ * calendarSources answers "what COULD carry a date" and is the right question for the setup
+ * banner. It is the wrong question for the picker: an app with six date fields and dates in one
+ * of them offered six ways to look at the calendar, five of which draw an empty month. Choosing
+ * one and finding nothing there reads as a broken calendar rather than as an empty field.
+ *
+ * Nothing is hidden by this. A field with no dates in it plots nothing either way -- this only
+ * stops it being offered as a choice.
+ */
+export function datedSources(app, sources = calendarSources(app)) {
+  const items = app?.items || [];
+  return (sources || []).filter((source) => (source.collection
+    ? items.some((item) => (Array.isArray(item.children) ? item.children : [])
+      .some((child) => child?.collection === source.collection.id && hasDate(child.values?.[source.field.id])))
+    : items.some((item) => hasDate(item.values?.[source.field.id]))));
 }
 
 /**
@@ -252,7 +282,10 @@ export function createAppViews(ctx) {
   // ---- Calendar ---------------------------------------------------------------------------
 
   function renderAppCalendar(companyId, app, anchorIso, fieldId, viewMode) {
-    const candidates = calendarSources(app);
+    // What COULD carry a date, and what actually does. The first decides whether this app is
+    // set up for a calendar at all; the second is what is worth offering and plotting.
+    const possible = calendarSources(app);
+    const candidates = datedSources(app, possible);
     const canManage = can('workspaces.manage', companyId);
     // The calendar renders whether or not the app has a date field yet. Replacing it with an
     // empty state hid the whole feature behind a setup step, so you could not see what you
@@ -270,7 +303,20 @@ export function createAppViews(ctx) {
     const memoDays = memosByDay(app);
     // A call scheduled from Quick Create belongs here as much as a dated record does: it is a
     // thing with a time on it that somebody has to do.
-    const evDays = eventsByDay(heldEvents(state, companyId).filter((row) => row.app_id === app.id));
+    // ...and only on records that are still here.
+    //
+    // A scheduled call belongs to a RECORD, but it is a row in its own table while the record is
+    // a fragment of a JSON document -- so there is nothing for a foreign key to cascade from, and
+    // deleting the record leaves the call behind. Drawn unfiltered, a deleted record's call sat on
+    // the calendar for ever with no name on it and a link that went nowhere.
+    //
+    // The app is resolved here, so its item list is proof: a row naming an id the app does not
+    // hold is a row about a record that has been deleted or sent somewhere else.
+    const alive = new Set((app.items || []).map((one) => one.id));
+    const evDays = eventsByDay(eventsForItems(
+      heldEvents(state, companyId).filter((row) => row.app_id === app.id),
+      alive,
+    ));
     const todayIso = iso(new Date());
     const link = (params) => appHref(companyPath('workspaces', {
       app_id: app.id, tab: 'calendar', ...(field ? { field: field.id } : {}), ...params,
@@ -387,11 +433,15 @@ export function createAppViews(ctx) {
               ${candidates.map((f) => `<option value="${h(f.id)}" ${chosen && f.id === chosen.id ? 'selected' : ''}>By ${h(f.label)}</option>`).join('')}
             </select></label>` : candidates.length === 1 ? `<span class="wb-cal-by">By ${h(candidates[0].label)}</span>` : ''}
         </div>
-        ${candidates.length ? '' : `<p class="wb-cal-setup">
+${possible.length ? '' : `<p class="wb-cal-setup">
           <i class="ti ti-calendar"></i>
           <span>Nothing here has a <b>Date</b> field yet — not the app, and not its sub-item lists — so nothing can be placed on the calendar.</span>
           ${can('workspaces.manage', companyId) ? `<a class="btn btn-sm btn-primary" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'fields' }, companyId))}" data-router><i class="ti ti-plus"></i>Add field</a>` : ''}
         </p>`}
+        ${possible.length && !candidates.length ? `<p class="wb-cal-setup">
+          <i class="ti ti-calendar"></i>
+          <span>No record has a date in <b>${possible.length === 1 ? h(possible[0].label) : `any of this app's ${possible.length} date fields`}</b> yet. Fill one in and the record appears here.</span>
+        </p>` : ''}
         ${grid}
         ${field && undated ? `<p class="wb-cal-undated">${undated} record${undated === 1 ? '' : 's'} ${undated === 1 ? 'has' : 'have'} no <b>${h(field.label)}</b> yet, so ${undated === 1 ? 'it is' : 'they are'} not shown here.</p>` : ''}
       </div>`;

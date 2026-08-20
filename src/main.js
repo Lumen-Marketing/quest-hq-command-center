@@ -3890,6 +3890,16 @@ function wbEventsPoll() {
     wbEventsModule = wbEventsModule || mod.createRecordEvents({
       activeProfileId: () => activeSession().profile?.id || '',
       appHref, companyPath, createSupabaseClient, isLiveSupabaseSession, notifyLocalEvent, render, state,
+      // Deleting a record does not delete the calls scheduled on it -- they are rows in their own
+      // table, and a record is a fragment of a JSON document with nothing to cascade from.
+      recordIsLive: (companyId, row) => {
+        const { app } = wbFind(canonicalCompanyId(companyId), `ws-${row.workspace_id}`, row.app_id);
+        // Only a RESOLVED app can prove a record is gone. A document this session has not loaded
+        // is not evidence of anything, and treating it as evidence would silently swallow real
+        // reminders -- so anything unresolvable is allowed through.
+        if (!app || !Array.isArray(app.items)) return true;
+        return app.items.some((one) => one.id === row.item_id);
+      },
     });
     return wbEventsModule.checkReminders(companyId);
   }).catch(() => {});
@@ -13446,6 +13456,11 @@ function normalizeWorkspaceBuilderDoc(doc) {
       activity: Array.isArray(ws.activity) ? ws.activity : [],
       feed: Array.isArray(ws.feed) ? ws.feed.map(normalizeFeedPost) : [],
       tiles: Array.isArray(ws.tiles) ? ws.tiles.map(normalizeWorkspaceTile) : null,
+      // Where the Activity tile sits in the app strip. It is a tile among the apps now rather
+      // than something pinned in front of them, so an index is all there is to remember -- and
+      // it has to be remembered HERE, because everything this function does not name is dropped
+      // on load.
+      activityAt: Math.max(0, Math.round(Number(ws.activityAt)) || 0),
       apps: Array.isArray(ws.apps) ? ws.apps.map((app) => (app && app.linked ? {
         // A linked app is a pointer into another workspace's app, not a copy.
         // Keep it lightweight so it stays a live reference (resolved at read time
@@ -14799,6 +14814,15 @@ function wbTileLinks(tile) {
 // tabs that fit the width (measured in wbMountTopbar) and reveals ‹ › paging
 // buttons only when there are more apps than fit. Activity is pinned left, Add
 // app pinned right.
+/**
+ * The id the Activity tile answers to while it is being dragged.
+ *
+ * Not an app, so it can never collide with one: every app id is minted by wbUid as
+ * `wb-<12 hex>`. wbApplyAppOrder takes it back out of the reported order and remembers it as a
+ * position instead.
+ */
+const WB_ACTIVITY_TILE = 'activity';
+
 function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   // Resolve linked apps to their live source objects (and flag them so the tab
   // can show a link mark). Each entry is { app, linked }.
@@ -14807,10 +14831,14 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   // pager, so it can be swiped on touch and dragged/wheeled on desktop. The arrows
   // remain for mouse users and simply scroll the same track.
   const apps = wbWorkspaceApps(wbDoc(companyId), workspace);
-  const canReorderApps = can('workspaces.manage', companyId) && apps.length > 1;
+  // One app is enough to reorder now: Activity is the second tile.
+  const canReorderApps = can('workspaces.manage', companyId) && apps.length >= 1;
   const homeHref = appHref(companyPath('workspaces', {}, companyId));
   const homeActive = !activeAppId;
-  const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
+  // draggable="false" and a tile id, exactly like an app: Activity sits INSIDE the track now,
+  // so it is dragged, dropped and remembered by the same code the apps use rather than by a
+  // second arrangement that would have to be kept in step with it.
+  const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router draggable="false" data-wb-app-id="${WB_ACTIVITY_TILE}" aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
   const appTabs = apps.map(({ app: a, linked }) => {
     const active = a.id === activeAppId;
     const href = appHref(companyPath('workspaces', { app_id: a.id }, companyId));
@@ -14818,7 +14846,11 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
     // draggable="false" so grabbing a tab does not start the browser's own link drag, which
      // would hijack the gesture before the strip ever sees it.
     return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router draggable="false" data-wb-app-id="${h(a.id)}" title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"${active ? ' data-wb-topbar-active' : ''}><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
-  }).join('');
+  });
+  // Activity slots in wherever it was last dropped. Clamped rather than trusted: an app deleted
+  // since the drag leaves an index past the end, and first is where it has always been.
+  const activityAt = Math.max(0, Math.min(appTabs.length, Math.round(Number(workspace?.activityAt)) || 0));
+  const strip = [...appTabs.slice(0, activityAt), homeTab, ...appTabs.slice(activityAt)].join('');
   // Rendered unconditionally and hidden by wbMountTopbar when nothing overflows, because
   // overflow depends on measured width which is not known at render time.
   const nav = `<div class="wb-topbar-nav" data-wb-topbar-nav hidden>`
@@ -14828,7 +14860,7 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   const addBtn = can('workspaces.manage', companyId)
     ? `<button class="wb-topbar-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus" aria-hidden="true"></i><span>Add app</span></button>`
     : '';
-  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps">${homeTab}<div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0"${canReorderApps ? ' data-wb-reorder="1"' : ''}>${appTabs}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
+  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps"><div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0"${canReorderApps ? ' data-wb-reorder="1"' : ''}>${strip}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
 }
 
 // Where the app strip was scrolled to. Kept in a variable rather than on the element:
@@ -14863,12 +14895,23 @@ function wbApplyAppOrder(companyId, ids) {
   const workspace = wbCompanyWorkspace(companyId);
   const entries = workspace?.apps;
   if (!Array.isArray(entries) || ids.length < 2) return;
+
+  // Activity is in the reported order but is not an app, so it is taken out first and kept as a
+  // POSITION. Leaving it in would have it silently dropped by the lookup below -- the strip would
+  // show it where it was let go and put it back at the front on the next reload.
+  const wasAt = Math.max(0, Math.min(entries.length, Math.round(Number(workspace.activityAt)) || 0));
+  const dropped = ids.indexOf(WB_ACTIVITY_TILE);
+  const appIds = ids.filter((id) => id !== WB_ACTIVITY_TILE);
+  const activityAt = dropped < 0 ? wasAt : Math.max(0, Math.min(appIds.length, dropped));
+
   const idOf = (entry) => String(entry?.id || entry?.appId || '');
-  const next = ids.map((id) => entries.find((entry) => idOf(entry) === String(id))).filter(Boolean);
+  const next = appIds.map((id) => entries.find((entry) => idOf(entry) === String(id))).filter(Boolean);
   entries.forEach((entry) => { if (!next.includes(entry)) next.push(entry); });
-  // A drag that ended where it started must not write a revision.
-  if (next.every((entry, at) => entry === entries[at])) return;
+  // A drag that ended where it started must not write a revision -- and moving ONLY Activity is
+  // still a move, so both halves are compared.
+  if (activityAt === wasAt && next.every((entry, at) => entry === entries[at])) return;
   workspace.apps = next;
+  workspace.activityAt = activityAt;
   wbSave(companyId);
 }
 
@@ -15135,6 +15178,11 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-import><i class="ti ti-file-import"></i>Import</button>`;
   if (tab === 'items' && app.items.length) headBtn += `<button class="btn" data-wb-print-data><i class="ti ti-printer"></i>Print</button>`;
   if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
+  // The field setup travels on its own, beside the whole-app Download on Settings. Rebuilding
+  // a form somebody already built next door is the commonest thing anybody does on this tab,
+  // and "install the whole app, records and all, then delete the records" was not that.
+  if (tab === 'fields' && app.fields.length) headBtn += `<button class="btn" data-wb-export-fields title="Save this app's fields to a file you can import into another app"><i class="ti ti-file-export"></i>Export fields</button>`;
+  if (canManage && tab === 'fields') headBtn += `<button class="btn" data-wb-import-fields title="Add fields from another app's export"><i class="ti ti-file-import"></i>Import fields</button>`;
   if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
   // Settings: the four things you DO to the app, up here beside the tabs rather than buried at
@@ -16297,7 +16345,13 @@ function wbFmtVal(ctx, field, value) {
       const tiles = shots.map((one, i) => `<button type="button" class="wb-img-shot" ${at(i)} title="${h(one.name || 'Photo')}" aria-label="${h(`View ${one.name || 'photo'}`)}"><img class="wb-img-avatar" src="${h(one.url)}" alt="${h(one.name || 'Photo')}" loading="lazy" decoding="async"></button>`);
       const seen = ctx.detail ? tiles : tiles.slice(0, 1);
       const rest = shots.length - seen.length;
-      return `<span class="wb-img-cell${ctx.detail ? ' is-detail' : ''}">${seen.join('')}${rest ? `<button type="button" class="wb-img-more" ${at(seen.length)} title="View all ${shots.length} photos" aria-label="View all ${shots.length} photos">+${rest}</button>` : ''}</span>`;
+      // The count rides ON the photo as a corner badge rather than sitting beside it as a
+      // second circle: in a narrow column that chip wrapped onto its own line and read as a
+      // second picture, which is the gallery-in-a-row this was meant to stop.
+      const more = rest
+        ? `<button type="button" class="wb-img-more" ${at(seen.length)} title="View all ${shots.length} photos" aria-label="View all ${shots.length} photos">+${rest}</button>`
+        : '';
+      return `<span class="wb-img-cell${ctx.detail ? ' is-detail' : ''}${more ? ' has-more' : ''}">${seen.join('')}${more}</span>`;
     }
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
     case 'rating': return wbRatingStars(value);
@@ -16771,7 +16825,10 @@ function wbPlainVal(companyId, workspace, app, field, value, values) {
     // directory by primary key.
     case 'company_contact': return companyContactLabel(String(value || ''));
     case 'relationship': { const ta = wbRelTargetApp(field, companyId); if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? 'No access' : ''; const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return it ? wbRelLabel(ta, it, field.config.displayField) : ''; }).join(' '); }
-    case 'file': case 'image': { const fv = wbFileValue(value); return fv ? (fv.name || '') : ''; }
+    // Every name, not the first: this feeds the activity receipt, search and CSV export, and a
+    // record whose Photos field gained three pictures should say so. Names only -- a stored URL
+    // is signed and carries an access token, and the activity log is written into the document.
+    case 'file': case 'image': return wbFileValues(value).map((one) => one.name).filter(Boolean).join(', ');
     case 'money': return `${field.config.currency || '$'}${value}`;
     case 'number': return `${value}${field.config.unit ? ` ${field.config.unit}` : ''}`;
     case 'duration': return wbFmtDuration(value);
@@ -16808,7 +16865,7 @@ function wbFieldNumber(app, field, raw, values) {
 function wbIsEmptyVal(field, raw) {
   if (field.type === 'calculation') return false;
   if (Array.isArray(raw)) return raw.length === 0;
-  if (field.type === 'file' || field.type === 'image') return !wbFileValue(raw);
+  if (field.type === 'file' || field.type === 'image') return !wbFileValues(raw).length;
   return raw === undefined || raw === null || raw === '';
 }
 function wbEvalFilter(companyId, workspace, app, item, flt) {
@@ -18000,6 +18057,7 @@ function wbLoadDataIO() {
         wbReportContext, wbLoadReports, wbAssignAutoNumbers,
         loadedReports: () => wbReportsModule,
         clone, downloadText, guardUpload, activeSession,
+        WB_FIELD_TYPES, WB_PALETTE, openWbModal, closeWbModal, safeHexColor, sanitizeColorConfig,
       });
       return wbDataIOModule;
     }).catch((error) => {
@@ -18030,6 +18088,9 @@ function wbPrintReports(companyId, workspaceId, appId) { return wbDataIO('wbPrin
 function wbExportCsv(companyId, workspaceId, appId) { return wbDataIO('wbExportCsv', companyId, workspaceId, appId); }
 function wbImportCsvPrompt(companyId, workspaceId, appId) { return wbDataIO('wbImportCsvPrompt', companyId, workspaceId, appId); }
 function wbDownloadApp(companyId, workspaceId, appId) { return wbDataIO('wbDownloadApp', companyId, workspaceId, appId); }
+function wbExportFields(companyId, workspaceId, appId) { return wbDataIO('wbExportFields', companyId, workspaceId, appId); }
+function wbImportFieldsPrompt(companyId, workspaceId, appId) { return wbDataIO('wbImportFieldsPrompt', companyId, workspaceId, appId); }
+function wbApplyFieldImport(modal) { return wbDataIO('wbApplyFieldImport', modal); }
 
 function wbInstallAppPrompt(companyId, workspaceId) {
   const input = document.createElement('input');
@@ -18880,10 +18941,18 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
 // JSON form and legacy plain strings (a URL or a bare filename).
 function wbFileValue(val) {
   if (!val) return null;
+  // An ARRAY is an object, so this branch used to answer null for every multi-file field and the
+  // caller fell back to printing the raw value. A list of files reads as its first file here;
+  // callers that want all of them ask wbFileValues.
+  if (Array.isArray(val)) return val.length ? wbFileValue(val[0]) : null;
   if (typeof val === 'object') return val.url || val.name ? val : null;
   const s = String(val).trim();
   if (!s) return null;
   if (s[0] === '{') { try { const o = JSON.parse(s); if (o && (o.url || o.name)) return o; } catch { /* fall through */ } }
+  // The same list, stored as a JSON string. Without this it reached the "a bare string is a
+  // filename" fallback below and the whole array -- names, signed URLs, access tokens and all --
+  // came back AS the filename, which is what the activity feed was printing.
+  if (s[0] === '[') { try { const a = JSON.parse(s); if (Array.isArray(a)) return a.length ? wbFileValue(a[0]) : null; } catch { /* fall through */ } }
   const isUrl = /^(https?:|data:|blob:)/i.test(s);
   let name = s;
   if (isUrl) { try { name = decodeURIComponent(new URL(s).pathname.split('/').pop() || s).replace(/^[0-9a-f-]{36}-/i, ''); } catch { name = 'Attached file'; } }
@@ -20472,6 +20541,9 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-print-reports]', () => wbPrintReports(companyId, workspaceId, appId));
     bind('[data-wb-export]', () => wbExportCsv(companyId, workspaceId, appId));
     bind('[data-wb-import]', () => wbImportCsvPrompt(companyId, workspaceId, appId));
+    // The Fields tab's own pair: the field SETUP out to a file, and another app's setup in.
+    bind('[data-wb-export-fields]', () => wbExportFields(companyId, workspaceId, appId));
+    bind('[data-wb-import-fields]', () => { if (!wbGuard()) return; wbImportFieldsPrompt(companyId, workspaceId, appId); });
     // Bulk selection: per-row checkbox, select-all, and the action bar.
     bind('[data-wb-select]', (el) => { const ui = wbItemsUI(appId); if (el.checked) ui.sel.add(el.dataset.wbSelect); else ui.sel.delete(el.dataset.wbSelect); render(); }, 'onchange');
     bind('[data-wb-select-all]', (el) => { const ui = wbItemsUI(appId); document.querySelectorAll('#wbItemsList [data-wb-select]').forEach((cb) => { if (el.checked) ui.sel.add(cb.dataset.wbSelect); else ui.sel.delete(cb.dataset.wbSelect); }); render(); }, 'onchange');
@@ -20840,6 +20912,17 @@ function wbMountModal() {
     m.draft.objectPath = ''; m.draft.bucket = ''; m.draft.url = ''; m.draft._preview = '';
     render();
   };
+  // Import fields: which of them travel, then the add. The ticks live on the modal rather
+  // than in the DOM, because every one of these re-renders and a checkbox's checked-ness does
+  // not survive that -- the same reason the builder's own field selection is held on state.
+  overlay.querySelectorAll('[data-wb-fi-pick]').forEach((b) => { b.onchange = () => {
+    const at = Number(b.dataset.wbFiPick);
+    m.picks = b.checked ? [...m.picks, at] : m.picks.filter((i) => i !== at);
+    render();
+  }; });
+  const fiAll = overlay.querySelector('[data-wb-fi-all]');
+  if (fiAll) fiAll.onclick = () => { m.picks = m.picks.length === m.fields.length ? [] : m.fields.map((_, i) => i); render(); };
+  const fiGo = overlay.querySelector('[data-wb-fi-go]'); if (fiGo) fiGo.onclick = () => wbApplyFieldImport(m);
   const confirmBtn = overlay.querySelector('[data-wb-confirm]'); if (confirmBtn) confirmBtn.onclick = () => wbConfirmDelete();
   const callBtn = overlay.querySelector('[data-wb-call-go]'); if (callBtn) callBtn.onclick = () => wbConfirmCall();
   const delWsBtn = overlay.querySelector('[data-wb-delete-ws-confirm]'); if (delWsBtn) delWsBtn.onclick = () => wbConfirmDeleteWorkspace();

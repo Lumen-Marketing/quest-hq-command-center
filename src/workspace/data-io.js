@@ -14,6 +14,7 @@
 
 import { parseCsvRows } from '../data/csv.js';
 import { describeExtras, portableExtras } from './app-portability.js';
+import { adoptFields, buildFieldSet, presentIn, readFieldSet } from './field-portability.js';
 
 export function createDataIO(ctx) {
   const {
@@ -21,6 +22,7 @@ export function createDataIO(ctx) {
     wbFind, wbPlainVal, wbSave, wbUid, wbLogActivity, wbMembers,
     wbReportContext, wbLoadReports, wbAssignAutoNumbers, loadedReports,
     clone, downloadText, guardUpload, activeSession,
+    WB_FIELD_TYPES, WB_PALETTE, openWbModal, closeWbModal, safeHexColor, sanitizeColorConfig,
   } = ctx;
 
   // Open a print-ready window carrying the app's own stylesheets (so report cards
@@ -235,8 +237,102 @@ export function createDataIO(ctx) {
     showToast(`Downloaded "${app.name}" (${summary}).`, 'local', 'Workspaces');
   }
 
+  /* ---- Field setup out and in (portable .questfields.json) ------------------- */
+  //
+  // "can you make it import and export so i can reuse other layout i have from other apps."
+  //
+  // Deliberately NOT the whole-app download above. That one builds a brand new app, so reusing
+  // one form's shape in an app you are already standing in meant installing the whole thing --
+  // records, automations and all -- and then deleting what you did not want. This carries the
+  // field list on its own and adds it to the app you are in.
+  function wbExportFields(companyId, workspaceId, appId) {
+    const { workspace, app } = wbFind(companyId, workspaceId, appId);
+    if (!app) return;
+    if (!app.fields.length) { showToast('This app has no fields to export yet.', 'local', 'Workspaces'); return; }
+    const bundle = buildFieldSet(app, app.fields, {
+      workspaceName: workspace?.name || '',
+      exportedAt: new Date().toISOString(),
+    });
+    const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
+    downloadText(`${safeName}.questfields.json`, JSON.stringify(bundle, null, 2), 'application/json');
+    showToast(`Exported ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} from "${app.name}" — import it from any app's Fields tab.`, 'local', 'Workspaces');
+  }
+
+  // Read the file, then ASK. Dropping twelve fields into somebody's app the instant they picked
+  // a file is not an import, it is an accident: the list is another app's, so which of it you
+  // actually want is a question only the person importing can answer.
+  function wbImportFieldsPrompt(companyId, workspaceId, appId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.questfields.json,.questapp.json,application/json';
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      // JSON carries no magic bytes to check, so the guard is the size, the parse, and the
+      // shape test in readFieldSet -- the same three the whole-app install relies on.
+      if (file.size > 8 * 1024 * 1024) { showToast('That file is far too large to be a field export.', 'local', 'Workspaces'); return; }
+      let text = '';
+      try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Workspaces'); return; }
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { showToast("That file isn't valid JSON.", 'local', 'Workspaces'); return; }
+      const read = readFieldSet(parsed, (type) => !!WB_FIELD_TYPES[type]);
+      if (!read.ok) { showToast(read.error, 'local', 'Workspaces'); return; }
+      const { app } = wbFind(companyId, workspaceId, appId);
+      if (!app) return;
+      const present = presentIn(read.fields, app.fields);
+      openWbModal({
+        kind: 'field-import',
+        companyId,
+        workspaceId,
+        appId,
+        source: read.source,
+        dropped: read.dropped,
+        fields: read.fields,
+        present,
+        // Ticked = the fields this app is MISSING. One it already has under the same name is
+        // left alone rather than arriving as a second copy, but the row stays tickable: the
+        // same label over a different TYPE is a call only the person importing can make, and
+        // ticking it lands a numbered field rather than writing over anything.
+        //
+        // By INDEX, not by id: the ids in the file are the source app's, and a hand-edited
+        // bundle is free to repeat one or leave it blank.
+        picks: read.fields.map((_, i) => i).filter((i) => !present[i]),
+      });
+    };
+    input.click();
+  }
+
+  /** Add the ticked fields to the app the dialog was opened from. */
+  function wbApplyFieldImport(modal) {
+    const m = modal;
+    if (!m || m.kind !== 'field-import') return;
+    const { workspace, app } = wbFind(m.companyId, m.workspaceId, m.appId);
+    if (!app) return;
+    const picked = m.fields.filter((_, i) => m.picks.includes(i));
+    if (!picked.length) { showToast('Tick at least one field to bring across.', 'local', 'Workspaces'); return; }
+    const { fields, renamed } = adoptFields(picked, app.fields, {
+      makeId: wbUid,
+      sanitizeConfig: (config) => sanitizeColorConfig(config, safeHexColor(app.color, WB_PALETTE[1])),
+    });
+    app.fields.push(...fields);
+    wbSave(m.companyId);
+    if (workspace) {
+      wbLogActivity(workspace, {
+        icon: 'ti-file-import',
+        color: '#0891b2',
+        text: `Imported ${fields.length} field${fields.length === 1 ? '' : 's'} into <b>${h(app.name)}</b>${m.source.app ? ` from <b>${h(m.source.app)}</b>` : ''}`,
+      });
+    }
+    closeWbModal();
+    // The renames are named rather than counted: "Amount came in as Amount 2" is what somebody
+    // needs to hear to go and look at it, and a bare "2 renamed" is not.
+    const note = renamed.length ? ` ${renamed.map((r) => `"${r.from}" came in as "${r.to}"`).join('; ')}.` : '';
+    showToast(`Added ${fields.length} field${fields.length === 1 ? '' : 's'} to "${app.name}".${note}`, 'local', 'Workspaces');
+  }
+
   return {
     wbOpenPrintWindow, wbPrintTitleBlock, wbPrintData, wbPrintReports,
     wbExportCsv, wbImportCsvPrompt, wbImportCsvText, wbDownloadApp,
+    wbExportFields, wbImportFieldsPrompt, wbApplyFieldImport,
   };
 }

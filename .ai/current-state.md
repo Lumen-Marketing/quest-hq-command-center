@@ -1666,11 +1666,16 @@ the bug -- `fitRect` handles the model's own word -- and are now pinned so the t
   **All photos**, a contact sheet that marks where you are and drops back to a single view on
   whichever one you pick. Arrow keys and Escape work; on a phone the picture itself advances on
   tap and the stage takes a horizontal swipe.
-- **A record LIST no longer paints every photo.** A row now draws one thumbnail and a `+3` chip
-  for the rest. Eight photos in a cell pushed the columns beside it off the row and still drew
-  each one too small to identify. The count is the honest summary; the viewer behind it is where
-  the photos are actually read. Only the record page and the record view modal show the whole
-  set — they pass `detail: true` on the context object `wbFmtVal` already receives.
+- **A record LIST no longer paints every photo.** A row draws ONE thumbnail and carries the
+  count for the rest as a `+3` BADGE on that thumbnail's bottom-right corner (`.wb-img-more`,
+  absolutely positioned inside `.wb-img-cell.has-more`). Eight photos in a cell pushed the
+  columns beside it off the row and still drew each one too small to identify. The badge first
+  shipped as a chip standing beside the photo, which was a second circle the same size — in a
+  narrow column it wrapped underneath and read as the second photo it was standing in for; on
+  the corner it costs no width at all. The count is the honest summary; the viewer behind it is
+  where the photos are actually read. Only the record page and the record view modal show the
+  whole set — they pass `detail: true` on the context object `wbFmtVal` already receives, and
+  in that mode every tile is drawn so the badge never appears.
 - The photos travel to the viewer by KEY, through a per-render registry (`WB_IMG_SETS`), not in
   the markup: a signed URL is 200-odd characters, and writing the whole gallery into every row —
   so the one photo it draws can still step through the rest — is a table nobody can scroll. The
@@ -1708,6 +1713,171 @@ the bug -- `fitRect` handles the model's own word -- and are now pinned so the t
   single photo gets no arrows and no toggle, and the extracted uploader still binds real field
   markup, paints its thumbnails, opens the viewer from one, and removes one on its own. No
   console errors.
+
+## 2026-08-19 A field setup travels between apps on its own
+
+- "on the form fields on the setup, can you make it import and export so i can reuse other layout
+  i have from other apps." The Fields tab gained **Export fields** (any role — it only reads) and
+  **Import fields** (`workspaces.manage`), beside the tabs where Export / Import / Print already
+  sit on Items.
+- **Why this is not the whole-app Download that already existed.** That one builds a BRAND NEW
+  app, so reusing one form's shape inside an app you are already standing in meant installing the
+  whole thing — records, automations, layouts — and then deleting what you did not want. Export
+  writes `<App>.questfields.json`: field definitions only, no records, no automations, no
+  arrangement.
+- **Import ADDS and can never replace.** The fields land after whatever the target already had,
+  so pressing it on an app with records in it cannot empty a column. Clearing the old shape out
+  first is the Fields tab's own bulk delete, which at least shows what it is about to destroy.
+- The file is read and then **asked about**: a dialog lists what is in it with a tick box each,
+  so importing eight of twelve does not mean importing twelve and deleting four. A **whole
+  `.questapp.json` is accepted too** — somebody holding last month's backup should not have to
+  install the app to reuse its five fields.
+- **What arrives ticked is what this app is MISSING.** A field the target already has under the
+  same name starts unticked and is marked "Already here" — a second Amount landing beside the
+  Amount already holding values is not reuse, it is a mess to clean up. Matching is on LABEL,
+  case- and space-insensitively, which is `presentIn` in `field-portability.js` and is the same
+  rule (and the same first-wins tie-break) `matchedFields` already uses to decide what a
+  relationship copies across.
+- **The row still ticks, though.** Where the labels match but the TYPES do not — an Amount that is
+  text here and money there — the chip says "Already here **as Text**", because the two are
+  indistinguishable in a list and that difference is the entire reason somebody would want it
+  anyway. Ticking it lands the numbered field (`Amount 2`); the existing field is never written
+  over, so there is no destructive branch in this flow at all.
+- **`src/workspace/field-portability.js`** is the pure half, beside `app-portability.js` which
+  does the same job for a whole app. Three things happen on the way in, and all three are what
+  stops an import being a copy-paste: every field gets a **fresh id**; a label the target already
+  uses is **numbered** ("Amount 2") so an import cannot silently merge with a field that only
+  happens to share a name; and references BETWEEN the imported fields are re-pointed at the new
+  ids, with anything that no longer resolves dropped rather than carried.
+- **`OWN_FIELD_REFS` in that module is the list of what those references are**, and is the
+  reason the remap is not guesswork: `progress.source` (including the `link:<relField>:<field>`
+  form, where only the NEAR half is reminted), `rollup.relField`, `button.set[].field` /
+  `when[].field` / `fields[]` / `map[].from`, and `pull[].to` on both `relationship` and
+  `company_contact`. Everything else in a config names another app — `targetApp`,
+  `displayField`, `targetField`, `pull[].from`, `map[].to` — and is left alone, because
+  reused inside the same account those still resolve.
+- **A calculation formula names its inputs by LABEL, not by id**, which is the trap this had to
+  handle: an imported Total whose `{Amount}` survived a rename would have started reading the
+  TARGET app's Amount — a sum quietly taken over the wrong column. Renamed labels are rewritten
+  into the formulas that came with them.
+- **Where the code lives was a budget decision.** The whole flow — picker, parse, dialog, apply —
+  went into `src/workspace/data-io.js`, which is already fetched on demand and prefetched when an
+  app view renders; the dialog markup went into `builder-modal.js`, likewise dynamic. `main.js`
+  gained two buttons, two binds, three one-line wrappers and the modal's three handlers. Entry
+  JavaScript 363,613 -> **363,992** gzip bytes: 379 bytes for the feature, **552 under** the
+  364,544 ceiling, which was not raised.
+- `tests/field-import-export.test.mjs` (20 tests) covers the bundle shape, the reader (whole-app
+  files, unknown types dropped and counted, every empty case), every reference class in
+  `OWN_FIELD_REFS`, the formula rewrite, double-import, and the wiring — including that nothing
+  in `data-io.js` reassigns `app.fields`, which is the "adds, never replaces" promise.
+
+## 2026-08-19 A Form field's page layout travels to another app
+
+- "in the fields FORM i want to export the layout I made there ... If I can export this, I can
+  import it too to other App with Form Field." The document builder's rail gained a **Reuse this
+  layout** group: **Export layout** (a `.questlayout.json` of the page) and **Import layout**.
+- **Not the toolbar.** PDF and Image up there export the finished DOCUMENT; this is the design.
+  The rail is the part of the editor about where a page comes from, which is where **Start from a
+  template** already lives — and importing a layout is the same act as picking a template.
+- **The whole difficulty is one word: `from`.** A field element stores no value, it stores the
+  HOST record's field id, and an id means nothing in the app a layout is carried to. So an export
+  writes down the **name behind every id it uses** (`fields` in the bundle, built from
+  `layoutFieldRefs`), and `adoptLayout` looks those names up where it lands — label, ignoring
+  case and space, the same rule and the same first-wins tie-break as everywhere else. An Address
+  box laid out over there finds the Address here with nobody re-picking it.
+- **A picture-filled `shape` carries `from` exactly as a `field` element does**, so it is
+  collected too. Missing it is how a logo band would arrive pointing at an app it had never heard
+  of.
+- **An unmatched box is NOT dropped.** It keeps its place, size and styling and arrives unbound,
+  which `previewText` already draws as a grey "Pick a field" — so the page comes in whole and the
+  three boxes that need a decision are the three that look like they do. Dropping them would leave
+  holes nobody could explain. The status bar names them: *"2 boxes printed a field this app has
+  not got — Site address, Photo."*
+- **Import replaces the page, and Undo covers it** — the same line `buildTemplate` draws.
+  Merging two layouts would stack one page on another. The document's own name, its saved
+  versions and any uploaded PDF beside the design stay put: a layout is the arrangement, not the
+  history, and never the record's values.
+- Matching runs against **`fields`, not `hostFields`** — `placeableFields` has already dropped
+  Button and Form, and a name matching one of those would bind a box to something it cannot draw.
+- `src/form/doc-portability.js` is pure and sits beside `doc-model.js`/`doc-templates.js`.
+  `doc-editor.js` is already behind a dynamic import, so it is bundled into the
+  `doc-editor` chunk and **not the entry**: entry JavaScript is unchanged at ~364,000 gzip bytes,
+  544 under the ceiling. `tests/doc-layout-portability.test.mjs` covers 12 cases including the
+  round trip through the real `normalizeDoc`.
+
+## 2026-08-20 A pass over the workspace apps, and eight things it found
+
+Reported from use: "some button field not working, some are hanging, lagging and freeze", "some
+apps didnt detect phone number", "I deleted all the records so why is this stays here", "why is it
+in a different card", and the Activity feed printing raw JSON. All of it is in this batch.
+
+- **Call said "This record has no phone number" over a record showing one.** `phoneChoices`
+  filtered on `!field.hidden`. Hidden is a TABLE setting -- the builder's own tooltip reads "still
+  editable on each record", and the record page draws hidden fields like any other -- so an app
+  that had tidied Phone out of its table lost the ability to ring anybody. Per-app, which is why it
+  struck some and not others. A test asserted the old behaviour ("a hidden line is not offered");
+  it is replaced with the reasoning. Keeping a number out of Call is a real thing to want, but it
+  needs its own switch, not the one that tidies a column.
+- **The Call dialog could stick on "Saving..." for ever.** The insert was awaited bare -- no
+  try/catch, no timeout -- and `record-page.js` called `saveQuick` with no `.catch`. Any throw
+  became an unhandled rejection with `busy: true` still on state: nothing repainted, Save stayed
+  disabled, and pressing again hit the `if (v.busy) return 'idle'` guard. Now caught, bounded by
+  `SAVE_TIMEOUT_MS` (20s), and cancelled in a `finally` -- a timer left running holds the event
+  loop open, which showed up as a test file taking 20 seconds instead of 235ms.
+- **And it was waiting on the wrong thing.** The call is durable the moment its `wb_record_events`
+  row lands. `wbSave` writes the BUILDER DOCUMENT -- every app and every record in the company,
+  `JSON.stringify`d synchronously into localStorage before it is uploaded -- and the dialog held
+  "Saving..." over all of it for two lines of bookkeeping. It fires in the background now. New
+  Field still awaits its own, because there the document write IS the durable save.
+- **A push or move inside one company wrote that document TWICE**, once for the arrival and once
+  for the removal. Prospect to Leads in one workspace is the ordinary case, so the ordinary case
+  paid double -- and it handed the optimistic-revision check a collision to resolve against a write
+  the same function had just made, which is how a press returns "could not be saved while others
+  are editing" with nobody else editing. One write now, and because both halves ride in it the move
+  became atomic rather than merely well-ordered. Across companies the old ordering stands.
+- **Buttons were not slower by accident.** `wbSave` began returning a real promise on 2026-08-17
+  (`8bbbd0b`); before that `await wbSave(...)` awaited `undefined` and a press returned while the
+  write was in the air. The old speed was a record that had not been saved yet.
+- **The app calendar offered date fields nothing had a date in.** `calendarSources` answers "what
+  COULD carry a date", which is right for the setup banner and wrong for the picker: six date
+  fields offered six ways to look at the calendar, five of them empty. `datedSources` is the
+  subset a record has actually filled in. Nothing is hidden -- an empty field plots nothing either
+  way -- and the two empty calendars now say different things, because telling somebody with six
+  empty date fields to add a seventh is wrong twice over.
+- **A scheduled call outlived the record it was scheduled on.** The row is in `wb_record_events`
+  and the record is a fragment of a JSON document, so there is nothing for a foreign key to cascade
+  from. The calendar drew those calls for ever with no name and a link to nowhere, and the ALARM
+  still rang for them. `eventsForItems` existed for exactly this and had never been wired up. The
+  liveness check defaults to "yes" and only suppresses when it can prove the record is gone: a
+  document this session has not loaded is not evidence, and suppressing an alarm is destructive.
+  The rows are hidden, not deleted -- cleanup belongs at permanent delete, since trashing is
+  restorable.
+- **Two components were both called `wb-pick`.** The Button field's "which fields travel" grid and
+  the New Field icon dropdown. The later rule won, so a grid of checkboxes inherited
+  `position: absolute; left: 0; right: 0` from a dropdown panel, tore itself out of the dialog and
+  landed as a full-width card across the bottom of the window. The grid is `wb-carry` now.
+  `tests/css-class-collisions.test.mjs` walks every `class="..."` in `src/` and holds them apart.
+- **The Activity feed printed file changes as raw JSON, signed URLs and access tokens included.**
+  `wbFileValue` could not read a list: an array is an object, so the object branch answered null,
+  and a JSON array stored as a string fell past it to "a bare string is a filename" -- so the whole
+  array came back AS the name. Fixed on both sides. What gets WRITTEN is now every file's name and
+  no URL (`wbPlainVal` reads `wbFileValues`), and what gets READ is passed through a new pure
+  `readableValue` -- because entries already in the feed keep the string they were logged with, and
+  the feed is the history. The same blind spot made `wbFieldIsEmpty` treat a required Photos field
+  holding three pictures as empty.
+- **Activity is draggable.** It sat outside the scrollable track, so the drag module never saw it.
+  It is a tile in the strip now with its own `WB_ACTIVITY_TILE` id; `wbApplyAppOrder` takes that id
+  out of the reported order and keeps it as `workspace.activityAt`. Three things would each have
+  broken it quietly: the workspace normaliser drops what it does not name, the no-op guard compared
+  only the app order (dragging Activity leaves the apps identical), and the index needs clamping
+  when an app is deleted after a drag.
+
+**Still open, and deliberately not in this batch.** Every workspace edit rewrites the whole company
+document, sync-`stringify`d into localStorage first, so cost scales with everything you own rather
+than with what you changed. That is the root of the lag reports; halving the push helped and did not
+fix it. Per-record storage -- or at minimum keeping media out of the document -- is its own piece of
+work. Also open: `syncButtons` calls `.closest()` on `document`, which has no such method, so its
+"only inside a modal or record page" guard silently never applies.
 
 ## Remaining controlled launch configuration
 

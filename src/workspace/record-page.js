@@ -109,7 +109,14 @@ export function createRecordPage(ctx) {
       const form = event.target.closest?.('[data-wb-quick-form]');
       if (!form || !quickModule) return;
       event.preventDefault();
-      quickModule.saveQuick(Object.fromEntries(new FormData(form).entries()), ctx);
+      // Caught here as well as inside saveQuick. An async call made with no catch turns any
+      // throw into an unhandled rejection, which is silent -- and silent, for this dialog, looks
+      // exactly like "Saving…" for ever.
+      Promise.resolve(quickModule.saveQuick(Object.fromEntries(new FormData(form).entries()), ctx))
+        .catch((error) => {
+          if (state.wbQuick) state.wbQuick = { ...state.wbQuick, busy: false, error: error?.message || 'That could not be saved.' };
+          render();
+        });
     });
     document.addEventListener('click', (event) => {
       // Close on the X, on Cancel, and on the backdrop ITSELF -- not on a press that landed

@@ -168,7 +168,9 @@ test('the module reports the order and stores nothing itself', () => {
 });
 
 test('only someone who can manage workspaces gets the reorder handle', () => {
-  assert.match(main, /const canReorderApps = can\('workspaces\.manage', companyId\) && apps\.length > 1;/);
+  // >= 1 rather than > 1: Activity sits among the apps now, so a single app already has a
+  // second tile to be reordered against.
+  assert.match(main, /const canReorderApps = can\('workspaces\.manage', companyId\) && apps\.length >= 1;/);
   assert.match(main, /\$\{canReorderApps \? ' data-wb-reorder="1"' : ''\}/);
   // A tab is a link; without this the browser's own drag steals the gesture.
   assert.match(main, /data-router draggable="false" data-wb-app-id="\$\{h\(a\.id\)\}"/);
@@ -180,8 +182,13 @@ test('the stored order keeps entries the strip never showed', () => {
   assert.match(body, /if \(!can\('workspaces\.manage', companyId\)\) return;/);
   assert.match(body, /entries\.forEach\(\(entry\) => \{ if \(!next\.includes\(entry\)\) next\.push\(entry\); \}\);/);
   // A drag that ended where it started must not write a revision.
-  assert.match(body, /if \(next\.every\(\(entry, at\) => entry === entries\[at\]\)\) return;/);
+  assert.ok(body.includes('if (activityAt === wasAt && next.every((entry, at) => entry === entries[at])) return;'), 'a drag that ended where it started writes nothing');
   assert.match(body, /wbSave\(companyId\);/);
+  // Activity is dragged with the apps but is not one, so it comes out of the reported order
+  // and is remembered as a position. Left in, the lookup would silently drop it and the strip
+  // would put it back at the front on the next reload.
+  assert.ok(body.includes('const appIds = ids.filter((id) => id !== WB_ACTIVITY_TILE);'));
+  assert.ok(body.includes('workspace.activityAt = activityAt;'));
 });
 
 // "After clicking the link and making an account, when I log in it says invalid login

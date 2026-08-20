@@ -85,6 +85,53 @@ export function describeChecklist(field, before, next) {
  * Returns null when the text is not that shape, so the caller falls back to printing it whole --
  * a checklist logged by some older build still reads, it just reads plainly.
  */
+/** A file name out of a storage URL: the last path segment, decoded, minus its uuid prefix. */
+function nameFromUrl(url) {
+  try {
+    const last = new URL(url).pathname.split('/').pop() || '';
+    return decodeURIComponent(last).replace(/^[0-9a-f-]{36}-/i, '') || '';
+  } catch { return ''; }
+}
+
+/**
+ * What a logged value should READ as.
+ *
+ * An activity entry keeps whatever string it was written with, so fixing what gets written fixes
+ * nothing that is already in the feed -- and the feed is the history, which is the part nobody
+ * wants to lose. This is the other half: entries written before the fix are made readable on the
+ * way to the screen.
+ *
+ * Three shapes, in order. A list of files reads as its names. One file reads as its name. A bare
+ * storage URL reads as the file at the end of it. Anything else is left alone but bounded, because
+ * a receipt is a chip on one line and a value that runs past it is the same complaint again.
+ *
+ * A signed URL carries an access token, so none of these branches can ever return a URL.
+ */
+export function readableValue(raw, cap = 120) {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+
+  if (value[0] === '[' || value[0] === '{') {
+    try {
+      const held = JSON.parse(value);
+      const list = Array.isArray(held) ? held : [held];
+      const names = list
+        .map((one) => (one && typeof one === 'object'
+          ? String(one.name || '').trim() || nameFromUrl(one.url)
+          : ''))
+        .filter(Boolean);
+      if (names.length) return names.join(', ');
+    } catch { /* not the JSON we know; fall through and bound it */ }
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    const name = nameFromUrl(value);
+    if (name) return name;
+  }
+
+  return value.length > cap ? `${value.slice(0, cap - 1)}\u2026` : value;
+}
+
 export function checklistDone(text) {
   const raw = String(text || '');
   const at = raw.indexOf(':');

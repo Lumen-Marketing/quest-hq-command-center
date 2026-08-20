@@ -23372,12 +23372,19 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-img-cell { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; vertical-align: middle; }
 .wb-img-shot { padding: 0; border: 0; background: none; line-height: 0; border-radius: 50%; cursor: zoom-in; flex: none; }
 .wb-img-shot:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
+/* One photo wide, always. The count sits ON the thumbnail's corner, so a row with eight
+   pictures is the same width as a row with one -- a "+7" chip parked BESIDE the photo was a
+   second circle, and in a narrow column it wrapped under the first and read as a second photo. */
+.wb-img-cell.has-more { position: relative; flex-wrap: nowrap; gap: 0; }
 .wb-img-more {
-  display: inline-grid; place-items: center; min-width: 34px; height: 34px; padding: 0 8px;
-  border: 1px solid var(--border, #e2d5bf); border-radius: 999px; background: var(--surface-2, #f6efe4);
-  color: var(--text-muted, #72695d); font-size: .78rem; font-weight: 800; cursor: pointer; flex: none;
+  position: absolute; right: -2px; bottom: -2px; z-index: 1;
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px;
+  border: 2px solid var(--surface, #fffaf0); border-radius: 999px; background: var(--text, #2c241b);
+  color: var(--surface, #fffaf0); font-size: .68rem; font-weight: 800; line-height: 1;
+  cursor: pointer; flex: none;
 }
-.wb-img-more:hover { border-color: var(--border-strong, #cdb595); color: var(--text, #2c241b); }
+.wb-img-more:hover { background: var(--orange, #e0552d); }
+.wb-img-more:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
 /* On the record the photos are the point, so they get room -- and squares, because a row of
    circles crops the corners off pictures that were chosen for what is in them. */
 .wb-img-cell.is-detail { gap: 8px; }
@@ -34382,7 +34389,13 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 }
 .wb-when-row .wb-input { min-width: 0; }
 
-.wb-pick-list {
+/* Which of this record's fields travel when a Button is pressed.
+   Named wb-carry, and it used to be wb-pick -- which the icon dropdown further down this file
+   also calls itself. Two unrelated components under one name is a cascade collision, and the
+   later rule won: this grid of checkboxes inherited "position: absolute; left: 0; right: 0" from
+   a dropdown panel, tore itself out of the dialog, and landed as a full-width white card across
+   the bottom of the window. Nothing in either component was wrong on its own. */
+.wb-carry-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 6px 12px;
@@ -34392,8 +34405,8 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   border-radius: 8px;
   background: var(--surface-2);
 }
-.wb-pick { display: flex; align-items: center; gap: 7px; font-size: 12px; min-width: 0; }
-.wb-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-carry { display: flex; align-items: center; gap: 7px; font-size: 12px; min-width: 0; }
+.wb-carry span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* What the button will actually do, spelled out before anybody presses it. */
 .wb-sub.wb-plan { line-height: 1.65; }
@@ -35207,6 +35220,37 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
   border-color: var(--accent, #e0552d);
   background: color-mix(in srgb, var(--accent, #e0552d) 6%, var(--surface));
 }
+
+/* ---- importing a field setup from another app -------------------------------------------
+   The list is the dialog, so it scrolls on its own: a twenty-field app must not push the
+   Add button off the bottom of a phone, which is the only control that ends the flow. */
+.wb-fi-bar { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; }
+.wb-fi-bar .wb-sub { margin: 0; }
+.wb-fi-list { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.wb-fi-row {
+  display: flex; align-items: center; gap: 11px; padding: 9px 12px; cursor: pointer;
+  border: 1px solid var(--border, #e2d5bf); border-radius: 11px; background: var(--surface, #fffaf0);
+}
+.wb-fi-row input { cursor: pointer; width: 16px; height: 16px; flex: none; }
+.wb-fi-row .wb-field-ic { width: 30px; height: 30px; font-size: 15px; }
+.wb-fi-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wb-fi-meta b { font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-fi-meta small { color: var(--text-muted, #72695d); font-size: .76rem; }
+/* Unticked is the state worth marking, not ticked: everything arrives ticked, so what the eye
+   needs to find is the two rows somebody has decided to leave behind. */
+.wb-fi-row:not(.is-picked) { border-style: dashed; background: var(--surface-2, #f6efe4); }
+.wb-fi-row:not(.is-picked) .wb-fi-meta { opacity: .6; }
+/* "Already here": this app has a field with that label, so it is not one of the ones this app is
+   MISSING, and it starts unticked. The row still ticks — the same name over a different TYPE is
+   a call only the person importing can make, and ticking lands a numbered field rather than
+   writing over the one already holding values. */
+.wb-fi-has {
+  margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0);
+  color: var(--text-muted, #72695d); font-size: .7rem; font-weight: 700;
+}
+.wb-fi-has.differs { border-color: var(--accent, #e0552d); color: var(--text, #2c241b); }
 
 /* A deleted FIELD in the bin, and the note a non-owner sees where Empty the bin would be. */
 .wb-trash-row.is-field { border-left: 3px solid var(--accent, #e0552d); }

@@ -11,7 +11,7 @@
 // The reading of the data is record-activity.js, which is pure. This is the drawing.
 
 import {
-  ACTIVITY_KINDS, checklistDone, commentThread, markMentions, recordFeed, recordTab,
+  ACTIVITY_KINDS, checklistDone, commentThread, markMentions, readableValue, recordFeed, recordTab,
 } from './record-activity.js';
 import { attachmentsHtml, createAttachments } from './attachments.js';
 
@@ -279,10 +279,15 @@ export function createRecordPanel(ctx) {
         <span class="wb-act-of">${list.done.length}/${list.total}</span>
       </span>`;
       }
+      // Read on the way OUT, not just on the way in. An entry written before file values were
+      // understood still holds the whole array -- names, signed URLs, tokens -- and the history is
+      // the part worth keeping, so it is made readable here rather than rewritten or thrown away.
+      const from = readableValue(change.from);
+      const to = readableValue(change.to);
       return `<span class="wb-act-change">
         <em>${h(change.label)}</em>
-        ${change.from ? `<s>${h(change.from)}</s>` : ''}
-        <b>${h(change.to) || '<span class="wb-act-cleared">cleared</span>'}</b>
+        ${from ? `<s>${h(from)}</s>` : ''}
+        <b>${h(to) || '<span class="wb-act-cleared">cleared</span>'}</b>
       </span>`;
     }).join('');
     return `<div class="wb-act-line">

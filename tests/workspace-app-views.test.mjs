@@ -173,7 +173,12 @@ test('the calendar draws even before the app has a date field', () => {
   // The notice is about having NO date field at all. Keying it on the SELECTED field was a
   // bug: with "All dates" chosen nothing is selected, so an app with three date fields was
   // told to go and add one.
-  assert.match(views, /\$\{candidates\.length \? '' : `<p class="wb-cal-setup">/, 'the notice sits above the grid');
+  // ...which is `possible`, every date field the app and its lists have, and NOT `candidates`,
+  // which is now the narrower set that a record has actually put a date in. Telling somebody
+  // with six empty date fields to go and add a seventh would be wrong twice over; that case
+  // gets its own line, asserted below.
+  assert.ok(views.includes("possible.length ? '' :"), 'the notice sits above the grid');
+  assert.ok(views.includes('possible.length && !candidates.length'), 'and "date fields, none filled in" says so instead');
   assert.match(views, /const chosen = candidates\.find\(\(c\) => c\.id === fieldId\) \|\| null;/);
   assert.match(views, /const active = chosen \? \[chosen\] : candidates;/, 'no selection means every date field');
 });
