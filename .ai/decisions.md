@@ -359,9 +359,10 @@ header in vercel.json blocked that frame in the browser, so Tasks rendered as an
 grey box in production while working in local dev (which serves none of the vercel.json
 headers). SAMEORIGIN allows the app to frame its own pages while still blocking any
 cross-origin site from framing Command Center, preserving the clickjacking guard.
-The CSP is unaffected: it stays strict and Report-Only on purpose (its `frame-ancestors`
-and `wasm` violations are being collected deliberately, per tests/security-headers.test.mjs),
-so this fix is the enforced X-Frame-Options header only. Enforced by that same test.
+The CSP now has two layers: a compatible policy is enforced and the tighter target remains
+Report-Only. The enforced layer allows same-origin Tasks framing and the eval/wasm behavior
+the current PDF and ZIP libraries require; the monitor shows what must change before those
+exceptions can be removed. `tests/security-headers.test.mjs` holds both policies in place.
 
 ## The service worker never mediates the /taskmanagement/ task frame
 
@@ -1590,6 +1591,30 @@ that is the page somebody opened in order to look at them.
 The two are told apart by `detail: true` on the context object `wbFmtVal` already receives, set
 by the record page and the record view modal. Not by a second formatter: the last time a surface
 grew its own copy of the value formatter, a User field printed the member's raw UUID.
+
+## Read-only mode is visible before a user presses a forbidden control
+
+Server and event-handler authorization remain the source of truth, but the rendered shell also
+applies one central read-only control state after each repaint. Mutable actions, form controls,
+file labels, and submit buttons associated through `form=` are disabled and marked consistently.
+This avoids presenting an action that can only fail while preserving the enforcement guard if a
+disabled attribute is removed or a call is made directly.
+
+## Terminal integration states do not keep background pollers alive
+
+RingCentral presence polling continues through transient transport errors, but it stops when the
+session has no token, the endpoint forbids access, or the integration endpoint reports that it is
+not configured. Those states require a login, permission, configuration, or deployment change;
+an interval cannot repair them and only creates repeated work. A future explicit reconnect can
+start a fresh poller through the same runtime.
+
+## Advisor hardening is forward-only and behavior-preserving
+
+Foreign-key indexes are added without changing constraints or customer rows. Service-only log
+tables keep RLS enabled with no browser policy so they fail closed; an advisor warning is safer
+than inventing a client policy for data the browser must never read. Reviewed authenticated
+security-definer routines likewise retain their grants and internal authorization instead of
+being broken solely to silence a generic advisor category.
 
 ### The extraction paid for the feature, again
 

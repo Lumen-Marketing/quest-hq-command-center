@@ -30094,6 +30094,103 @@ html[data-card-style="glass"] .message-context-rail {
   display: block;
 }
 
+/* Read-only sample workspace: the event guards still reject writes, while this
+   state makes that limit visible before somebody opens or fills a form. */
+[data-readonly-disabled="true"] {
+  cursor: not-allowed !important;
+  opacity: .5;
+}
+
+label[data-readonly-disabled="true"] {
+  filter: grayscale(.25);
+}
+
+/* Shell banners own one explicit track. Previously each banner was a raw grid
+   child, so the second/third one created implicit rows and could land beneath
+   the fixed mobile navigation. */
+.quest-app {
+  grid-template-rows: 64px auto minmax(0, 1fr);
+}
+
+.shell-banners {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  z-index: 34;
+}
+
+.deck {
+  grid-row: 1 / span 3;
+}
+
+.work-surface {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+/* Keep complete tab labels and scroll the row instead of shaving letters off
+   the right edge on narrow settings/admin screens. */
+.compact-tabbar {
+  max-width: 100%;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scroll-padding-inline: 4px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.compact-tabbar > a {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 980px) {
+  .quest-app,
+  .quest-app:is(.sidebar-collapsed),
+  .quest-app:not(.sidebar-collapsed) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .topbar {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .shell-banners {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .work-surface {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+@media (max-width: 620px) {
+  .readonly-demo-banner {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 8px 12px;
+  }
+
+  .readonly-demo-banner .btn {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .role-preview-banner {
+    grid-template-columns: 8px minmax(0, 1fr);
+    padding: 8px 12px;
+  }
+
+  .role-preview-banner .btn {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
 /* ---- Floating message dock -------------------------------------------------
    A circular button pinned bottom-right, with the launcher or an open
    conversation stacked above it. Fixed rather than absolute so it survives the

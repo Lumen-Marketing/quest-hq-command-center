@@ -72,6 +72,7 @@ import { formatCurrencyDraft, parseCurrencyAmount } from './ui/currency-input.js
 import {
   canonicalSettingsDestination, renderSettingsSurfaceLoadError, settingsSurfaceTabs,
 } from './settings/navigation-model.js';
+import { applyReadOnlyControlState } from './ui/read-only-controls.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -4064,6 +4065,7 @@ function render() {
   // whether anything actually changed happens once, when it fires.
   scheduleUiPrefsSync();
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock() + renderLayoutDiagnostic();
+  applyReadOnlyControlState(app, { readOnly: isReadOnlyDemo(), isMutableAction, isMutableFormSubmit });
   mountLayoutDiagnosticIfRequested();
   queueMicrotask(restoreSidebarScroll);
   queueMicrotask(bindTimePickerInputs);
@@ -5516,9 +5518,11 @@ function shellTemplate(route, workspace) {
           </div>
         </div>
       </header>
-      ${renderMobileStatusRail(companyId)}
-      ${renderReadOnlyDemoBanner()}
-      ${renderRolePreviewBanner(companyId)}
+      <div class="shell-banners">
+        ${renderMobileStatusRail(companyId)}
+        ${renderReadOnlyDemoBanner()}
+        ${renderRolePreviewBanner(companyId)}
+      </div>
       <div class="app-body">
         <aside class="deck quest-nav-v2" aria-label="Quest navigation">
           ${renderDeck(route)}
@@ -6115,6 +6119,28 @@ function renderEodPage(route, companyId) {
   return questLoader('Loading');
 }
 
+// Calls data, polling and markup are all behind the Calls surface. Keeping that
+// runtime lazy prevents RingCentral from consuming entry-bundle headroom for
+// companies that never install or open the plugin.
+let callsRuntimeModule = null;
+let callsRuntimePending = null;
+
+function loadCallsRuntime() {
+  if (callsRuntimeModule) return Promise.resolve(callsRuntimeModule);
+  if (!callsRuntimePending) {
+    callsRuntimePending = import('./ops/calls-runtime.js').then((mod) => {
+      callsRuntimeModule = mod.createCallsRuntime({
+        activeCompanyId, activeSession, createSupabaseClient, emptyState, h, render, state,
+      });
+      return callsRuntimeModule;
+    }).catch((error) => {
+      callsRuntimePending = null;
+      throw error;
+    });
+  }
+  return callsRuntimePending;
+}
+
 // ---- renderCallsPage ---------------------------------------------------------
 // Body lives in ./ops/calls-page.js and is fetched on first use.
 let renderCallsPageModule = null;
@@ -6123,9 +6149,14 @@ let renderCallsPagePending = null;
 function loadRenderCallsPage() {
   if (renderCallsPageModule) return Promise.resolve(renderCallsPageModule);
   if (!renderCallsPagePending) {
-    renderCallsPagePending = import('./ops/calls-page.js').then((mod) => {
+    renderCallsPagePending = Promise.all([import('./ops/calls-page.js'), loadCallsRuntime()]).then(([mod, runtime]) => {
       renderCallsPageModule = mod.createCallsPage({
-        CALLS_RANGE_OPTIONS, appHref, callsBoardMarkup, callsNotConnectedMarkup, callsRangeKey, companyPath, emptyState, ensureCallsData, h, timeAgo, state,
+        CALLS_RANGE_OPTIONS: runtime.CALLS_RANGE_OPTIONS,
+        callsBoardMarkup: runtime.callsBoardMarkup,
+        callsNotConnectedMarkup: runtime.callsNotConnectedMarkup,
+        callsRangeKey: runtime.callsRangeKey,
+        ensureCallsData: runtime.ensureCallsData,
+        appHref, companyPath, emptyState, h, timeAgo, state,
       });
       return renderCallsPageModule;
     }).catch((error) => {
@@ -7043,189 +7074,8 @@ function renderWorkspace(route) {
 
 
 // ── Calls (RingCentral) ──────────────────────────────────────────────────────
-// Two surfaces, both deliberately thin: who is on the phone right now, and how
-// many calls per person ran long enough to be a real conversation. Everything
-// else a manager might want is already in RingCentral's own Analytics page.
-//
-// Historic counts come from our own database through an aggregate RPC, so the
-// page renders even when RingCentral is unreachable. Only the live board talks
-// to RingCentral, through a server proxy that holds the credentials.
-
-const CALLS_RANGE_OPTIONS = [
-  ['today', 'Today'],
-  ['7d', 'Last 7 days'],
-  ['30d', 'Last 30 days'],
-];
-// The dashboard widget adds a "Custom" pill that reveals two date pickers.
-const CALLS_WIDGET_RANGE_OPTIONS = [...CALLS_RANGE_OPTIONS, ['custom', 'Custom']];
-const CALLS_STATUS_LABELS = {
-  on_call: 'On call',
-  ringing: 'Ringing',
-  dnd: 'Do not disturb',
-  offline: 'Offline',
-  busy: 'Busy',
-  available: 'Available',
-};
-const CALLS_PRESENCE_POLL_MS = 15000;
-let callsPresenceTimer = null;
-let callsVisibilityBound = false;
-
-function callsRangeKey(route) {
-  const requested = String(route?.params?.get?.('range') || 'today');
-  return CALLS_RANGE_OPTIONS.some(([key]) => key === requested) ? requested : 'today';
-}
-
-function callsRangeBounds(rangeKey) {
-  // The dashboard widget can pass `custom:<from>|<to>` (each an YYYY-MM-DD date
-  // from its own pair of date pickers). We cover the whole of both days so a
-  // From and To on the same date still returns that day's calls.
-  if (typeof rangeKey === 'string' && rangeKey.startsWith('custom:')) {
-    const [fromStr, toStr] = rangeKey.slice(7).split('|');
-    const from = new Date(`${fromStr}T00:00:00`);
-    const to = new Date(`${toStr}T23:59:59.999`);
-    return { from: from.toISOString(), to: to.toISOString() };
-  }
-  const to = new Date();
-  const from = new Date(to);
-  if (rangeKey === '7d') from.setDate(from.getDate() - 7);
-  else if (rangeKey === '30d') from.setDate(from.getDate() - 30);
-  else from.setHours(0, 0, 0, 0);
-  return { from: from.toISOString(), to: to.toISOString() };
-}
-
-function callsDurationLabel(sinceIso) {
-  const started = new Date(sinceIso).getTime();
-  if (!Number.isFinite(started)) return '—';
-  const seconds = Math.max(0, Math.floor((Date.now() - started) / 1000));
-  const pad = (value) => String(value).padStart(2, '0');
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  return hours ? `${hours}:${pad(minutes)}:${pad(seconds % 60)}` : `${minutes}:${pad(seconds % 60)}`;
-}
-
-async function loadCallsStats(companyId, rangeKey) {
-  const key = `${companyId}|${rangeKey}`;
-  const client = createSupabaseClient();
-  if (!client) { state.callsStats = { key, rows: [], sync: null, unavailable: true }; return; }
-
-  const bounds = callsRangeBounds(rangeKey);
-  const [stats, sync] = await Promise.all([
-    client.rpc('ringcentral_conversation_stats', { p_company_id: companyId, p_from: bounds.from, p_to: bounds.to }),
-    client.from('ringcentral_sync_state').select('last_sync_at,consecutive_failures').eq('company_id', companyId).maybeSingle(),
-  ]);
-
-  // An erroring RPC means the migration has not been applied. That is a very
-  // different thing from "nobody made any calls", and saying so saves someone
-  // hunting for missing data that was never there.
-  state.callsStats = {
-    key,
-    rows: stats.error ? [] : (stats.data || []),
-    sync: sync.error ? null : sync.data,
-    unavailable: Boolean(stats.error),
-  };
-  if (callsSurfaceVisible()) render();
-}
-
-async function loadCallsPresence(companyId) {
-  const token = activeSession()?.access_token;
-  if (!token) return;
-  const idle = { agents: [], error: '', forbidden: false, notConnected: false };
-  try {
-    const response = await fetch(`/api/ringcentral-presence?company_id=${encodeURIComponent(companyId)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const isJson = String(response.headers.get('content-type') || '').includes('application/json');
-
-    if (response.status === 403) {
-      // A member, not an admin. The board is a supervision surface, so hide it
-      // rather than showing them a single row about themselves.
-      state.callsPresence = { ...idle, forbidden: true };
-    } else if (response.status === 503 || !isJson) {
-      // 503 is the endpoint saying it has no credentials. A non-JSON body means
-      // the serverless function is not running at all — which is exactly what a
-      // plain `vite dev` server does, since it serves index.html for /api/*.
-      state.callsPresence = { ...idle, notConnected: true };
-    } else if (!response.ok) {
-      state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
-    } else {
-      const payload = await response.json();
-      state.callsPresence = { ...idle, agents: payload.agents || [] };
-    }
-  } catch {
-    state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
-  }
-  if (callsSurfaceVisible()) render();
-}
-
-// The Calls data feeds two surfaces: the module and a dashboard widget. Both
-// need loads and polling, so visibility is a question about either of them.
-function callsSurfaceVisible() {
-  return state.route?.section === 'calls' || state.route?.section === 'dashboard';
-}
-
-function ensureCallsData(companyId, rangeKey = 'today') {
-  const key = `${companyId}|${rangeKey}`;
-  if (state.callsStats.key !== key) queueMicrotask(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
-  if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
-  // Presence is fetched by the poller (an immediate first load plus every 15s),
-  // never here. This runs on every render, and loadCallsPresence calls render()
-  // on completion — fetching here created a render->fetch->render loop that hit
-  // the endpoint thousands of times and got the caller rate-limited.
-  ensureCallsPresencePolling(companyId);
-}
-
-function callsNotConnectedMarkup() {
-  return emptyState(`RingCentral isn't connected yet. Once the migration is applied and the RingCentral credentials are set, live status and conversation counts appear here.`);
-}
-
-function stopCallsPresencePolling() {
-  if (callsPresenceTimer) clearInterval(callsPresenceTimer);
-  callsPresenceTimer = null;
-}
-
-function ensureCallsPresencePolling(companyId) {
-  if (callsPresenceTimer) return;
-  // Set the timer handle before the first fetch resolves. loadCallsPresence
-  // calls render() on completion, which re-enters ensureCallsPresencePolling;
-  // with the handle already set that re-entry returns here instead of starting
-  // a second fetch — this is what keeps the one-shot load from becoming a loop.
-  callsPresenceTimer = setInterval(() => {
-    // The router replaces the whole view, so there is no unmount hook to hang
-    // this off; the timer retires itself once the user is somewhere else.
-    if (!callsSurfaceVisible()) { stopCallsPresencePolling(); return; }
-    if (document.hidden || state.callsPresence.forbidden || state.callsPresence.notConnected) return;
-    loadCallsPresence(companyId).catch(() => {});
-  }, CALLS_PRESENCE_POLL_MS);
-  // First load now, so the board is not blank for the first 15 seconds.
-  loadCallsPresence(companyId).catch(() => {});
-  if (!callsVisibilityBound) {
-    callsVisibilityBound = true;
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden || !callsSurfaceVisible() || !callsPresenceTimer) return;
-      if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
-      loadCallsPresence(activeCompanyId()).catch(() => {});
-    });
-  }
-}
-
-function callsBoardMarkup() {
-  const { agents, error, notConnected } = state.callsPresence;
-  if (notConnected) return '<p class="calls-empty">Not connected to RingCentral yet.</p>';
-  if (error) return `<p class="calls-empty">${h(error)}</p>`;
-  if (!agents.length) return '<p class="calls-empty">Loading live status…</p>';
-
-  const rank = { on_call: 0, ringing: 1, busy: 2, dnd: 3, available: 4, offline: 5 };
-  const ordered = [...agents].sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
-
-  return `<table class="calls-board"><tbody>${ordered.map((agent) => `
-    <tr>
-      <td class="calls-board-name">${h(agent.name || 'Unknown')}</td>
-      <td class="calls-board-ext">${h(agent.extension_number || '')}</td>
-      <td><span class="calls-status-dot calls-status-${h(agent.status)}"></span>${h(CALLS_STATUS_LABELS[agent.status] || agent.status)}</td>
-      <td class="calls-board-since">${h(callsDurationLabel(agent.since))}</td>
-    </tr>`).join('')}</tbody></table>`;
-}
-
+// The runtime lives in ./ops/calls-runtime.js and is loaded only when the Calls
+// page or dashboard widget is opened.
 // Dashboard widget. Same two ideas as the module, compressed: who is on the
 // phone, and today's conversation counts. Links through for the full view.
 // ---- Calls widget ----------------------------------------------------------------
@@ -7236,10 +7086,14 @@ let callsWidgetPending = null;
 function loadCallsWidget() {
   if (callsWidgetModule) return Promise.resolve(callsWidgetModule);
   if (!callsWidgetPending) {
-    callsWidgetPending = import('./ops/calls-widget.js').then((mod) => {
+    callsWidgetPending = Promise.all([import('./ops/calls-widget.js'), loadCallsRuntime()]).then(([mod, runtime]) => {
       callsWidgetModule = mod.createCallsWidget({
-        CALLS_WIDGET_RANGE_OPTIONS, appHref, callsBoardMarkup, callsNotConnectedMarkup, can, companyPath,
-        dashboardMetricTile, ensureCallsData, ensureCallsPresencePolling, formatDate, h, state,
+        CALLS_WIDGET_RANGE_OPTIONS: runtime.CALLS_WIDGET_RANGE_OPTIONS,
+        callsBoardMarkup: runtime.callsBoardMarkup,
+        callsNotConnectedMarkup: runtime.callsNotConnectedMarkup,
+        ensureCallsData: runtime.ensureCallsData,
+        ensureCallsPresencePolling: runtime.ensureCallsPresencePolling,
+        appHref, can, companyPath, dashboardMetricTile, formatDate, h, state,
       });
       return callsWidgetModule;
     }).catch((error) => {
@@ -27856,7 +27710,7 @@ function handleAction(event, node) {
   }
   if (action === 'calls-widget-range') {
     event.preventDefault();
-    state.callsWidgetRange = CALLS_WIDGET_RANGE_OPTIONS.some(([id]) => id === node.dataset.range) ? node.dataset.range : '7d';
+    state.callsWidgetRange = callsRuntimeModule?.isWidgetRange(node.dataset.range) ? node.dataset.range : '7d';
     render();
     return;
   }
@@ -38802,7 +38656,7 @@ function wbPendingContactNames() {
     .map((picker) => String(picker.querySelector('[data-wb-cc-name]')?.value || '').trim())
     .filter(Boolean)
     .sort()
-    .join(' ');
+    .join('\0');
 }
 
 // The scan for unlinked names, and the creating, both live in ./company-contacts/page.js.

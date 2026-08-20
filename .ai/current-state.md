@@ -2,6 +2,15 @@
 
 Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-08-21 release hardening
+
+- Read-only sample sessions now receive visibly disabled mutation controls after every shell render, including controls submitted through an external `form` attribute. Existing click and submit authorization guards remain the enforcement backstop.
+- The RingCentral calls runtime is lazy-loaded outside the main entry bundle. Missing sessions and unavailable or forbidden integrations now render a terminal status and release their polling interval instead of leaving the board on an endless loading state.
+- Status, read-only, and role-preview notices occupy their own shell row. On narrow screens the notice row and settings tabs scroll or wrap independently rather than covering the active workspace.
+- Vercel now sends a compatible enforced Content Security Policy while retaining the stricter policy in report-only mode. Same-origin Tasks framing and the current PDF/ZIP tooling remain supported.
+- Production migration `20260820201554_harden_setup_function_and_foreign_keys` pins the setup-role helper's search path and adds indexes for all 21 foreign keys identified by the performance advisor. Post-migration catalog checks found the helper setting and every expected index, and company/workspace record counts were unchanged.
+- The remaining Supabase advisor notices are documented exceptions or owner-controlled settings: service-only log tables intentionally have RLS with no browser policy, authenticated security-definer routines retain their reviewed server-side authorization, new indexes remain "unused" until real traffic reaches them, and leaked-password protection must be enabled in the Supabase dashboard.
+
 ## Production
 
 - Product: Questbase, formerly Quest HQ Command Center.

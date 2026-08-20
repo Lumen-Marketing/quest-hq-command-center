@@ -202,6 +202,7 @@ const FACTORY_MODULES = [
   ['src/team/access-row.js', 'createAccessRow'],
   ['src/team/workload-page.js', 'createTeamWorkloadPage'],
   ['src/ops/eod-page.js', 'createEodPage'],
+  ['src/ops/calls-runtime.js', 'createCallsRuntime'],
   ['src/ops/calls-page.js', 'createCallsPage'],
   ['src/workspace/app-views.js', 'createAppViews'],
   ['src/ops/workday-page.js', 'createWorkdayPage'],

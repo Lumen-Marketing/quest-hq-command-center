@@ -79,6 +79,7 @@ Supabase's 2026 API hardening means new tables must be deliberately exposed and 
 - Production Guardian runs the production smoke check every six hours and creates/reopens an incident issue on failure.
 - The daily recycle-bin purge endpoint is configured in vercel.json; Supabase also catalogs scheduled database work.
 - After deployment, inspect Vercel build/runtime errors and Supabase project health plus security/performance advisors when the change touches those layers.
+- After changing CSP or framing headers, verify the same-origin Tasks frame, PDF/document tooling, authentication, and one narrow-screen signed-in route in the deployed browser before declaring the release healthy.
 
 ## Recovery and rollback
 
