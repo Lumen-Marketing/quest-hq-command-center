@@ -5,7 +5,8 @@ import test from 'node:test';
 // The Recycle Bin tab's markup is fetched on demand now. It is still one surface, so both
 // files are read as one and every assertion below keeps its original meaning.
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/settings/recycle-bin-panel.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/settings/recycle-bin-panel.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/settings-surfaces.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migrations = readdirSync(new URL('../supabase/migrations/', import.meta.url));
 const recycleMigrationName = migrations.find((name) => /recycle_bin_safe_delete/.test(name));

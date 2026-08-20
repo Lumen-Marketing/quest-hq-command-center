@@ -17,10 +17,10 @@ export const PEOPLE_ACCESS_TABS = Object.freeze([
 ]);
 
 export const ADMIN_TABS = Object.freeze([
-  { id: 'billing', label: 'Billing' },
-  { id: 'data-recovery', label: 'Data & Recovery' },
-  { id: 'audit-history', label: 'Audit History' },
-  { id: 'diagnostics', label: 'Diagnostics' },
+  { id: 'billing', label: 'Billing', permissions: ['billing.view'] },
+  { id: 'data-recovery', label: 'Data & Recovery', permissions: ['settings.manage'] },
+  { id: 'audit-history', label: 'Audit History', permissions: ['users.manage', 'settings.manage'] },
+  { id: 'diagnostics', label: 'Diagnostics', permissions: ['settings.manage'] },
   { id: 'platform', label: 'Platform', developerOnly: true },
 ]);
 
@@ -43,10 +43,14 @@ export function canonicalSettingsDestination(tab = 'company') {
     || LEGACY_SETTINGS_DESTINATIONS.company;
 }
 
-export function settingsSurfaceTabs(surface, { isDeveloper = false } = {}) {
+export function settingsSurfaceTabs(surface, { isDeveloper = false, can = () => false } = {}) {
   if (surface === 'setup') return SETUP_TABS;
   if (surface === 'people') return PEOPLE_ACCESS_TABS;
-  if (surface === 'admin') return ADMIN_TABS.filter((tab) => !tab.developerOnly || isDeveloper);
+  if (surface === 'admin') {
+    if (isDeveloper) return ADMIN_TABS;
+    return ADMIN_TABS.filter((tab) => !tab.developerOnly
+      && (tab.permissions || []).some((permission) => can(permission)));
+  }
   return [];
 }
 
@@ -54,4 +58,18 @@ export function normalizeSettingsSurfaceTab(surface, requestedTab, capabilities 
   const tabs = settingsSurfaceTabs(surface, capabilities);
   const requested = String(requestedTab || '');
   return tabs.some((tab) => tab.id === requested) ? requested : (tabs[0]?.id || '');
+}
+
+export function renderSettingsSurfaceLoadError({ h, message = '' }) {
+  return `
+    <article class="panel span-3 settings-load-error" role="alert">
+      <div class="section-head">
+        <div>
+          <h2>Settings could not load</h2>
+          <p>${h(message || 'The settings files were unavailable. Check your connection and try again.')}</p>
+        </div>
+        <button class="btn btn-primary" type="button" data-action="retry-settings-surfaces">Try again</button>
+      </div>
+    </article>
+  `;
 }

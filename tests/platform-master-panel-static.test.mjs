@@ -5,7 +5,9 @@ import test from 'node:test';
 // The platform master panel is lazily loaded from its own module, so the shell and
 // that module are both part of 'the source' for these assertions.
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/platform/master-panel.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/platform/master-panel.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/navigation-model.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/settings-surfaces.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202606251100_platform_master_panel.sql', import.meta.url), 'utf8');
 
@@ -20,7 +22,8 @@ test('platform master migration exposes admin-only company and member RPCs', () 
 });
 
 test('platform master panel is gated to platform admins and lists companies with members', () => {
-  assert.match(source, /ADMIN_TABS\.filter\(\(item\) => !item\.developerOnly \|\| isQuestDeveloper\(\)\)/);
+  assert.match(source, /if \(isDeveloper\) return ADMIN_TABS/);
+  assert.match(source, /developerOnly: true/);
   assert.match(source, /tab === 'platform' && isQuestDeveloper\(\) \? renderPlatformMasterPanel\(companyId\)/);
   assert.match(source, /function renderPlatformMasterPanel\(currentCompanyId\)/);
   assert.match(source, /function renderPlatformCompanyRow\(company, currentCompanyId\)/);

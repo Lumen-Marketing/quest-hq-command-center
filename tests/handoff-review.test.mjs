@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { HANDOFF_CHECKS, findHandoffIssues } from '../src/crm/handoff-review.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/settings-surfaces.js', import.meta.url), 'utf8');
 
 const FIXTURE = {
   contacts: [{ id: 'c1', name: 'Jane Smith' }, { id: 'c2', name: 'Bob Jones' }],

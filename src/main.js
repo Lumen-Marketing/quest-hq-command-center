@@ -36,7 +36,7 @@ import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequi
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh, shouldRenderAfterRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
-import { COMPANY_STATUS_FILTERS, INACTIVE_COMPANY_STATUSES, filterCompanyRows, paginate } from './platform-directory.js';
+import { INACTIVE_COMPANY_STATUSES, filterCompanyRows, paginate } from './platform-directory.js';
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
@@ -70,7 +70,7 @@ import {
 } from './team/permission-coverage.js';
 import { formatCurrencyDraft, parseCurrencyAmount } from './ui/currency-input.js';
 import {
-  ADMIN_TABS, SETUP_TABS, canonicalSettingsDestination, normalizeSettingsSurfaceTab,
+  canonicalSettingsDestination, renderSettingsSurfaceLoadError, settingsSurfaceTabs,
 } from './settings/navigation-model.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
@@ -6792,7 +6792,15 @@ function canViewModule(module, companyId = activeCompanyId()) {
   if (module.status === 'planned') return false;
   if (!isModuleInstalled(module.id, companyId)) return false;
   if (!subscriptionAllowsCompany(companyId) && !['settings', 'setup', 'admin', 'users'].includes(module.id)) return false;
+  if (module.id === 'admin') return canViewAdminSurface(companyId);
   return can(module.permission || `${module.id}.view`, companyId);
+}
+
+function canViewAdminSurface(companyId = activeCompanyId()) {
+  return settingsSurfaceTabs('admin', {
+    isDeveloper: isQuestDeveloper(),
+    can: (permission) => can(permission, companyId),
+  }).length > 0;
 }
 
 function moduleBadgeCount(moduleId, companyId = activeCompanyId()) {
@@ -6902,7 +6910,6 @@ function renderPlatformMasterPanel(companyId) {
             availableWorkspacePlugins,
             companyColor,
             companyPluginStatus,
-            companyDirectoryEmptyState,
             companyDirectoryFilters,
             companyName,
             emptyState,
@@ -6915,9 +6922,7 @@ function renderPlatformMasterPanel(companyId) {
             platformCompanyRows,
             platformMembersForCompany,
             renderAvatar,
-            renderCompanyDirectoryPager,
             renderPlatformBackupCopyRow,
-            renderCompanyDirectoryToolbar,
             shortUserId,
             state,
             subscriptionLabelForStatus,
@@ -7002,7 +7007,8 @@ function renderWorkspace(route) {
   if (moduleMeta?.status !== 'planned') {
     if (!subscriptionAllowsCompany(companyId) && !['settings', 'setup', 'admin', 'users'].includes(route.section)) return renderSubscriptionBlockedPage(companyId);
     if (!isModuleInstalled(route.section, companyId)) return renderPluginBlockedPage(companyId, moduleMeta);
-    if (moduleMeta?.permission && !can(moduleMeta.permission, companyId)) return renderPermissionBlockedPage(companyId, moduleMeta.permission);
+    if (route.section === 'admin' && !canViewAdminSurface(companyId)) return renderPermissionBlockedPage(companyId, 'settings.manage');
+    if (route.section !== 'admin' && moduleMeta?.permission && !can(moduleMeta.permission, companyId)) return renderPermissionBlockedPage(companyId, moduleMeta.permission);
   }
   if (route.section === 'workday') return renderWorkdayPage(companyId);
   if (route.section === 'jobs') return renderJobsPage(route, companyId);
@@ -21302,147 +21308,32 @@ function renderSettingsPage(route, companyId) {
   `);
 }
 
-function settingsSurfaceTabs(section, tabs, activeTab, companyId) {
-  return compactTabs(`${navigationLabel(section, titleCase(section))} sections`, tabs.map(({ id, label }) => [
-    companyPath(section, { tab: id }, companyId), label, activeTab === id,
-  ]));
-}
-
-function renderSetupPipelineSettings(companyId) {
-  const canManageCrm = can('crm.manage', companyId);
-  const canManageJobs = can('jobs.manage', companyId);
-  return `
-    <article class="panel span-3 setup-pipeline-surface">
-      <div class="section-head">
-        <div><h2>Pipelines</h2><p>Packaged Quest CRM stages and custom Workspace Builder pipelines are managed from their real records.</p></div>
-        <a class="btn btn-primary" href="${appHref(companyPath('workspaces', {}, companyId))}" data-router><i class="ti ti-layout-grid-add"></i>Open Workspace Builder</a>
-      </div>
-      <div class="setup-action-grid">
-        <button class="btn" type="button" data-action="open-stage-manager" data-module="contacts" ${canManageCrm ? '' : 'disabled'}><i class="ti ti-address-book"></i>Contact stages</button>
-        <button class="btn" type="button" data-action="open-stage-manager" data-module="deals" ${canManageCrm ? '' : 'disabled'}><i class="ti ti-briefcase"></i>Quote stages</button>
-        <button class="btn" type="button" data-action="open-stage-manager" data-module="jobs" ${canManageJobs ? '' : 'disabled'}><i class="ti ti-hammer"></i>Job stages</button>
-      </div>
-      <p class="form-note">Quest CRM keeps its ready-made lifecycle. Regular CRM and Workspace Builder apps stay customizable per workspace.</p>
-    </article>
-  `;
-}
-
-function renderSetupIntegrations(companyId) {
-  const callsEnabled = isPluginInstalled(companyId, 'calls');
-  const messagesEnabled = isPluginInstalled(companyId, 'messages');
-  return `
-    <article class="panel span-2">
-      <div class="section-head"><div><h2>Integrations</h2><p>Connection entry points and their current module availability. Secrets remain on the server.</p></div></div>
-      ${contractRows([
-        ['Cloud data', state.sync.mode === 'live' ? 'Connected' : state.sync.label],
-        ['RingCentral calls', callsEnabled ? 'Module enabled — verify in Calls' : 'Module not enabled'],
-        ['Company messaging', messagesEnabled ? 'Module enabled' : 'Module not enabled'],
-        ['SMS readiness', 'Checked on each contact before sending'],
-      ])}
-    </article>
-    <article class="panel">
-      <div class="section-head"><div><h2>Manage connection surfaces</h2><p>Enable the workspace module first, then finish its connection from that module.</p></div></div>
-      <div class="form-actions">
-        <a class="btn btn-primary" href="${appHref(companyPath('setup', { tab: 'modules' }, companyId))}" data-router>Open Modules</a>
-        ${callsEnabled ? `<a class="btn" href="${appHref(companyPath('calls', {}, companyId))}" data-router>Open Calls</a>` : ''}
-      </div>
-    </article>
-  `;
-}
-
-function renderSetupLaunchCheck(companyId) {
-  const workspace = activeWorkspace();
-  const installed = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length;
-  const checks = [
-    ['Company profile', Boolean(companyName(companyId)), companyName(companyId) || 'Company name required'],
-    ['Active workspace', Boolean(workspace), workspace?.name || 'Create or select a workspace'],
-    ['Live data connection', state.sync.mode === 'live', state.sync.mode === 'live' ? 'Connected' : state.sync.label],
-    ['Workspace modules', installed > 0, `${installed} enabled`],
-    ['People access', companyAccessUsers(companyId).some((user) => user.status === 'active'), `${companyAccessUsers(companyId).filter((user) => user.status === 'active').length} active`],
-  ];
-  const ready = checks.filter(([, passed]) => passed).length;
-  return `
-    <article class="panel span-3 setup-launch-check">
-      <div class="section-head"><div><h2>Launch Check</h2><p>${ready} of ${checks.length} workspace readiness checks are passing.</p></div></div>
-      <div class="launch-check-list">
-        ${checks.map(([label, passed, detail]) => `<div class="launch-check-row ${passed ? 'passed' : 'attention'}"><i class="ti ${passed ? 'ti-circle-check-filled' : 'ti-alert-circle'}"></i><span><strong>${h(label)}</strong><small>${h(detail)}</small></span><b>${passed ? 'Ready' : 'Check'}</b></div>`).join('')}
-      </div>
-    </article>
-  `;
-}
-
-function renderSetupPageLegacyUnused(route, companyId) {
-  const tab = normalizeSettingsSurfaceTab('setup', route.params.get('tab'));
-  return `
-    ${workspaceHeader('Setup', 'Configure company identity, workspaces, modules, pipelines, and launch readiness.', '')}
-    ${settingsSurfaceTabs('setup', SETUP_TABS, tab, companyId)}
-    <section class="dashboard-grid compact-settings-grid settings-surface settings-surface-setup">
-      ${tab === 'company-profile' ? renderWorkspaceSettingsSurface('renderCompanyProfileSettings', companyId) : ''}
-      ${tab === 'company-brand' ? `
-        <article class="panel span-3">
-          <div class="section-head"><div><h2>Company Brand</h2><p>Preview with your personal appearance, then save it as the default for members who have not chosen their own.</p></div></div>
-          <div class="theme-toggle-row">${renderAppearanceControls()}</div>
-        </article>
-      ` : ''}
-      ${tab === 'workspaces' ? `${renderWorkspaceSettingsSurface('renderWorkspaceDirectorySettings', companyId)}${renderCompanySetupSettings(companyId, route)}` : ''}
-      ${tab === 'modules' ? renderPluginsSettings(companyId) : ''}
-      ${tab === 'pipelines' ? renderSetupPipelineSettings(companyId) : ''}
-      ${tab === 'handoffs' ? (can('crm.manage', companyId) ? renderHandoffReviewPanel(companyId) : `
-        <article class="panel span-3"><div class="section-head"><div><h2>Handoffs</h2><p>Your role can view company setup but cannot review or change CRM handoffs.</p></div></div>
-          ${contractRows([['Required permission', 'crm.manage'], ['Your role', roleForCompany(companyId)]])}
-        </article>
-      `) : ''}
-      ${tab === 'integrations' ? renderSetupIntegrations(companyId) : ''}
-      ${tab === 'launch-check' ? renderSetupLaunchCheck(companyId) : ''}
-    </section>
-  `;
-}
-
-function renderAdminAuditHistory(companyId) {
-  const events = companyAuditEvents(companyId).slice(0, 50);
-  return `
-    <article class="panel span-3">
-      <div class="section-head"><div><h2>Audit History</h2><p>Recent access, role, membership, and company administration changes.</p></div></div>
-      <div class="access-audit-list">${events.map(renderAuditEventRow).join('') || emptyState('No audit events yet.')}</div>
-    </article>
-  `;
-}
-
-function renderAdminPageLegacyUnused(route, companyId) {
-  const tabs = ADMIN_TABS.filter((item) => !item.developerOnly || isQuestDeveloper());
-  const tab = normalizeSettingsSurfaceTab('admin', route.params.get('tab'), { isDeveloper: isQuestDeveloper() });
-  return `
-    ${workspaceHeader('Admin', 'Billing, recovery, audit history, and technical diagnostics.', '')}
-    ${settingsSurfaceTabs('admin', tabs, tab, companyId)}
-    <section class="dashboard-grid compact-settings-grid settings-surface settings-surface-admin">
-      ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
-      ${tab === 'data-recovery' ? `<div class="settings-recovery-stack span-3">${renderBackupsSettings(companyId)}${renderRecycleBinSettings(companyId)}</div>` : ''}
-      ${tab === 'audit-history' ? renderAdminAuditHistory(companyId) : ''}
-      ${tab === 'diagnostics' ? renderWorkspaceSettingsSurface('renderDiagnosticsSettings', companyId) : ''}
-      ${tab === 'platform' && isQuestDeveloper() ? renderPlatformMasterPanel(companyId) : ''}
-    </section>
-  `;
-}
-
 let settingsSurfacesModule = null;
 let settingsSurfacesPending = null;
+let settingsSurfacesLoadError = null;
 
 function loadSettingsSurfaces() {
   if (settingsSurfacesModule) return Promise.resolve(settingsSurfacesModule);
   if (!settingsSurfacesPending) {
     settingsSurfacesPending = import('./settings/settings-surfaces.js').then((mod) => {
+      settingsSurfacesLoadError = null;
       settingsSurfacesModule = mod.createSettingsSurfaces({
         activeWorkspace, appHref, availableWorkspacePlugins, can, companyAccessUsers,
-        companyAuditEvents, companyName, companyPath, compactTabs, contractRows, emptyState, h,
-        isPluginInstalled, isQuestDeveloper, navigationLabel, renderAdminAuditEventRow: renderAuditEventRow,
-        renderAppearanceControls, renderBackupsSettings, renderBillingSettings,
+        billingMode: CONFIG.billingMode, companyAuditEvents, companyName, companyPath,
+        companyDirectoryFilters, companySubscription, compactTabs,
+        contractRows, emptyState, filterCompanyRows, formatDate, h, isPluginInstalled,
+        isQuestDeveloper, navigationLabel, paginate, profileById, renderAvatar,
+        questAuthEnabled: CONFIG.questAuthEnabled, renderAppearanceControls, renderBackupsSettings,
         renderCompanySetupSettings, renderHandoffReviewPanel, renderPlatformMasterPanel,
         renderPluginsSettings, renderRecycleBinSettings, renderWorkspaceSettingsSurface,
-        roleForCompany, state, titleCase, workspaceHeader,
+        roleForCompany, shortUserId, state, subscriptionAllowsCompany, subscriptionLabel,
+        subscriptionLabelForStatus, subscriptionNeedsReview, titleCase, workspaceHeader,
+        workspaceReviewRows,
       });
       return settingsSurfacesModule;
     }).catch((error) => {
       settingsSurfacesPending = null;
+      settingsSurfacesLoadError = error;
       throw error;
     });
   }
@@ -21451,6 +21342,12 @@ function loadSettingsSurfaces() {
 
 function renderSettingsSurface(method, route, companyId) {
   if (settingsSurfacesModule?.[method]) return settingsSurfacesModule[method](route, companyId);
+  if (settingsSurfacesLoadError) {
+    return renderSettingsSurfaceLoadError({
+      h,
+      message: settingsSurfacesLoadError?.message || 'The settings files were unavailable.',
+    });
+  }
   loadSettingsSurfaces().then(() => render()).catch((error) => console.error(`${method} failed to load`, error));
   return questLoader('Loading');
 }
@@ -21475,7 +21372,8 @@ function loadBackupsPanel() {
     backupsPanelPending = import('./settings/backups-panel.js').then((mod) => {
       backupsPanelModule = mod.createBackupsPanel({
         BACKUP_INTERVAL_OPTIONS, backupSettingsForCompany, contractRows, emptyState, formatDateTime,
-        h, renderWorkspaceBackupRow, state, workspaceBackupsForCompany,
+        canManageBackups: (companyId) => can('settings.manage', companyId), formatBytes, h,
+        state, titleCase, workspaceBackupsForCompany,
       });
       return backupsPanelModule;
     }).catch((error) => {
@@ -21492,27 +21390,6 @@ function renderBackupsSettings(companyId) {
   return questLoader('Loading');
 }
 
-
-function renderWorkspaceBackupRow(backup) {
-  const statusClass = backup.status === 'active' ? 'active' : 'muted';
-  return `
-    <article class="backup-row ${backup.status === 'deleted' ? 'deleted' : ''}">
-      <div>
-        <strong>${h(backup.label || 'Workspace backup')}</strong>
-        <small>${h(titleCase(backup.kind))} / ${formatDateTime(backup.created_at)} / ${formatBytes(backup.size_bytes)}</small>
-      </div>
-      <div class="backup-record-counts">
-        ${Object.entries(backup.record_counts || {}).slice(0, 5).map(([key, value]) => `<span>${h(titleCase(key))}: ${h(String(value))}</span>`).join('')}
-      </div>
-      <b class="status-pill ${statusClass}">${h(titleCase(backup.status))}</b>
-      <div class="backup-actions">
-        <button class="btn" type="button" data-action="download-workspace-backup" data-backup-id="${h(backup.id)}"><i class="ti ti-download"></i>Download</button>
-        <button class="btn" type="button" data-action="open-restore-backup" data-backup-id="${h(backup.id)}" ${backup.status !== 'active' ? 'disabled' : ''}><i class="ti ti-restore"></i>Restore</button>
-        <button class="btn danger" type="button" data-action="mark-workspace-backup-deleted" data-backup-id="${h(backup.id)}"><i class="ti ti-trash"></i>Mark deleted</button>
-      </div>
-    </article>
-  `;
-}
 
 // ---- Settings > Recycle Bin ------------------------------------------------------
 // Body lives in ./settings/recycle-bin-panel.js and is fetched on first use.
@@ -22280,78 +22157,6 @@ function pluginStatusLabel(status) {
   return 'Available';
 }
 
-function renderBillingSettings(companyId) {
-  const subscription = companySubscription(companyId);
-  const pendingReview = subscriptionNeedsReview(companyId);
-  const manualBilling = CONFIG.billingMode === 'manual';
-  const buttonLabel = manualBilling ? 'Manual approval' : pendingReview ? 'Billing pending' : 'Start subscription';
-  return `
-    <article class="panel">
-      <div class="section-head">
-        <div><h2>${pendingReview ? 'Workspace awaiting approval' : 'Subscription'}</h2><p>${manualBilling ? 'Manual approval is active for launch week. Lumen activates workspaces after review.' : pendingReview ? 'Quest needs to approve billing/access before live company data opens.' : '$300/month company workspace billing gate.'}</p></div>
-        <button class="btn btn-primary" type="button" data-action="start-checkout" ${pendingReview || manualBilling ? 'disabled' : ''}><i class="ti ti-credit-card"></i>${buttonLabel}</button>
-      </div>
-      ${contractRows([
-        ['Plan', '$300/month company workspace'],
-        ['Status', subscriptionLabel(companyId)],
-        ['Billing mode', manualBilling ? 'Manual approval' : 'Stripe checkout'],
-        ['Stripe customer', subscription?.stripe_customer_id || 'Not connected'],
-        ['Approval', pendingReview || manualBilling ? 'Waiting for Lumen review' : 'Ready'],
-        ['Renewal / trial', subscription?.current_period_end || subscription?.trial_ends_at ? formatDate(subscription.current_period_end || subscription.trial_ends_at) : 'Pending'],
-      ])}
-    </article>
-    <article class="panel">
-      <div class="section-head"><div><h2>Billing gate</h2><p>Paid modules open only after approval or an active billing state.</p></div></div>
-      ${contractRows([
-        ['Workspace access', subscriptionAllowsCompany(companyId) ? 'Allowed' : 'Suspended'],
-        ['Finance/files privacy', CONFIG.questAuthEnabled ? 'Requires Auth + RLS' : 'Demo only'],
-        ['Seat billing', 'Tracked later; not charged in v1'],
-      ])}
-    </article>
-    ${isQuestDeveloper() ? renderWorkspaceApprovalConsole(companyId) : ''}
-  `;
-}
-
-function renderWorkspaceApprovalConsole(companyId) {
-  const reviews = workspaceReviewRows();
-  const pending = reviews.filter((review) => review.status === 'pending_review').length;
-  const filters = companyDirectoryFilters('review');
-  const matched = filterCompanyRows(reviews, filters);
-  const view = paginate(matched, filters.page);
-  return `
-    <article class="panel span-3">
-      <div class="section-head">
-        <div><h2>Quest approval console</h2><p>${pending} workspace${pending === 1 ? '' : 's'} waiting for manual activation.</p></div>
-      </div>
-      ${renderCompanyDirectoryToolbar('review', filters, view)}
-      <div class="approval-console-list">
-        ${view.rows.map((review) => renderWorkspaceReviewRow(review, companyId)).join('') || companyDirectoryEmptyState(filters)}
-      </div>
-      ${renderCompanyDirectoryPager('review', view)}
-    </article>
-  `;
-}
-
-function renderWorkspaceReviewRow(review, currentCompanyId) {
-  const active = ['active', 'trialing', 'past_due', 'grace'].includes(review.status);
-  const isCurrent = review.company_id === currentCompanyId;
-  return `
-    <article class="workspace-review-row ${review.status === 'pending_review' ? 'pending' : ''}">
-      <span>
-        <strong>${h(review.company_name || companyName(review.company_id))}${isCurrent ? ' / current' : ''}</strong>
-        <small>${h(review.company_id)} / ${h(review.owner_email || 'No owner email')} / ${formatDate(review.created_at)}</small>
-      </span>
-      <b class="status-pill ${active ? 'active' : review.status === 'pending_review' ? 'pending' : 'muted'}">${h(subscriptionLabelForStatus(review.status, review))}</b>
-      <div class="workspace-review-actions">
-        <button class="btn btn-primary" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="active" ${active ? 'disabled' : ''}>Approve</button>
-        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="pending_review" ${review.status === 'pending_review' ? 'disabled' : ''}>Pending</button>
-        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="suspended" ${review.status === 'suspended' ? 'disabled' : ''}>Suspend</button>
-        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="rejected" ${review.status === 'rejected' ? 'disabled' : ''}>Reject</button>
-      </div>
-    </article>
-  `;
-}
-
 // Search/filter/paging state for the two platform-owner company lists. 'platform'
 // is the master panel, 'review' the Quest approval console.
 function companyDirectoryFilters(scope) {
@@ -22364,46 +22169,6 @@ function setCompanyDirectoryFilters(scope, patch = {}) {
   state[key] = { ...companyDirectoryFilters(scope), ...patch };
   return state[key];
 }
-
-function renderCompanyDirectoryToolbar(scope, filters, view) {
-  return `
-    <div class="company-directory-toolbar">
-      <label class="company-directory-search">
-        <i class="ti ti-search" aria-hidden="true"></i>
-        <input type="search" value="${h(filters.search || '')}" placeholder="Search name, ID, or owner email"
-          data-company-directory-search="${h(scope)}" aria-label="Search companies" />
-      </label>
-      <label class="company-directory-status">
-        <span>Status</span>
-        <select data-company-directory-status="${h(scope)}">
-          ${COMPANY_STATUS_FILTERS.map(([value, label]) => `<option value="${h(value)}" ${filters.status === value ? 'selected' : ''}>${h(label)}</option>`).join('')}
-        </select>
-      </label>
-      <span class="company-directory-count">${view.total ? `${view.from}-${view.to} of ${view.total}` : 'No matches'}</span>
-    </div>
-  `;
-}
-
-function renderCompanyDirectoryPager(scope, view) {
-  if (view.pageCount <= 1) return '';
-  return `
-    <div class="company-directory-pager">
-      <button class="btn" type="button" data-action="company-directory-page" data-scope="${h(scope)}" data-page="${view.page - 1}" ${view.hasPrev ? '' : 'disabled'}><i class="ti ti-chevron-left"></i>Previous</button>
-      <span>Page ${view.page + 1} of ${view.pageCount}</span>
-      <button class="btn" type="button" data-action="company-directory-page" data-scope="${h(scope)}" data-page="${view.page + 1}" ${view.hasNext ? '' : 'disabled'}>Next<i class="ti ti-chevron-right"></i></button>
-    </div>
-  `;
-}
-
-function companyDirectoryEmptyState(filters) {
-  if (filters.search) return emptyState(`No companies match "${filters.search}".`);
-  if (filters.status === 'archived') return emptyState('No archived companies.');
-  if (filters.status === 'rejected') return emptyState('No rejected companies.');
-  if (filters.status === 'canceled') return emptyState('No canceled companies.');
-  return emptyState('No companies found for platform review.');
-}
-
-
 
 function renderPlatformBackupCopyRow(copy) {
   return `
@@ -27961,18 +27726,30 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'retry-settings-surfaces') {
+    event.preventDefault();
+    settingsSurfacesLoadError = null;
+    settingsSurfacesPending = null;
+    render();
+    return;
+  }
   if (action === 'create-workspace-backup') {
     event.preventDefault();
+    if (!requirePermission('settings.manage', activeCompanyId(), 'Your role cannot create workspace backups.', 'Backups')) return;
     createWorkspaceBackup(activeCompanyId(), 'manual').catch((error) => showToast(error.message || 'Backup failed.', 'error', 'Backups'));
     return;
   }
   if (action === 'download-workspace-backup') {
     event.preventDefault();
-    downloadBackupZip(workspaceBackupById(node.dataset.backupId)).catch((error) => showToast(error.message || 'Download failed.', 'error', 'Backups'));
+    const backup = workspaceBackupById(node.dataset.backupId);
+    if (!backup || !requirePermission('settings.manage', backup.company_id, 'Your role cannot download workspace backups.', 'Backups')) return;
+    downloadBackupZip(backup).catch((error) => showToast(error.message || 'Download failed.', 'error', 'Backups'));
     return;
   }
   if (action === 'open-restore-backup') {
     event.preventDefault();
+    const backup = workspaceBackupById(node.dataset.backupId);
+    if (!backup || !requirePermission('settings.manage', backup.company_id, 'Your role cannot restore workspace backups.', 'Backups')) return;
     state.selectedWorkspaceBackupId = node.dataset.backupId || '';
     state.modal = 'workspace-backup-restore';
     render();
@@ -27980,6 +27757,8 @@ function handleAction(event, node) {
   }
   if (action === 'mark-workspace-backup-deleted') {
     event.preventDefault();
+    const backup = workspaceBackupById(node.dataset.backupId);
+    if (!backup || !requirePermission('settings.manage', backup.company_id, 'Your role cannot delete workspace backups.', 'Backups')) return;
     markWorkspaceBackupDeleted(node.dataset.backupId || '').catch((error) => showToast(error.message || 'Backup update failed.', 'error', 'Backups'));
     return;
   }
@@ -29456,6 +29235,7 @@ function handleAction(event, node) {
   }
   if (action === 'start-checkout') {
     event.preventDefault();
+    if (!requirePermission('billing.manage', activeCompanyId(), 'Your role can view billing but cannot change the subscription.', 'Billing')) return;
     startCheckout();
     return;
   }
@@ -30937,6 +30717,7 @@ function onDocumentSubmit(event) {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target).entries());
     const companyId = activeCompanyId();
+    if (!requirePermission('settings.manage', companyId, 'Your role cannot change backup settings.', 'Backups')) return;
     state.backupSettings = {
       ...(state.backupSettings || {}),
       [companyId]: { interval_key: BACKUP_INTERVAL_OPTIONS.some(([value]) => value === form.interval_key) ? form.interval_key : 'manual' },
@@ -30950,6 +30731,8 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-workspace-backup-restore-form]')) {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target).entries());
+    const backup = workspaceBackupById(form.backup_id);
+    if (!backup || !requirePermission('settings.manage', backup.company_id, 'Your role cannot restore workspace backups.', 'Backups')) return;
     restoreWorkspaceBackup(form.backup_id).catch((error) => showToast(error.message || 'Restore failed.', 'error', 'Backups'));
     return;
   }
@@ -32528,6 +32311,7 @@ async function requestCompanyAccess(formNode) {
 
 async function startCheckout() {
   const companyId = activeCompanyId();
+  if (!requirePermission('billing.manage', companyId, 'Your role can view billing but cannot change the subscription.', 'Billing')) return false;
   if (CONFIG.billingMode === 'manual') {
     state.sync = { label: 'Manual approval active', mode: 'local' };
     showToast('Manual approval is active for launch week. Lumen will activate billing after review.', 'local', 'Billing');
@@ -34561,6 +34345,10 @@ function onDocumentChange(event) {
     return;
   }
   if (event.target.matches('[data-workspace-backup-import]')) {
+    if (!requirePermission('settings.manage', activeCompanyId(), 'Your role cannot import workspace backups.', 'Backups')) {
+      event.target.value = '';
+      return;
+    }
     const file = event.target.files?.[0];
     importWorkspaceBackupFile(file).catch((error) => showToast(error.message || 'Import failed.', 'error', 'Backups'));
     event.target.value = '';
@@ -38670,20 +38458,6 @@ function companyAuditEvents(companyId = activeCompanyId()) {
     .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
 }
 
-function renderAuditEventRow(event) {
-  const profile = profileById(event.actor_profile_id);
-  const actor = profile?.full_name || profile?.email || shortUserId(event.actor_profile_id || 'system');
-  return `
-    <article class="access-audit-row">
-      ${renderAvatar({ full_name: actor, email: profile?.email || '' }, 'avatar small')}
-      <span>
-        <strong>${h(titleCase(String(event.event_type || 'access.event').replace(/[._-]+/g, ' ')))}</strong>
-        <small>${h(actor)} / ${formatDate(event.created_at)}</small>
-      </span>
-    </article>
-  `;
-}
-
 function companyRoles(companyId = activeCompanyId()) {
   const custom = state.roles.filter((role) => role.company_id === companyId);
   if (custom.length) return custom.sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
@@ -39644,6 +39418,7 @@ function workspaceBackupRecordCounts(payload) {
 }
 
 async function createWorkspaceBackup(companyId = activeCompanyId(), kind = 'manual') {
+  if (!requirePermission('settings.manage', companyId, 'Your role cannot create workspace backups.', 'Backups')) return false;
   const payload = buildWorkspaceBackupPayload(companyId);
   const now = new Date().toISOString();
   const profile = activeSession()?.profile || {};
@@ -39688,6 +39463,7 @@ async function downloadBackupZip(backup) {
     showToast('Backup not found.', 'local', 'Backups');
     return;
   }
+  if (!requirePermission('settings.manage', target.company_id, 'Your role cannot download workspace backups.', 'Backups')) return false;
   const JSZip = await loadJsZip();
   const zip = new JSZip();
   zip.file('quest-backup.json', JSON.stringify(target.payload || buildWorkspaceBackupPayload(target.company_id), null, 2));
@@ -39704,6 +39480,7 @@ async function downloadBackupZip(backup) {
 
 async function importWorkspaceBackupFile(file) {
   if (!file) return;
+  if (!requirePermission('settings.manage', activeCompanyId(), 'Your role cannot import workspace backups.', 'Backups')) return false;
   const check = await validateUpload(file, 'backup');
   if (!check.ok) throw new Error(check.reason);
   const JSZip = await loadJsZip();
@@ -39717,15 +39494,20 @@ async function importWorkspaceBackupFile(file) {
     throw new Error('The quest-backup.json file inside this zip is not valid JSON.');
   }
   validateWorkspaceBackupPayload(payload);
+  const companyId = canonicalCompanyId(payload.company_id);
+  if (companyId !== canonicalCompanyId(activeCompanyId())) {
+    throw new Error('Open the company named in this backup before importing it.');
+  }
+  if (!requirePermission('settings.manage', companyId, 'Your role cannot import backups for this company.', 'Backups')) return false;
   const now = new Date().toISOString();
   const profile = activeSession()?.profile || {};
   const backup = normalizeWorkspaceBackup({
     id: `backup-${crypto.randomUUID()}`,
-    company_id: payload.company_id,
-    label: `${companyName(payload.company_id)} imported backup`,
+    company_id: companyId,
+    label: `${companyName(companyId)} imported backup`,
     kind: 'import',
     status: 'active',
-    interval_key: backupSettingsForCompany(payload.company_id).interval_key,
+    interval_key: backupSettingsForCompany(companyId).interval_key,
     payload,
     size_bytes: file.size || new Blob([JSON.stringify(payload)]).size,
     record_counts: workspaceBackupRecordCounts(payload),
@@ -39808,6 +39590,7 @@ function applyWorkspaceBackupPayload(payload) {
 async function restoreWorkspaceBackup(backupId) {
   const backup = workspaceBackupById(backupId);
   if (!backup) throw new Error('Backup not found.');
+  if (!requirePermission('settings.manage', backup.company_id, 'Your role cannot restore workspace backups.', 'Backups')) return false;
   applyWorkspaceBackupPayload(backup.payload);
   const failures = isLiveSupabaseSession() ? await persistWorkspaceBackupPayloadToSupabase(backup.payload) : [];
   state.modal = '';
@@ -39901,6 +39684,7 @@ async function markWorkspaceBackupDeleted(backupId) {
   const now = new Date().toISOString();
   const existing = workspaceBackupById(backupId);
   if (!existing) return false;
+  if (!requirePermission('settings.manage', existing.company_id, 'Your role cannot delete workspace backups.', 'Backups')) return false;
   let updated = normalizeWorkspaceBackup({ ...existing, status: 'deleted', deleted_at: now, deleted_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null, updated_at: now });
   if (isLiveSupabaseSession()) {
     const { ok, data } = await supabaseWrite('workspace_backups', updated);
