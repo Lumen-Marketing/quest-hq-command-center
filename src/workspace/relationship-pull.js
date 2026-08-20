@@ -47,6 +47,25 @@ export const PULL_FAMILY = {
   checkbox: 'boolean',
   user: 'user',
   company_contact: 'contact',
+
+  // Everything below had NO family, and a type with no family is refused by canPull -- silently,
+  // and by a rule written for a different question. On a copy that meant a field quietly did not
+  // fill in. On a MOVE it meant data loss: the record is removed from the app it left, so the
+  // photos, the files, the checklist and the spreadsheet went with it and did not arrive.
+  //
+  // Each of these travels to its OWN kind and to nothing else, which is the whole reason they can
+  // travel at all. A file is an object -- or a list of them -- not a string, so widening it into
+  // text would write JSON into a text field, which is the shape of bug the activity feed just had.
+  file: 'file',
+  // A picture is a file that happens to be a picture: the same stored shape, so the two are one
+  // family and a photo can land in a File field and the other way about.
+  image: 'file',
+  checklist: 'checklist',
+  sheet: 'sheet',
+  form: 'doc',
+  // Tags are already handled as "optionish" by translateValue, which maps the labels across and
+  // mints any the destination has not got -- that branch was simply unreachable without this line.
+  tags: 'option',
 };
 
 /**
@@ -67,6 +86,12 @@ const ACCEPTS = {
   boolean: ['boolean'],
   user: ['user'],
   contact: ['contact'],
+  // Their own kind only. There is no readable form to widen any of these into: what they store is
+  // structure, and structure written into a text field is JSON on somebody's screen.
+  file: ['file'],
+  checklist: ['checklist'],
+  sheet: ['sheet'],
+  doc: ['doc'],
 };
 
 export function canPull(fromType, toType) {

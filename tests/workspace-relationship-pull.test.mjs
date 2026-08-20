@@ -201,10 +201,60 @@ test('searching matches either half', () => {
 });
 
 test('every family in the table has a rule, so no type silently copies nothing', () => {
+  // The invariant is that a type can be copied to its OWN kind. It used to be written as "can be
+  // copied into a text field", which held only while every family happened to be a string --
+  // widening a file, a checklist or a spreadsheet into text does not produce words, it produces
+  // the structure they store, and that lands on somebody's screen as JSON.
   Object.entries(PULL_FAMILY).forEach(([type, family]) => {
     assert.ok(family, `${type} has no family`);
-    assert.ok(canPull(type, 'text'), `${type} cannot be copied anywhere`);
+    // A computed type is readable but not writable -- an autonumber destination is refused
+    // because the system stamps it -- so for those the question is whether they can be read
+    // FROM at all.
+    if (COMPUTED_TYPES.includes(type)) {
+      assert.ok(canPull(type, 'text'), `${type} cannot be read from`);
+      return;
+    }
+    assert.ok(canPull(type, type), `${type} cannot be copied anywhere, not even to its own kind`);
   });
+});
+
+test('a file, a picture, a checklist and a sheet all travel', () => {
+  // Reported from use: "I tried to upload multiple files using file field, and multiple images
+  // using image field, but when I move it using the button field move function, the file and the
+  // images are gone." Every one of these had NO family, and a type with no family is refused --
+  // silently, by a rule written to stop text landing in a number column.
+  //
+  // On a copy that meant a field quietly did not fill in. On a MOVE it was data loss: the record
+  // is removed from the app it left, so whatever did not travel is simply gone.
+  assert.ok(canPull('file', 'file'));
+  assert.ok(canPull('image', 'image'));
+  assert.ok(canPull('checklist', 'checklist'));
+  assert.ok(canPull('sheet', 'sheet'));
+  assert.ok(canPull('form', 'form'));
+  assert.ok(canPull('tags', 'tags'));
+});
+
+test('a picture and a file are one family, because they are one stored shape', () => {
+  assert.ok(canPull('image', 'file'), 'a photo can land in a File field');
+  assert.ok(canPull('file', 'image'), 'and the other way about');
+});
+
+test('structure is never widened into text', () => {
+  // There is no readable form for these on the way across -- `readable` answers '' for an object
+  // -- so allowing it would write an empty string over a real value, or the object itself.
+  assert.ok(!canPull('file', 'text'), 'a file is not a string');
+  assert.ok(!canPull('image', 'textarea'));
+  assert.ok(!canPull('checklist', 'text'));
+  assert.ok(!canPull('sheet', 'text'));
+  // Tags are the exception, and only because translateValue knows how to read them.
+  assert.ok(canPull('tags', 'text'), 'tags have labels, so they read as words');
+});
+
+test('and none of them can take something that is not their own kind', () => {
+  assert.ok(!canPull('text', 'file'), 'text cannot become a file');
+  assert.ok(!canPull('number', 'checklist'));
+  assert.ok(!canPull('file', 'sheet'), 'two kinds of structure are still two kinds');
+  assert.ok(!canPull('sheet', 'form'));
 });
 
 // --- copying every field the two apps share --------------------------------------------------

@@ -58,8 +58,10 @@ test('the recorded position is re-read rather than trusted', () => {
 });
 
 test('the page scroller is handled as well as inner containers', () => {
-  assert.match(fn('lastScrolledTarget'), /if \(window\.scrollY\) kept\.push\(\{ selector: 'window', top: window\.scrollY \}\)/);
-  assert.match(fn('applyKeptScroll'), /window\.scrollTo\(0, top\)/);
+  // Both axes. A records table scrolled sideways to reach a Yes/No column snapped back to the
+  // first field the moment the toggle re-rendered it, because only scrollTop was remembered.
+  assert.ok(fn('lastScrolledTarget').includes("if (window.scrollY || window.scrollX) kept.push({ selector: 'window', top: window.scrollY, left: window.scrollX })"));
+  assert.ok(fn('applyKeptScroll').includes('window.scrollTo(x, top)'));
 });
 
 test('every scrolled region is restored, not only the most recent one', () => {
@@ -70,13 +72,16 @@ test('every scrolled region is restored, not only the most recent one', () => {
   assert.match(main, /const scrolledTargets = new Map\(\);/);
   assert.match(fn('trackScrollTargets'), /scrolledTargets\.set\(selector, true\)/);
   assert.match(fn('lastScrolledTarget'), /for \(const selector of scrolledTargets\.keys\(\)\)/);
-  assert.match(fn('applyKeptScroll'), /for \(const \{ selector, top \} of kept\.scrolled \|\| \[\]\)/);
+  assert.ok(fn('applyKeptScroll').includes('for (const { selector, top, left } of kept.scrolled || [])'));
 });
 
 test('a zero scroll position is skipped rather than recorded as a target', () => {
   // Restoring a zero is a no-op, but keeping it in the list was what let one container at
   // the top hide another that was not.
-  assert.match(fn('lastScrolledTarget'), /if \(el && el\.scrollTop\) kept\.push/);
+  // Either axis counts now: a table scrolled right sits at scrollTop 0, and testing only the
+  // top dropped it from the list as though it had never moved. A container at zero on BOTH is
+  // still skipped, which is what this test was always about.
+  assert.ok(fn('lastScrolledTarget').includes('if (el && (el.scrollTop || el.scrollLeft)) kept.push'));
 });
 
 test('the tracked set is bounded', () => {
@@ -185,8 +190,9 @@ test('the restore writes only when the value actually differs', () => {
   // Assigning an unchanged scrollTop is not free — it can cancel a smooth scroll in progress
   // — and the second pass is a no-op in the common case where the first one worked.
   const apply = main.match(/function applyKeptScroll\(kept, restoreFocus\) \{[\s\S]*?\n\}/)?.[0] || '';
-  assert.match(apply, /if \(window\.scrollY !== top\) window\.scrollTo\(0, top\);/);
-  assert.match(apply, /if \(target && target\.scrollTop !== top\) target\.scrollTop = top;/);
+  assert.ok(apply.includes('if (window.scrollY !== top || window.scrollX !== x) window.scrollTo(x, top);'));
+  assert.ok(apply.includes('if (target.scrollTop !== top) target.scrollTop = top;'));
+  assert.ok(apply.includes('if (target.scrollLeft !== x) target.scrollLeft = x;'));
 });
 
 test('the app strip scrolls itself, never via scrollIntoView', () => {

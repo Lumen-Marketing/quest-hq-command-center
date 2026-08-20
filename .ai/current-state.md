@@ -1879,6 +1879,56 @@ fix it. Per-record storage -- or at minimum keeping media out of the document --
 work. Also open: `syncButtons` calls `.closest()` on `document`, which has no such method, so its
 "only inside a modal or record page" guard silently never applies.
 
+## 2026-08-20 A move was destroying files, and four things found beside it
+
+- **A button MOVE was losing files, photos, checklists, tags, spreadsheets and documents.**
+  Reported from use: "I tried to upload multiple files using file field, and multiple images using
+  image field, but when I move it using the button field move function, the file and the images
+  are gone." `canPull` refuses any type with no entry in `PULL_FAMILY`, and `file`, `image`,
+  `checklist`, `tags`, `sheet` and `form` all had none -- so `planPush` put every one of them in
+  `skipped` and the value never travelled. On a COPY that is a field that quietly did not fill in.
+  On a MOVE the record is removed from the app it left, so what did not travel was **destroyed**.
+  The rule that refused them was written for a different question -- "text must not land in a
+  number column" -- and a missing family read as "refuse" rather than as "unknown".
+- **Files and pictures are ONE family**, because they are one stored shape: a photo can land in a
+  File field and the other way about. `checklist`, `sheet` and `form` each get their own family
+  and travel only to their own kind; `tags` becomes optionish, which is what finally makes
+  `translateValue`'s existing tags branch reachable -- it was already written to map labels across
+  and mint any the destination lacks. **Structure is never widened into text**: `readable()`
+  answers '' for an object, so allowing it would write an empty string over a real value.
+- `relationship` is deliberately still without a family. Its ids are scoped to a particular target
+  app, so carrying them is only correct when both fields point at the SAME app -- a config
+  comparison, which `canPull` is not shaped for. Left as a known gap rather than half-fixed.
+- **An existing test asserted the wrong invariant.** "Every type can be copied into a text field"
+  held only while every family happened to be a string. It is now "every type can be copied to its
+  own kind", with computed types (autonumber, calculation, created_time) checked for readability
+  instead, since nothing can ever be written INTO them.
+- **Six photos on a record took six rows.** The value column beside a 34%/200px label lands near
+  300px, and a 78px tile plus gaps left room for exactly one per line. It is a grid now --
+  `repeat(auto-fill, minmax(64px, 1fr))`, tiles at `aspect-ratio: 1` so the columns line up -- and
+  capped at three rows, past which it stops being a field and starts being a gallery. The Change
+  chip needed `white-space: nowrap` AND `flex: none`: either alone still let a narrow column
+  squeeze it until "Change" read down the page one letter at a time.
+- **Scroll preservation only ever remembered `scrollTop`.** A records table is wider than the
+  window, so reaching a Yes/No column means scrolling sideways -- and toggling it re-rendered,
+  which put the container back at `scrollLeft: 0` with the control scrolling off screen under the
+  cursor. Both halves needed widening: the CAPTURE skipped anything at `scrollTop` 0, which is
+  exactly where a horizontally-scrolled table sits, so fixing the restore alone would have done
+  nothing. A container at zero on both axes is still skipped.
+- **`docs/apps/EOD Report.questapp.json`** -- the tenth bundle, installed once per workspace
+  (Prospecting, Underwriting, Sales, Production). One record per day: a required Stage, the same
+  six counts in every stage so four workspaces read side by side, money moved and at risk, three
+  free-text cards, and a five-step close-out checklist driving a progress bar. It carries **no
+  relationship, rollup, button, sub-item list or automation** -- every one of those names another
+  app by an id install cannot remap, which is precisely what would break the same file being
+  installed four times. Both dashboard sums read STORED fields, never the `Touches` calculation.
+- **The Assignee field is a searchable datalist**, not a `<select>`. Same three-part control the
+  `company_contact` field already uses and for the reason its comment already gives: a select is
+  fine for five people and unusable for fifty. The name is visible, the id is stored (so renaming
+  somebody never breaks an assignment), and the email rides as each option's label because two
+  people called Rom are one entry in a list of names. Matching accepts the email too. Both `input`
+  and `change` are wired -- a datalist pick fires `input` in Chromium and `change` in Firefox.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

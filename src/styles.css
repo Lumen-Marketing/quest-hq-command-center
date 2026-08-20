@@ -23385,18 +23385,42 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 .wb-img-more:hover { background: var(--orange, #e0552d); }
 .wb-img-more:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
-/* On the record the photos are the point, so they get room -- and squares, because a row of
-   circles crops the corners off pictures that were chosen for what is in them. */
-.wb-img-cell.is-detail { gap: 8px; }
-.wb-img-cell.is-detail .wb-img-shot { border-radius: 10px; }
-.wb-img-cell.is-detail .wb-img-avatar { width: 78px; height: 78px; border-radius: 10px; border-width: 1px; }
+/* On the record the photos are the point, so they are all drawn -- and squares, because a row
+   of circles crops the corners off pictures that were chosen for what is in them.
+
+   A GRID, not an inline row that wraps. The value column on a record page is about 300px, and a
+   78px tile plus its gaps left room for exactly one per line -- so six photos became six rows and
+   a field taller than the rest of the record put together. auto-fill packs as many as the column
+   holds and wraps to the next line, which is the same six photos in two rows. */
+.wb-img-cell.is-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  width: 100%;
+  /* A cap, not a scrollbar: past three rows this stops being a field on a record and starts
+     being a gallery, and the viewer is where a gallery belongs. */
+  max-height: 226px;
+  overflow-y: auto;
+}
+.wb-img-cell.is-detail .wb-img-shot { border-radius: 10px; width: 100%; }
+/* The tile fills its grid cell and stays square, so the columns line up whatever the photo's
+   own proportions are. */
+.wb-img-cell.is-detail .wb-img-avatar {
+  width: 100%; height: auto; aspect-ratio: 1; border-radius: 10px; border-width: 1px;
+}
 /* The click that opens the inline editor skips buttons, and a filled photo cell is nothing
    but buttons. This is the part of the cell that still means "edit this field". */
 .wb-img-edit {
   display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px;
   border: 1px dashed var(--border-strong, #cdb595); background: var(--surface-2, #f6efe4);
   color: var(--text-muted, #72695d); font-size: .75rem; font-weight: 700; cursor: pointer;
+  /* Both of these, or the chip is squeezed until "Change" reads down the page one letter at a
+     time -- which is what a narrow column does to a flex item that is allowed to shrink. */
+  white-space: nowrap; flex: none;
 }
+/* Under the photos rather than beside them. Beside, it competes with the grid for a column that
+   has none to spare; under, it is where the eye already is when it has finished looking. */
+.wb-view-val:has(.wb-img-cell.is-detail) { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .wb-view-val:hover .wb-img-edit { color: var(--text, #2c241b); border-color: var(--orange, #e0552d); }
 
 /* The photo viewer. Its own layer on <body>, above every modal (240) and the sheet overlay

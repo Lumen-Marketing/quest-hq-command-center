@@ -1,0 +1,443 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-20T04:30:00.000Z",
+  "app": {
+    "name": "EOD Report",
+    "recordName": "Report",
+    "type": "reporting",
+    "icon": "ti-clipboard-check",
+    "color": "#4f46e5",
+    "description": "One record per day, per workspace: what moved, what stalled, what is blocked and what tomorrow starts with. Install the same app into Prospecting, Underwriting, Sales and Production — the Stage field is what makes one report fit all four, so the numbers can be read side by side at the end of a week.",
+    "fields": [
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "category",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "display": "chips",
+          "options": [
+            {
+              "id": "o-prospecting",
+              "label": "Prospecting",
+              "color": "#0891b2"
+            },
+            {
+              "id": "o-underwriting",
+              "label": "Underwriting",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "o-sales",
+              "label": "Sales",
+              "color": "#e0552d"
+            },
+            {
+              "id": "o-production",
+              "label": "Production",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "o-draft",
+              "label": "Draft",
+              "color": "#6b7280"
+            },
+            {
+              "id": "o-submitted",
+              "label": "Submitted",
+              "color": "#2563eb"
+            },
+            {
+              "id": "o-reviewed",
+              "label": "Reviewed",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-by",
+        "label": "Reported by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-headline",
+        "label": "Headline",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "The one line somebody reading this at 6pm needs"
+        }
+      },
+      {
+        "id": "f-new",
+        "label": "New in",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "records"
+        }
+      },
+      {
+        "id": "f-forward",
+        "label": "Moved forward",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "records"
+        }
+      },
+      {
+        "id": "f-stalled",
+        "label": "Stalled",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "records"
+        }
+      },
+      {
+        "id": "f-calls",
+        "label": "Calls made",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-messages",
+        "label": "Messages sent",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touches",
+        "label": "Touches",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Calls made} + {Messages sent}"
+        }
+      },
+      {
+        "id": "f-value",
+        "label": "Value moved",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        }
+      },
+      {
+        "id": "f-risk",
+        "label": "Value at risk",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        }
+      },
+      {
+        "id": "f-what",
+        "label": "What happened",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What actually moved, and why"
+        }
+      },
+      {
+        "id": "f-blockers",
+        "label": "Blockers",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What is stuck, and who has to unstick it"
+        }
+      },
+      {
+        "id": "f-tomorrow",
+        "label": "Tomorrow",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "The first three things"
+        }
+      },
+      {
+        "id": "f-due",
+        "label": "Due tomorrow",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "items"
+        }
+      },
+      {
+        "id": "f-close",
+        "label": "Close-out",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Every record touched today is up to date",
+            "Anything still open has a next action on it",
+            "Nothing overdue was left without a note",
+            "Handoffs to the next stage are sent",
+            "Tomorrow's first three are picked"
+          ]
+        }
+      },
+      {
+        "id": "f-done",
+        "label": "Closed out",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-close",
+          "display": "bar"
+        }
+      },
+      {
+        "id": "f-photos",
+        "label": "Photos",
+        "type": "image",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-files",
+        "label": "Attachments",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-logged",
+        "label": "Logged",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "automations": [],
+    "cardFields": [
+      "f-date",
+      "f-stage",
+      "f-status",
+      "f-headline",
+      "f-touches",
+      "f-value",
+      "f-done"
+    ],
+    "recordLayout": [
+      {
+        "id": "b-day",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The day",
+          "fieldIds": [
+            "f-date",
+            "f-stage",
+            "f-status",
+            "f-by",
+            "f-headline"
+          ]
+        }
+      },
+      {
+        "id": "b-numbers",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "By the numbers",
+          "fieldIds": [
+            "f-new",
+            "f-forward",
+            "f-stalled",
+            "f-calls",
+            "f-messages",
+            "f-touches",
+            "f-value",
+            "f-risk"
+          ]
+        }
+      },
+      {
+        "id": "b-words",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "In words",
+          "fieldIds": [
+            "f-what",
+            "f-blockers",
+            "f-tomorrow",
+            "f-due"
+          ]
+        }
+      },
+      {
+        "id": "b-close",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Close-out",
+          "fieldIds": [
+            "f-close",
+            "f-done",
+            "f-photos",
+            "f-files",
+            "f-logged"
+          ]
+        }
+      },
+      {
+        "id": "b-note",
+        "type": "note",
+        "size": 2,
+        "config": {
+          "text": "One report per workspace per day. Fill the counts for the stage this workspace is, leave the rest at zero — a blank number reads as \"nothing happened\", which is itself worth knowing."
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 2,
+        "config": {}
+      }
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-stage",
+        "title": "By stage",
+        "fieldId": "f-stage",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-cal",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-calls",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-calls"
+        }
+      },
+      {
+        "id": "w-value",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-value"
+        }
+      },
+      {
+        "id": "w-risk",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-risk"
+        }
+      },
+      {
+        "id": "w-stages",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": {
+          "text": "Installed once per workspace. Read one workspace to see a stage; filter By stage across all four to see the funnel move."
+        }
+      }
+    ]
+  }
+}

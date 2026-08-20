@@ -642,9 +642,29 @@ export function createFieldInput(ctx) {
           </div>`;
         break;
       }
+      // Typed, not scrolled -- the same reasoning as the company directory below, and the same
+      // three-part control: a visible input carrying the NAME, a hidden one carrying the id, and
+      // a datalist the browser filters as you type. A <select> is fine for five people and
+      // unusable for fifty, and which of those a company is changes without anybody revisiting
+      // this. The id is what gets stored, so renaming somebody never breaks an assignment.
       case 'user': {
         const members = wbMembers(companyId);
-        input = members.length ? `<select class="wb-input" data-f="${h(f.id)}"><option value="">— Unassigned —</option>${members.map((m) => `<option value="${h(m.id)}" ${val === m.id ? 'selected' : ''}>${h(m.name)}</option>`).join('')}</select>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">No company members to assign.</div>'; break;
+        if (!members.length) {
+          input = '<div class="wb-sub" style="color:var(--warning,#d97706)">No company members to assign.</div>';
+          break;
+        }
+        const listId = `wbusr-${f.id}`;
+        const current = members.find((m) => m.id === String(val || ''));
+        // The email rides as each option's label: two people called Rom are one entry in a list
+        // of names, and the address is the thing that tells them apart.
+        input = `
+          <div class="wb-inline wb-user-picker" data-wb-user-picker>
+            <span class="wb-cur"><i class="ti ti-user"></i></span>
+            <input class="wb-input" list="${h(listId)}" data-wb-user-name value="${h(current ? current.name : '')}" placeholder="Search members…" autocomplete="off" />
+            <input type="hidden" data-f="${h(f.id)}" data-wb-user-id value="${h(current ? current.id : '')}" />
+            <datalist id="${h(listId)}">${members.map((m) => `<option value="${h(m.name)}"${m.email ? ` label="${h(m.email)}"` : ''}></option>`).join('')}</datalist>
+          </div>`;
+        break;
       }
       // A datalist, not a <select>: a company directory runs to hundreds of people and the
       // only way to find one in a dropdown is to scroll. The visible input carries the name

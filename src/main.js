@@ -3732,18 +3732,26 @@ const scrolledTargets = new Map();
 
 function lastScrolledTarget() {
   const kept = [];
-  if (window.scrollY) kept.push({ selector: 'window', top: window.scrollY });
+  // BOTH axes. Only scrollTop was remembered, so a records table scrolled sideways to reach a
+  // Yes/No column snapped back to the first field the moment the toggle re-rendered it -- the
+  // control you just used scrolling off screen under your own cursor. A wide table is the
+  // ordinary case in the App Builder, so this was the ordinary case too.
+  if (window.scrollY || window.scrollX) kept.push({ selector: 'window', top: window.scrollY, left: window.scrollX });
   for (const selector of scrolledTargets.keys()) {
     let el = null;
     try { el = document.querySelector(selector); } catch { el = null; }
     // Read fresh: the recorded value goes stale as soon as anything else moves it.
-    if (el && el.scrollTop) kept.push({ selector, top: el.scrollTop });
+    // Either axis counts: a table scrolled right sits at scrollTop 0, and testing only the top
+    // would drop it from the list as though it had never moved.
+    if (el && (el.scrollTop || el.scrollLeft)) kept.push({ selector, top: el.scrollTop, left: el.scrollLeft });
   }
   // The work surface is the common case, and on the very first interaction nothing has been
   // recorded yet because no scroll event has fired.
   if (!kept.some((entry) => entry.selector === '#workspace' || entry.selector === '.work-surface')) {
     const surface = document.querySelector('.work-surface');
-    if (surface && surface.scrollTop) kept.push({ selector: '.work-surface', top: surface.scrollTop });
+    if (surface && (surface.scrollTop || surface.scrollLeft)) {
+      kept.push({ selector: '.work-surface', top: surface.scrollTop, left: surface.scrollLeft });
+    }
   }
   return kept.length ? kept : null;
 }
@@ -3799,14 +3807,20 @@ function restoreScrollAfterRender(kept) {
 }
 
 function applyKeptScroll(kept, restoreFocus) {
-  for (const { selector, top } of kept.scrolled || []) {
+  for (const { selector, top, left } of kept.scrolled || []) {
+    const x = left || 0;
     if (selector === 'window') {
-      if (window.scrollY !== top) window.scrollTo(0, top);
+      if (window.scrollY !== top || window.scrollX !== x) window.scrollTo(x, top);
       continue;
     }
     let target = null;
     try { target = document.querySelector(selector); } catch { target = null; }
-    if (target && target.scrollTop !== top) target.scrollTop = top;
+    if (!target) continue;
+    if (target.scrollTop !== top) target.scrollTop = top;
+    // Assigned separately, and only when it differs: writing scrollLeft on a container that has
+    // nothing to scroll sideways is harmless but writing it every render is not free, and the
+    // second pass below runs on every one of them.
+    if (target.scrollLeft !== x) target.scrollLeft = x;
   }
   // Not while a modal is open: the control is behind it, and focusing it both breaks the
   // dialog's focus trap and scrolls the page under it.
@@ -33990,6 +34004,7 @@ function onDocumentInput(event) {
   // Both paths, for the reason the job Client field taught us: typing fires input, and
   // picking from the datalist fires input too in Chromium but change in Firefox.
   if (event.target.matches('[data-wb-cc-name]')) syncCompanyContactPicker(event.target);
+  if (event.target.matches('[data-wb-user-name]')) syncUserPicker(event.target);
   // The sheet's name is typed beside it and stored INSIDE the sheet, because that is what every
   // column, search result and export reads. The hidden input still carries the whole thing, so
   // the form's own save needs to know nothing about this.
@@ -34380,6 +34395,7 @@ function onDocumentChange(event) {
   // value stops being half-typed and becomes the answer.
   if (event.target.matches?.('[data-wb-option-input]')) wbCommitOptionChoice(event.target);
   if (event.target.matches('[data-wb-cc-name]')) syncCompanyContactPicker(event.target);
+  if (event.target.matches('[data-wb-user-name]')) syncUserPicker(event.target);
   // Picking a client from the suggestions dispatches CHANGE, not input -- see the
   // [data-job-type-option] handler. The same call lives in onDocumentInput for the typing
   // path; without this one, choosing the very name the menu offered filled nothing, which
@@ -38915,6 +38931,30 @@ function wbPendingContactNames() {
 // The scan for unlinked names, and the creating, both live in ./company-contacts/page.js.
 async function wbCreateMissingContacts(companyId) {
   return (await loadCompanyContactsPage()).createMissingContacts(companyId);
+}
+
+/**
+ * The name somebody typed, back to the member id that is actually stored.
+ *
+ * Matched on the NAME, and on the email as well: the datalist shows the address beside each
+ * name, so it is a reasonable thing to type or paste, and refusing it would look like the
+ * control failing to find somebody it had just offered.
+ *
+ * An empty box means unassigned, which is a real answer. A half-typed one also clears the id --
+ * the same as the contact picker beside it -- because a stored id that no longer matches what is
+ * on screen is worse than an obvious blank.
+ */
+function syncUserPicker(input) {
+  const picker = input?.closest?.('[data-wb-user-picker]');
+  const idField = picker?.querySelector('[data-wb-user-id]');
+  if (!idField) return;
+  const typed = String(input.value || '').trim().toLowerCase();
+  const members = wbMembers(activeCompanyId());
+  const match = typed
+    ? members.find((m) => String(m.name || '').trim().toLowerCase() === typed)
+      || members.find((m) => String(m.email || '').trim().toLowerCase() === typed)
+    : null;
+  idField.value = match ? match.id : '';
 }
 
 function syncCompanyContactPicker(input) {
