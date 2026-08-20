@@ -19,7 +19,9 @@ test('navigation follows the approved job center information architecture', () =
   // first in the Company tab. A contact belongs to the company -- that is the whole point of
   // the directory, and why the table has no workspace_id -- so sitting under Work, beside a
   // person's own tasks and inbox, said the opposite of what it is.
-  assert.match(source, /\{ label: 'Company', ids: \['company-contacts', 'users', 'analytics'\] \},\n\s*\{ label: 'Workspace',/, 'Company sits directly above Workspace');
+  // \r?\n, not \n: main.js was rewritten from LF to CRLF wholesale, and an assertion about
+  // WHICH GROUP SITS ABOVE WHICH has no business failing over the byte that separates them.
+  assert.match(source, /\{ label: 'Company', ids: \['company-contacts', 'users', 'analytics'\] \},\r?\n\s*\{ label: 'Workspace',/, 'Company sits directly above Workspace');
   assert.match(source, /company: new Set\(\['Company', 'Workspace', 'Operations', 'Control'\]\)/, 'and shows in the Company tab, not My work');
   assert.ok(
     !/'my-work': new Set\(\[[^\]]*'Company'/.test(source),
