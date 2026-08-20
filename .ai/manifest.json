@@ -10,13 +10,13 @@
     "latest_migration": "20260820190142_restrict_workspace_backups_to_settings_managers.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-08-10T18:23:17.639Z",
+    "supabase_verified_at": "2026-08-20T19:12:49.976Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260815120844",
-      "name": "company_contact_field_types"
+      "version": "20260820191221",
+      "name": "restrict_workspace_backups_to_settings_managers"
     },
     "vercel_verified_at": "2026-07-31T19:35:36.974Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
