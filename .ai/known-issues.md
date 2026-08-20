@@ -4,7 +4,21 @@ Only confirmed, actionable items belong here.
 
 ## Main browser bundle remains large
 
-Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js are lazy-loaded, but src/main.js remains a performance and maintainability risk. Measure production behavior before splitting and retain the budget guard.
+Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js plus the RingCentral calls runtime are lazy-loaded, but src/main.js remains a performance and maintainability risk. Measure production behavior before splitting and retain the budget guard.
+
+## The strict CSP target is still report-only
+
+Production enforces a compatible CSP baseline, but the tighter target remains report-only because
+the current PDF/ZIP toolchain needs eval/wasm behavior and Tasks is a same-origin frame. Review
+violation reports and replace or reconfigure those dependencies before removing the compatibility
+exceptions; tightening the header without verifying those flows can blank Tasks or break document
+work.
+
+## Leaked-password protection is an owner dashboard setting
+
+The Supabase security advisor still reports leaked-password protection as disabled. It cannot be
+enabled by a repository migration. A project owner must enable it in Supabase Auth settings and
+then rerun the security advisor; application code must not claim that control is active first.
 
 ## Tasks write store has rollback concurrency footguns (unwired)
 

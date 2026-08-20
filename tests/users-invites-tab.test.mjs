@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { PEOPLE_ACCESS_TABS, normalizeSettingsSurfaceTab } from '../src/settings/navigation-model.js';
 
 // The Users page is a fetched module now; same surface, read as one.
 const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
@@ -19,19 +20,19 @@ const usersPage = (() => {
 
 // --- the tab ---------------------------------------------------------------------------
 
-test('Users has three tabs, and the new one is routable', () => {
-  assert.match(usersPage, /\['members', 'access', 'invites'\]\.includes\(route\.params\.get\('tab'\)\)/);
-  assert.match(usersPage, /companyPath\('users', \{ tab: 'invites' \}, companyId\)/);
+test('People & Access has members, roles, access, and invites', () => {
+  assert.deepEqual(PEOPLE_ACCESS_TABS.map(({ id }) => id), ['members', 'roles', 'access', 'invites']);
+  assert.match(usersPage, /companyPath\('users', \{ tab: id \}, companyId\)/);
 });
 
 test('an unknown tab still falls back to members', () => {
-  assert.match(usersPage, /: 'members';/);
+  assert.equal(normalizeSettingsSurfaceTab('people', 'not-real'), 'members');
 });
 
 test('the tab says how many things are waiting', () => {
   // An invitation nobody has accepted and a request nobody has answered are both waiting on
   // someone here; a tab you must open to discover that is a tab you forget to open.
-  assert.match(usersPage, /`Invites\$\{companyInvites\(companyId\)\.length \+ pendingRequests\.length \? ` \(\$\{companyInvites\(companyId\)\.length \+ pendingRequests\.length\}\)` : ''\}`/);
+  assert.match(usersPage, /id === 'invites' && companyInvites\(companyId\)\.length \+ pendingRequests\.length/);
 });
 
 test('invites and join requests moved off the Access tab', () => {

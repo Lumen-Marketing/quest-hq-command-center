@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { HANDOFF_CHECKS, findHandoffIssues } from '../src/crm/handoff-review.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/settings-surfaces.js', import.meta.url), 'utf8');
 
 const FIXTURE = {
   contacts: [{ id: 'c1', name: 'Jane Smith' }, { id: 'c2', name: 'Bob Jones' }],
@@ -65,7 +66,7 @@ test('the screen reports only — it never repairs', () => {
 });
 
 test('the panel is admin-gated and lazily loaded', () => {
-  assert.match(main, /if \(can\('crm\.manage', companyId\)\) \{\s*\n\s*settingsTabs\.push/);
+  assert.match(main, /tab === 'handoffs' \? \(can\('crm\.manage', companyId\) \? renderHandoffReviewPanel\(companyId\)/);
   assert.match(main, /import\('\.\/crm\/handoff-review\.js'\)/);
   assert.doesNotMatch(main, /^import .*crm\/handoff-review/m);
 });

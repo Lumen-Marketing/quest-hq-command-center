@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/settings-surfaces.js', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/20260730213315_additional_command_center_hardening.sql', import.meta.url), 'utf8');
 
 function functionSource(name, nextName) {

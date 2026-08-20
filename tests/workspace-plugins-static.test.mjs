@@ -89,8 +89,8 @@ test('navigation and routes are gated by installed plugins', () => {
   assert.match(source, /installedLiveModules\(companyId\)/);
 });
 
-test('settings exposes plugin management and role permissions respect installed plugins', () => {
-  assert.match(source, /companyPath\('settings', \{ tab: 'plugins' \}, companyId\), 'Plugins', 'plugins'/);
+test('setup exposes module management and role permissions respect installed plugins', () => {
+  assert.match(source, /companyPath\('setup', \{ tab: 'modules' \}, companyId\)/);
   assert.match(source, /function renderPluginsSettings\(companyId\)/);
   assert.match(source, /data-action="set-workspace-plugin"/);
   assert.match(source, /data-action="apply-workspace-plugin-preset"/);

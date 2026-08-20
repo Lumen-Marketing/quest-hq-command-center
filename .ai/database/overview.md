@@ -52,6 +52,20 @@ Two reviewed forward migrations are live and newer than the committed full catal
 
 Supabase recorded them as `20260730183658_atomic_contact_to_quote` and `20260730183713_pipeline_stage_seed_repair`. Targeted catalog verification confirmed the column, index, grants, function security mode, per-kind creation guard, and zero missing required pipeline kinds in active workspaces.
 
+## Live advisor hardening
+
+`20260820201503_harden_setup_function_and_foreign_keys.sql` is live in the provider ledger as
+`20260820201554_harden_setup_function_and_foreign_keys`. It pins
+`app_private.company_setup_role_permissions(text)` to an empty search path and adds the 21
+foreign-key indexes identified by the performance advisor. Targeted live verification confirmed
+the function configuration and all 21 indexes. The migration changes neither foreign-key
+behavior nor application rows.
+
+The committed full catalog snapshot below predates this migration. Its tracked public function,
+policy, table, trigger, bucket, and relationship shapes are unaffected because the changed helper
+is private-schema and the snapshot does not catalog indexes; use the live ledger and this section
+for the newer migration's exact status.
+
 ## Live lifecycle hardening migration
 
 `20260730213315_additional_command_center_hardening.sql` is in the live Supabase ledger.

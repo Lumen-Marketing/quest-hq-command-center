@@ -22,7 +22,7 @@ A company is the market customer, subscription, and outer security tenant. The d
 
 ## Guided setup produces an editable plan, not a hardcoded company type
 
-Company registration creates only the account and its safe default Main workspace, then sends an owner to Settings > Setup. Guide me, ready-made blueprints, and Start from scratch all produce the same versioned plan shape, which the owner can review before applying. The server owns app/role allowlists and role permission templates, caps the plan size, rejects CRM conflicts, preserves populated pipelines, and maps generated workspace/role keys to stable ids so a retry cannot duplicate them. Questionnaire reset clears only answers and the draft; it intentionally retains the last applied plan and every company or business record. This keeps onboarding easy without making one roofing/CRM layout mandatory for every market customer.
+Company registration creates only the account and its safe default Main workspace, then opens that workspace's required Setup modal. Guide me, ready-made blueprints, and Start from scratch all produce the same versioned plan shape, which the owner can review before applying. The server owns app/role allowlists and role permission templates, caps the plan size, rejects CRM conflicts, preserves populated pipelines, and maps generated workspace/role keys to stable ids so a retry cannot duplicate them. Questionnaire reset clears only answers and the draft; it intentionally retains the last applied plan and every company or business record. This keeps onboarding easy without making one roofing/CRM layout mandatory for every market customer.
 
 ## Worker invites are non-elevated and workspace-explicit
 
@@ -175,11 +175,11 @@ Contacts, Jobs, Quotes, and the Underwriter keep an expiring same-browser copy w
 
 ## Sidebar scopes organize navigation without bypassing access rules
 
-The desktop command rail separates daily modules into My work and administrative/tooling modules into Company. Both scopes are derived from the existing module registry, installed-plugin checks, and permission gates; the mobile More sheet continues to expose the complete allowed module set.
+The desktop command rail separates daily modules into My work and company-wide/configuration modules into Company. Company now exposes People & Access, Setup, and Admin instead of one catch-all Settings destination. Setup owns company profile/brand, workspaces, modules, pipelines, handoffs, integrations, and launch checks; People & Access owns members, roles, access, and invites; Admin owns billing, recovery, audit history, and diagnostics. These are presentation and route-composition boundaries over the existing stores, RPCs, permission checks, and RLS—not new copies of the data. Old Settings URLs redirect to the equivalent new page. The mobile More sheet continues to expose the complete allowed module set.
 
 ## Job Center navigation uses stakeholder language at the presentation layer
 
-The desktop rail groups daily work as Work, Pipeline, Production, Tools, Review, and Build, with user-facing aliases such as Home, Inbox, Estimator, Reports, People, and Meetings. Internal module IDs, registry labels, routes, plugin entitlements, and permission names remain unchanged so the information-architecture redesign does not fork authorization or data behavior. The rail and dense estimator screens use IBM Plex Sans for interface copy and IBM Plex Mono for labels and numeric data.
+The desktop rail groups daily work as Work, Pipeline, Production, Tools, Review, and Build, with user-facing aliases such as Home, Inbox, Estimator, Reports, People & Access, Workspace Builder, and Meetings. Compatibility module IDs and permission names remain unchanged where existing links or authorization depend on them; new Setup and Admin sections use the existing `settings.view` permission. The rail and dense estimator screens use IBM Plex Sans for interface copy and IBM Plex Mono for labels and numeric data.
 
 ## Underwriter is a decision workbench, not a guidance dashboard
 
@@ -359,9 +359,10 @@ header in vercel.json blocked that frame in the browser, so Tasks rendered as an
 grey box in production while working in local dev (which serves none of the vercel.json
 headers). SAMEORIGIN allows the app to frame its own pages while still blocking any
 cross-origin site from framing Command Center, preserving the clickjacking guard.
-The CSP is unaffected: it stays strict and Report-Only on purpose (its `frame-ancestors`
-and `wasm` violations are being collected deliberately, per tests/security-headers.test.mjs),
-so this fix is the enforced X-Frame-Options header only. Enforced by that same test.
+The CSP now has two layers: a compatible policy is enforced and the tighter target remains
+Report-Only. The enforced layer allows same-origin Tasks framing and the eval/wasm behavior
+the current PDF and ZIP libraries require; the monitor shows what must change before those
+exceptions can be removed. `tests/security-headers.test.mjs` holds both policies in place.
 
 ## The service worker never mediates the /taskmanagement/ task frame
 
@@ -1429,10 +1430,10 @@ a modal that cannot be cancelled, closed from the backdrop, or dismissed with Es
 does not force a preset: **Start from scratch** remains the explicit skip and applies the
 bounded blank plan. Once a plan is applied, the modal closes through the shared modal cleanup.
 
-Settings > Setup is deliberately different. It is a small launcher for the same lazy-loaded
+Setup > Workspaces is deliberately different. It is a small launcher for the same lazy-loaded
 interface, but the reopened modal has Cancel because the workspace already exists and the
 owner is choosing to review it. Keeping one panel for both entry points prevents creation and
-Settings from drifting into two setup systems.
+Setup from drifting into two setup systems.
 
 The workspace work-type question uses a searchable catalog of more than forty common trades
 and business types. Those choices are presentation detail, not new server authorities: each
@@ -1590,6 +1591,30 @@ that is the page somebody opened in order to look at them.
 The two are told apart by `detail: true` on the context object `wbFmtVal` already receives, set
 by the record page and the record view modal. Not by a second formatter: the last time a surface
 grew its own copy of the value formatter, a User field printed the member's raw UUID.
+
+## Read-only mode is visible before a user presses a forbidden control
+
+Server and event-handler authorization remain the source of truth, but the rendered shell also
+applies one central read-only control state after each repaint. Mutable actions, form controls,
+file labels, and submit buttons associated through `form=` are disabled and marked consistently.
+This avoids presenting an action that can only fail while preserving the enforcement guard if a
+disabled attribute is removed or a call is made directly.
+
+## Terminal integration states do not keep background pollers alive
+
+RingCentral presence polling continues through transient transport errors, but it stops when the
+session has no token, the endpoint forbids access, or the integration endpoint reports that it is
+not configured. Those states require a login, permission, configuration, or deployment change;
+an interval cannot repair them and only creates repeated work. A future explicit reconnect can
+start a fresh poller through the same runtime.
+
+## Advisor hardening is forward-only and behavior-preserving
+
+Foreign-key indexes are added without changing constraints or customer rows. Service-only log
+tables keep RLS enabled with no browser policy so they fail closed; an advisor warning is safer
+than inventing a client policy for data the browser must never read. Reviewed authenticated
+security-definer routines likewise retain their grants and internal authorization instead of
+being broken solely to silence a generic advisor category.
 
 ### The extraction paid for the feature, again
 

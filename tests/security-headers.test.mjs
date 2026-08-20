@@ -35,12 +35,16 @@ test('Permissions-Policy disables camera/mic but KEEPS geolocation for the map',
   assert.match(pp, /geolocation=\(self\)/);
 });
 
-test('CSP ships in Report-Only until proven safe, not enforcing', () => {
+test('CSP keeps strict monitoring and enforces a compatible baseline', () => {
   const headers = headerMap();
-  // Deliberately Report-Only: the app embeds Supabase/Office iframes and loads
-  // OSM tiles, so an enforcing policy must be verified in a browser first.
   assert.ok(headers.has('Content-Security-Policy-Report-Only'), 'expected a Report-Only CSP');
-  assert.ok(!headers.has('Content-Security-Policy'), 'CSP should not enforce until the report-only pass is clean');
+  assert.ok(headers.has('Content-Security-Policy'), 'expected an enforcing CSP baseline');
+
+  const enforced = headers.get('Content-Security-Policy') || '';
+  assert.match(enforced, /frame-ancestors 'self'/, 'same-origin Tasks iframe must remain usable');
+  assert.match(enforced, /script-src 'self'[^;]*'wasm-unsafe-eval'/);
+  assert.match(enforced, /script-src 'self'[^;]*'unsafe-eval'/);
+  assert.ok(!/script-src[^;]*unsafe-inline/.test(enforced), 'inline scripts stay blocked');
 });
 
 test('CSP violations are reported to a real endpoint, not just the console', () => {
@@ -52,33 +56,33 @@ test('CSP violations are reported to a real endpoint, not just the console', () 
   assert.match(report, /csp-report/);
 });
 
-// Documents what the bundle scan found: promoting to a STRICT `script-src 'self'`
-// would break PDF viewing (pdf.js WebAssembly) and ZIP backups (jszip new Function).
-// An enforcing policy must therefore add 'wasm-unsafe-eval' (for pdf) and decide on
-// jszip's eval before flipping — see the deploy notes. This test is a reminder, not
-// a live assertion, so it can't silently rot into a false "safe to enforce".
-test('enforcing the CSP requires wasm/eval allowances (known blockers)', () => {
-  const csp = headerMap().get('Content-Security-Policy-Report-Only') || '';
-  // While still Report-Only, script-src stays strict so violations are actually reported.
-  assert.match(csp, /script-src 'self'(;|\s)/);
-  assert.ok(!/unsafe-eval/.test(csp), 'no eval allowances while report-only — we want the violations reported');
+test('the strict report-only canary still reports wasm/eval use', () => {
+  const monitored = headerMap().get('Content-Security-Policy-Report-Only') || '';
+  assert.match(monitored, /script-src 'self'(;|\s)/);
+  assert.ok(!/unsafe-eval/.test(monitored), 'the canary stays stricter than enforcement');
+  assert.match(monitored, /frame-ancestors 'none'/);
 });
 
-test('the CSP allows every origin the app actually uses', () => {
-  const csp = headerMap().get('Content-Security-Policy-Report-Only') || '';
+test('both CSP layers allow every origin the app actually uses', () => {
+  const policies = [
+    headerMap().get('Content-Security-Policy') || '',
+    headerMap().get('Content-Security-Policy-Report-Only') || '',
+  ];
   // script has NO unsafe-inline (the build emits no inline scripts) — the real win.
-  assert.match(csp, /script-src 'self'(;|\s)/, "script-src must be strict 'self'");
-  assert.ok(!/script-src[^;]*unsafe-inline/.test(csp), 'script-src must not allow unsafe-inline');
+  for (const csp of policies) {
+    assert.match(csp, /script-src 'self'(;|\s)/, "script-src must begin with 'self'");
+    assert.ok(!/script-src[^;]*unsafe-inline/.test(csp), 'script-src must not allow unsafe-inline');
   // Origins discovered in the source that must not be blocked:
-  for (const needle of [
-    'https://rqundirizvojpzhljtdn.supabase.co',        // REST + storage
-    'wss://rqundirizvojpzhljtdn.supabase.co',          // realtime
-    'https://api.pwnedpasswords.com',                  // breach check
-    'https://nominatim.openstreetmap.org',             // geocoding
-    'tile.openstreetmap.org',                          // map tiles
-    'https://fonts.gstatic.com',                       // web font files
-    'https://view.officeapps.live.com',                // office doc preview iframe
-  ]) {
-    assert.ok(csp.includes(needle), `CSP is missing a required origin: ${needle}`);
+    for (const needle of [
+      'https://rqundirizvojpzhljtdn.supabase.co',        // REST + storage
+      'wss://rqundirizvojpzhljtdn.supabase.co',          // realtime
+      'https://api.pwnedpasswords.com',                  // breach check
+      'https://nominatim.openstreetmap.org',             // geocoding
+      'tile.openstreetmap.org',                          // map tiles
+      'https://fonts.gstatic.com',                       // web font files
+      'https://view.officeapps.live.com',                // office doc preview iframe
+    ]) {
+      assert.ok(csp.includes(needle), `CSP is missing a required origin: ${needle}`);
+    }
   }
 });

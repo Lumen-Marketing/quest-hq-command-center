@@ -2,6 +2,15 @@
 
 Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-08-21 release hardening
+
+- Read-only sample sessions now receive visibly disabled mutation controls after every shell render, including controls submitted through an external `form` attribute. Existing click and submit authorization guards remain the enforcement backstop.
+- The RingCentral calls runtime is lazy-loaded outside the main entry bundle. Missing sessions and unavailable or forbidden integrations now render a terminal status and release their polling interval instead of leaving the board on an endless loading state.
+- Status, read-only, and role-preview notices occupy their own shell row. On narrow screens the notice row and settings tabs scroll or wrap independently rather than covering the active workspace.
+- Vercel now sends a compatible enforced Content Security Policy while retaining the stricter policy in report-only mode. Same-origin Tasks framing and the current PDF/ZIP tooling remain supported.
+- Production migration `20260820201554_harden_setup_function_and_foreign_keys` pins the setup-role helper's search path and adds indexes for all 21 foreign keys identified by the performance advisor. Post-migration catalog checks found the helper setting and every expected index, and company/workspace record counts were unchanged.
+- The remaining Supabase advisor notices are documented exceptions or owner-controlled settings: service-only log tables intentionally have RLS with no browser policy, authenticated security-definer routines retain their reviewed server-side authorization, new indexes remain "unused" until real traffic reaches them, and leaked-password protection must be enabled in the Supabase dashboard.
+
 ## Production
 
 - Product: Questbase, formerly Quest HQ Command Center.
@@ -55,7 +64,7 @@ Repository migration filenames and Supabase provider ledger versions can differ 
 
 The market customer and outer security boundary is a company. Each company owns configurable operational workspaces. Owners, Admins, and Developers inherit access to active workspaces; workers and other members require explicit active workspace memberships and can have a separate role in each workspace.
 
-After an owner creates a company, Questbase creates its default Main workspace and opens that workspace's guided Setup as a required modal. The creation modal has no Cancel, X, backdrop exit, or Escape exit; the owner completes it by applying a setup or using Start from scratch. The owner can answer four short questions, search across more than forty work types, choose a ready-made setup, and review the selected workspace's apps, pipeline stages, and non-elevated role names before applying. Every later operational workspace is created blank and opens the same required survey for itself. Settings > Setup is now a launcher that reopens the same modal with Cancel available. Drafts and reset history follow each workspace across devices. Applying is one retry-safe database operation scoped to the selected workspace. Settings can reset that workspace's questionnaire without deleting or undoing its applied configuration, the company, members, sibling workspaces, customers, jobs, tasks, files, or messages.
+After an owner creates a company, Questbase creates its default Main workspace and opens that workspace's guided Setup as a required modal. The creation modal has no Cancel, X, backdrop exit, or Escape exit; the owner completes it by applying a setup or using Start from scratch. The owner can answer four short questions, search across more than forty work types, choose a ready-made setup, and review the selected workspace's apps, pipeline stages, and non-elevated role names before applying. Every later operational workspace is created blank and opens the same required survey for itself. Setup > Workspaces is the launcher that reopens the same modal with Cancel available. Drafts and reset history follow each workspace across devices. Applying is one retry-safe database operation scoped to the selected workspace. Setup can reset that workspace's questionnaire without deleting or undoing its applied configuration, the company, members, sibling workspaces, customers, jobs, tasks, files, or messages.
 
 The teammate flow now follows one bounded path:
 
@@ -74,7 +83,8 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 ## Feature state
 
 - Company and operational-workspace separation is production state.
-- Guided workspace setup is implemented as one lazy-loaded modal with Guide me, ready-made, a searchable work-type catalog, and a direct Start from scratch path. Company and operational-workspace creation use the non-dismissible form; Settings > Setup launches the cancellable form. Its draft is stored per operational workspace and reset is explicitly non-destructive.
+- Guided workspace setup is implemented as one lazy-loaded modal with Guide me, ready-made, a searchable work-type catalog, and a direct Start from scratch path. Company and operational-workspace creation use the non-dismissible form; Setup > Workspaces launches the cancellable form. Its draft is stored per operational workspace and reset is explicitly non-destructive.
+- The former catch-all Settings screen is now three real surfaces over the same data paths: Setup (company profile/brand, workspaces, modules, pipelines, handoffs, integrations, launch check), People & Access (members, roles, access, invites), and Admin (billing, data and recovery, audit history, diagnostics, plus developer-only platform tools). Legacy Settings URLs redirect to the matching destination.
 - EOD reports are a native Operations module backed by `public.eod_reports`, gated by the new `eod.view` / `eod.manage` permissions. The page and the admin-only platform master panel are both lazily loaded, which is what kept the entry bundle under its ceiling.
 - Workspaces independently activate entitled plugins and preserve workspace identity through CRM, pipeline, underwriting, job, file, proposal, and task records.
 - Operational-workspace defaults and uploaded icons now persist in Supabase and survive a reload; rejected writes no longer appear successful in the browser.

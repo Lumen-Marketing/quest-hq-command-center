@@ -3,12 +3,13 @@
 // A factory, because every store, permission check and formatter it reads belongs to main.js.
 
 import * as memberDirectory from './member-directory.js';
+import { PEOPLE_ACCESS_TABS, normalizeSettingsSurfaceTab } from '../settings/navigation-model.js';
 
 export function createUsersPage(ctx) {
   const {
     CONFIG, appHref, can, compactTabs, companyAccessUsers, companyInvites,
     companyPath, companyRoles, contractRows, emptyState, h, isProtectedOwner, metricCard,
-    renderAvatar, renderInviteRow, renderJoinRequestRow, renderUserAccessRow, roleForCompany, state,
+    renderAvatar, renderInviteRow, renderJoinRequestRow, renderRolesSettings, renderUserAccessRow, roleForCompany, state,
     titleCase, userDisplayMeta, userDisplayName, workspaceAccessSummaryForUser, workspaceHeader,
   } = ctx;
 
@@ -116,25 +117,22 @@ export function createUsersPage(ctx) {
 
   function renderUsersPage(route, companyId) {
     const users = companyAccessUsers(companyId);
-    const tab = ['members', 'access', 'invites'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
+    const tab = normalizeSettingsSurfaceTab('people', route.params.get('tab'));
     const pendingRequests = state.joinRequests.filter((item) => item.company_id === companyId && item.status === 'pending');
     const canManageUsers = can('users.manage', companyId);
     const activeUsers = users.filter((user) => user.status === 'active');
     const inactiveUsers = users.filter((user) => user.status !== 'active');
     return `
-      ${workspaceHeader('Users', 'Company members, roles, workers, and access context.', `
+      ${workspaceHeader('People & Access', 'Members, roles, invitations, and company access in one place.', `
         <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite user</button>
-        <a class="btn" href="${appHref(companyPath('settings', { tab: 'roles' }, companyId))}" data-router><i class="ti ti-shield-lock"></i>Roles</a>
-        <a class="btn" href="${appHref(companyPath('settings', { tab: 'access' }, companyId))}" data-router><i class="ti ti-settings"></i>Access settings</a>
       `)}
-      ${compactTabs('Users sections', [
-        [companyPath('users', { tab: 'members' }, companyId), 'Members', tab === 'members'],
-        [companyPath('users', { tab: 'access' }, companyId), 'Access', tab === 'access'],
-        // Counted in the label: an invitation nobody has accepted and a request nobody has
-        // answered are both things waiting on someone here, and a tab you have to open to
-        // discover that is a tab you forget to open.
-        [companyPath('users', { tab: 'invites' }, companyId), `Invites${companyInvites(companyId).length + pendingRequests.length ? ` (${companyInvites(companyId).length + pendingRequests.length})` : ''}`, tab === 'invites'],
-      ])}
+      ${compactTabs('People and access sections', PEOPLE_ACCESS_TABS.map(({ id, label }) => [
+        companyPath('users', { tab: id }, companyId),
+        id === 'invites' && companyInvites(companyId).length + pendingRequests.length
+          ? `${label} (${companyInvites(companyId).length + pendingRequests.length})`
+          : label,
+        tab === id,
+      ]))}
       ${tab === 'members' ? `
         <section class="metric-grid operations-metrics">
           ${metricCard('Active users', activeUsers.length)}
@@ -154,6 +152,10 @@ export function createUsersPage(ctx) {
               </div>
             </article>
           `).join('') || emptyState('No users assigned to this company yet.')}
+        </section>
+      ` : tab === 'roles' ? `
+        <section class="dashboard-grid compact-settings-grid people-roles-surface">
+          ${renderRolesSettings(companyId)}
         </section>
       ` : tab === 'invites' ? `
         <!-- Getting someone in: an invitation goes out, or a request comes in. Two halves of

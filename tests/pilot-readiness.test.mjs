@@ -61,8 +61,8 @@ test('the owner dashboard renders an actionable checklist from existing company 
   assert.match(source, /companyTasks\(companyId\)\.length/);
   assert.match(source, /function renderPilotLaunchChecklist\(companyId\)/);
   assert.match(source, /renderPilotLaunchChecklist\(companyId\)/);
-  assert.match(source, /companyPath\('settings', \{ tab: 'company' \}, companyId\)/);
-  assert.match(source, /companyPath\('settings', \{ tab: 'plugins' \}, companyId\)/);
+  assert.match(source, /companyPath\('setup', \{ tab: 'workspaces' \}, companyId\)/);
+  assert.match(source, /companyPath\('setup', \{ tab: 'modules' \}, companyId\)/);
   assert.match(source, /companyPath\('users', \{\}, companyId\)/);
   assert.match(source, /companyPath\('contacts', \{\}, companyId\)/);
   assert.match(source, /companyPath\('tasks', \{\}, companyId\)/);

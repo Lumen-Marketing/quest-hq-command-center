@@ -17,7 +17,8 @@ The app uses:
 - A lazy-loaded company-search index maps only permission-allowed Contacts, Quotes, Jobs, Tasks, Files, and Proposals into workspace-aware command-palette routes.
 - A lazy-loaded local form-draft engine protects unsaved Contact, Job, Quote, and Underwriter input without adding those recovery copies to the primary browser bundle.
 - A lazy-loaded record-history presenter reads the workspace-scoped `record_history` ledger only when a Contact, Quote, or Job history dialog is opened.
-- A lazy-loaded workspace-setup modal turns owner answers or a selected blueprint into an editable app/pipeline/role plan for exactly one selected operational workspace; the pure planning model, broad searchable work-type catalog, Supabase controller, and Settings launcher remain separate.
+- A lazy-loaded workspace-setup modal turns owner answers or a selected blueprint into an editable app/pipeline/role plan for exactly one selected operational workspace; the pure planning model, broad searchable work-type catalog, Supabase controller, and Setup > Workspaces launcher remain separate.
+- Setup and Admin page composition is lazy-loaded from `src/settings/settings-surfaces.js`; it reuses the existing company, workspace, plugin, role, billing, backup, recycle, audit, and diagnostics renderers rather than creating parallel stores or writes.
 - A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
 
 ## Request and data flow
@@ -28,7 +29,7 @@ The route reconciliation step canonicalizes stale or inaccessible company/worksp
 
 The tenancy hierarchy is `profile -> company membership -> company -> operational workspace -> workspace membership/role/plugins -> workspace-owned records`. A company is the customer, billing, and top-level security tenant. Operational workspaces are configurable child environments inside that company; they are not separate customer accounts.
 
-Company-owner onboarding follows `company creation -> guaranteed blank default Main workspace -> required Setup modal for Main -> answers or blueprint -> editable review -> apply_workspace_setup`. Every later operational-workspace creation opens the same required modal for that new workspace. The required version has no Cancel, close control, backdrop exit, or Escape exit; applying a plan or using Start from scratch is its valid completion path. Settings > Setup is a launcher for the same modal in a cancellable mode. Its work-type question searches a broad catalog that maps back to the existing bounded server plan families. Drafts, applied plans, reset history, and an optimistic mutation revision are keyed by `workspace_id`; apply changes only the selected workspace and a retry reuses the server-recorded role ids. Reset clears that workspace's questions and draft only, deliberately preserving its applied configuration, every tenant/business record, and every sibling workspace.
+Company-owner onboarding follows `company creation -> guaranteed blank default Main workspace -> required Setup modal for Main -> answers or blueprint -> editable review -> apply_workspace_setup`. Every later operational-workspace creation opens the same required modal for that new workspace. The required version has no Cancel, close control, backdrop exit, or Escape exit; applying a plan or using Start from scratch is its valid completion path. Setup > Workspaces is a launcher for the same modal in a cancellable mode. Its work-type question searches a broad catalog that maps back to the existing bounded server plan families. Drafts, applied plans, reset history, and an optimistic mutation revision are keyed by `workspace_id`; apply changes only the selected workspace and a retry reuses the server-recorded role ids. Reset clears that workspace's questions and draft only, deliberately preserving its applied configuration, every tenant/business record, and every sibling workspace.
 
 Public flows such as client portals, public forms, and proposals go through token-aware API handlers. Server handlers use deployment-only credentials and must validate method, input, tenant scope, and authorization before accessing Supabase.
 
@@ -62,7 +63,8 @@ The SPA supports:
 | Imported/persisted color validation | [src/security/color.js](../src/security/color.js) |
 | First-run launch checklist | [src/launch/pilot-readiness.js](../src/launch/pilot-readiness.js) |
 | Workspace setup planner and blueprints | [src/onboarding/company-setup-model.js](../src/onboarding/company-setup-model.js) |
-| Workspace setup Settings UI/controller | [src/onboarding/company-setup-panel.js](../src/onboarding/company-setup-panel.js) |
+| Workspace setup UI/controller | [src/onboarding/company-setup-panel.js](../src/onboarding/company-setup-panel.js) |
+| Setup/Admin route composition and information architecture | [src/settings/settings-surfaces.js](../src/settings/settings-surfaces.js), [src/settings/navigation-model.js](../src/settings/navigation-model.js) |
 | In-product support reporting | [src/support/reporting.js](../src/support/reporting.js) |
 | Grounded Help Center catalog and filtering | [src/assistant/help-index.js](../src/assistant/help-index.js) |
 | Lazy Help Center page and responsive styles | [src/help](../src/help) |

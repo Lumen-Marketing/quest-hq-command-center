@@ -7,12 +7,13 @@
 // Pure by construction — every shell helper arrives through `ctx`, so this module never
 // imports from main.js and cannot form a cycle.
 
+import { createCompanyDirectoryView } from './company-directory-view.js';
+
 export function createPlatformPanel(ctx) {
   const {
     availableWorkspacePlugins,
     companyColor,
     companyPluginStatus,
-    companyDirectoryEmptyState,
     companyDirectoryFilters,
     companyName,
     emptyState,
@@ -25,9 +26,7 @@ export function createPlatformPanel(ctx) {
     platformCompanyRows,
     platformMembersForCompany,
     renderAvatar,
-    renderCompanyDirectoryPager,
     renderPlatformBackupCopyRow,
-    renderCompanyDirectoryToolbar,
     shortUserId,
     state,
     subscriptionLabelForStatus,
@@ -35,6 +34,9 @@ export function createPlatformPanel(ctx) {
     workspaceIconSelect,
     workspacePresetSelect,
   } = ctx;
+  const {
+    companyDirectoryEmptyState, renderCompanyDirectoryPager, renderCompanyDirectoryToolbar,
+  } = createCompanyDirectoryView({ emptyState, h });
 
   function renderPlatformMasterPanel(currentCompanyId) {
     const companies = platformCompanyRows();

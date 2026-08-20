@@ -25,22 +25,22 @@ export function createPluginsPanel(ctx) {
       const canAddWorkspace = canManageOperationalWorkspaces(companyId);
       return `<article class="panel span-3 plugins-settings-panel">
         <div class="section-head">
-          <div><h2>Plugins</h2><p>Plugins are switched on inside a workspace, and this company has none yet.</p></div>
+          <div><h2>Modules</h2><p>Modules are switched on inside a workspace, and this company has none yet.</p></div>
           ${canAddWorkspace ? '<button class="btn btn-primary" type="button" data-action="open-create-operational-workspace-modal"><i class="ti ti-plus"></i>Create a workspace</button>' : ''}
         </div>
-        ${emptyState(canAddWorkspace ? 'Create one and the plugins below can be switched on.' : 'Ask an owner to create one.')}
+        ${emptyState(canAddWorkspace ? 'Create one and the modules below can be switched on.' : 'Ask an owner to create one.')}
       </article>`;
     }
     return `
       <article class="panel span-3 plugins-settings-panel">
         <div class="section-head">
-          <div><h2>${h(workspace.name)} plugins</h2><p>${installedCount} active plugin${installedCount === 1 ? '' : 's'} in this workspace. Company entitlements set what can be activated here.</p></div>
+          <div><h2>${h(workspace.name)} modules</h2><p>${installedCount} active module${installedCount === 1 ? '' : 's'} in this workspace. Company entitlements set what can be activated here.</p></div>
         </div>
         <div class="plugin-preset-row">
           ${Object.entries(WORKSPACE_PLUGIN_PRESETS).map(([presetCode, pluginIds]) => `
             <button class="btn" type="button" data-action="apply-workspace-plugin-preset" data-workspace-id="${h(workspaceId)}" data-preset-code="${h(presetCode)}" ${canManagePlugins ? '' : 'disabled'}>
               <i class="ti ti-layout-grid-add"></i>${h(WORKSPACE_PLUGIN_PRESET_LABELS[presetCode] || titleCase(presetCode))}
-              <small>${pluginIds.length} plugins</small>
+              <small>${pluginIds.length} modules</small>
             </button>
           `).join('')}
         </div>

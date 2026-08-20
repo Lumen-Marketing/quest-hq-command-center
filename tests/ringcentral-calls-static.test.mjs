@@ -3,11 +3,14 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
-// The calls page and its home widget are fetched on demand now; same surface, read as one.
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+// The calls page, widget and runtime are fetched on demand now; same surface, read as one.
+const entryMain = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const callsRuntime = readFileSync(new URL('../src/ops/calls-runtime.js', import.meta.url), 'utf8');
+const main = entryMain
   + readFileSync(new URL('../src/ops/calls-page.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/ops/calls-widget.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8')
+  + callsRuntime;
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('the calls plugin is registered and maps to the calls module', () => {
@@ -32,7 +35,7 @@ test('the calls module appears in the Operations navigation group', () => {
   // stakeholder-approved IA by sidebar-navigation-static.test.mjs, and the
   // module registry already files Calls under Operations.
   assert.match(main, /\{ label: 'Operations', ids: \[[^\]]*'calls'\] \}/);
-  assert.match(main, /\{ label: 'Review', ids: \['analytics', 'users', 'calendar'\] \}/);
+  assert.match(main, /\{ label: 'Review', ids: \['calendar'\] \}/);
 });
 
 test('team.view resolves to the calls plugin in the browser as well as the database', () => {
@@ -50,6 +53,13 @@ test('the page renderer is synchronous, matching every other page renderer', () 
   assert.match(main, /^function renderCallsPage\(route, companyId\) \{/m);
 });
 
+test('the RingCentral runtime is extracted from the application entry chunk', () => {
+  assert.match(entryMain, /import\('\.\/ops\/calls-runtime\.js'\)/);
+  assert.doesNotMatch(entryMain, /ringcentral_conversation_stats/);
+  assert.doesNotMatch(entryMain, /function loadCallsPresence/);
+  assert.match(callsRuntime, /ringcentral_conversation_stats/);
+});
+
 test('aggregates come from the RPC rather than being counted in the browser', () => {
   assert.match(main, /ringcentral_conversation_stats/);
   assert.doesNotMatch(main, /from\('ringcentral_calls'\)/);
@@ -58,7 +68,7 @@ test('aggregates come from the RPC rather than being counted in the browser', ()
 test('the live board polls the presence endpoint and can stop itself', () => {
   assert.match(main, /\/api\/ringcentral-presence/);
   assert.match(main, /visibilitychange/);
-  assert.match(main, /clearInterval\(callsPresenceTimer\)/);
+  assert.match(main, /clearIntervalImpl\(callsPresenceTimer\)/);
 });
 
 test('polling stops when the user navigates away from both surfaces', () => {

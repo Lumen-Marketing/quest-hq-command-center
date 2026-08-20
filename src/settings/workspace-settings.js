@@ -3,10 +3,10 @@
 
 export function createWorkspaceSettings(ctx) {
   const {
-    activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, renderAppearanceControls, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state, isCompanyOwner,
+    activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state, isCompanyOwner,
   } = ctx;
 
-  function renderWorkspaceSettings(companyId) {
+  function settingsContext(companyId) {
     const company = companyById(companyId) || normalizeCompany({ id: companyId });
     const iconDraft = workspaceIconDraft(companyId);
     const canManage = canManageOperationalWorkspaces(companyId);
@@ -21,9 +21,13 @@ export function createWorkspaceSettings(ctx) {
       : connectionMode === 'loading'
         ? 'Questbase is checking the workspace data connection.'
         : 'This company account is using local fallback data. Changes may not persist for the team.';
+    return { company, iconDraft, canManage, workspace, companyWorkspaces, connectionMode, connectionLabel, connectionDescription };
+  }
+
+  function renderCompanyProfileSettings(companyId) {
+    const { company, iconDraft, canManage } = settingsContext(companyId);
     return `
-      <div class="settings-col">
-        <article class="panel">
+        <article class="panel span-2 settings-company-profile">
           <div class="section-head"><div><h2>Company account</h2><p>The customer, billing, and security boundary above every operational workspace.</p></div></div>
           <form class="workspace-settings-form" data-workspace-settings-form>
             <input type="hidden" name="company_id" value="${h(companyId)}" />
@@ -48,6 +52,20 @@ export function createWorkspaceSettings(ctx) {
             </div>
           </form>
         </article>
+        <article class="panel settings-scope-note">
+          <div class="section-head"><div><h2>Company scope</h2><p>Shared company details are used across every workspace.</p></div></div>
+          ${contractRows([
+            ['Company', companyName(companyId)],
+            ['Company ID', companyId],
+            ['Scope', 'All workspaces'],
+          ])}
+        </article>
+    `;
+  }
+
+  function renderWorkspaceDirectorySettings(companyId) {
+    const { companyWorkspaces, canManage, workspace } = settingsContext(companyId);
+    return `
         <article class="panel">
           <div class="section-head">
             <div><h2>Workspace directory</h2><p>${companyWorkspaces.length} operational workspace${companyWorkspaces.length === 1 ? '' : 's'} under this company account. Click one to configure it.</p></div>
@@ -78,14 +96,26 @@ export function createWorkspaceSettings(ctx) {
             }).join('') || emptyState('No workspaces have been created.')}
           </div>
         </article>
-        <article class="panel">
-          <div class="section-head"><div><h2>Appearance</h2><p>Theme, background, and card style. Your choice follows you to any device you sign in on.</p></div></div>
-          <div class="theme-toggle-row">${renderAppearanceControls()}</div>
+        <article class="panel settings-workspace-identity">
+          <div class="section-head">
+            <div><h2>Selected workspace</h2><p>Workspace name, icon, membership and setup stay scoped to this workspace.</p></div>
+          </div>
+          ${workspace ? `
+            <div class="workspace-icon-current">
+              ${workspaceIconMarkup(workspace, 'large')}
+              <div><strong>${h(workspace.name)}</strong><small>${h(workspaceRoleLabel(workspace.id))} · ${h(String(workspaceMemberCount(workspace.id)))} assigned</small></div>
+              <button class="btn" type="button" data-action="open-edit-operational-workspace-modal" data-workspace-id="${h(workspace.id)}" ${canManage ? '' : 'disabled'}><i class="ti ti-adjustments"></i>Edit workspace</button>
+            </div>
+          ` : emptyState('Select a workspace to manage its identity.')}
         </article>
-      </div>
-      <div class="settings-col">
+    `;
+  }
+
+  function renderDiagnosticsSettings(companyId) {
+    const { workspace, connectionMode, connectionLabel, connectionDescription } = settingsContext(companyId);
+    return `
         <article class="panel settings-workspace-data-card">
-          <div class="section-head"><div><h2>Workspace data</h2><p>Pipeline records, stages, members, and plugins are isolated here.</p></div></div>
+          <div class="section-head"><div><h2>Workspace diagnostics</h2><p>Identifiers and record counts for support and troubleshooting.</p></div></div>
           ${contractRows([
             ['Company ID', companyId],
             ['Workspace ID', workspace?.id || 'Not assigned'],
@@ -95,7 +125,7 @@ export function createWorkspaceSettings(ctx) {
           ])}
         </article>
         <article class="panel settings-connection-card">
-          <div class="section-head"><div><h2>Data connection</h2><p>Admin-only health check for where workspace changes are being saved.</p></div></div>
+          <div class="section-head"><div><h2>Data connection</h2><p>Health check for where workspace changes are being saved.</p></div></div>
           <div class="settings-connection-status">
             <span class="sync-pill ${h(connectionMode)}" data-sync-state><i class="ti ti-database"></i>${h(connectionLabel)}</span>
             <p>${h(connectionDescription)}</p>
@@ -107,9 +137,13 @@ export function createWorkspaceSettings(ctx) {
             ['Storage mode', connectionMode === 'live' ? 'Quest cloud database' : connectionMode === 'loading' ? 'Checking' : 'This browser only'],
           ])}
         </article>
-      </div>
     `;
   }
 
-  return { renderWorkspaceSettings };
+  // Kept for old imports while bookmarks are redirected to the new surfaces.
+  function renderWorkspaceSettings(companyId) {
+    return `${renderCompanyProfileSettings(companyId)}${renderWorkspaceDirectorySettings(companyId)}${renderDiagnosticsSettings(companyId)}`;
+  }
+
+  return { renderWorkspaceSettings, renderCompanyProfileSettings, renderWorkspaceDirectorySettings, renderDiagnosticsSettings };
 }
