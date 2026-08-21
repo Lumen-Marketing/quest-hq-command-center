@@ -754,29 +754,14 @@
   font-weight: 700;
 }
 
-.company-setup-loading {
-  display: grid;
-  place-items: center;
-  gap: 6px;
-  min-height: 230px;
-  text-align: center;
-}
-
-.company-setup-spinner,
 .company-setup-button-spinner {
   display: inline-block;
-  width: 28px;
-  height: 28px;
-  border: 3px solid color-mix(in srgb, var(--setup-accent) 25%, transparent);
+  width: 15px;
+  height: 15px;
+  border: 2px solid color-mix(in srgb, var(--setup-accent) 25%, transparent);
   border-top-color: var(--setup-accent);
   border-radius: 50%;
   animation: company-setup-spin 700ms linear infinite;
-}
-
-.company-setup-button-spinner {
-  width: 15px;
-  height: 15px;
-  border-width: 2px;
 }
 
 .company-setup-shell .danger-quiet {

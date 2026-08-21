@@ -29055,82 +29055,7 @@ html[data-card-style="glass"] .message-context-rail {
   .deck-toggle i { transition: none; }
 }
 
-/* Loading indicator -------------------------------------------------------- */
-/* Echoes the Questbase mark — two arc pairs and a dot — rather than a generic spinner.
-   The rings turn at different speeds and in opposite directions, which reads as something
-   working rather than something merely spinning. */
-.quest-loader {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 34px 16px;
-}
-
-.quest-loader-mark {
-  width: 52px;
-  height: 52px;
-  fill: none;
-  stroke-linecap: round;
-  stroke-width: 4;
-  overflow: visible;
-}
-
-.quest-loader-outer,
-.quest-loader-inner {
-  transform-origin: 24px 24px;
-}
-
-.quest-loader-outer {
-  stroke: var(--orange);
-  animation: quest-loader-spin 1.6s linear infinite;
-}
-
-/* Counter-rotating, and slower: two rings turning the same way just look like one ring. */
-.quest-loader-inner {
-  stroke: var(--ink);
-  opacity: .55;
-  animation: quest-loader-spin 2.4s linear infinite reverse;
-}
-
-.quest-loader-dot {
-  fill: var(--orange);
-  stroke: none;
-  transform-origin: 24px 24px;
-  animation: quest-loader-pulse 1.6s ease-in-out infinite;
-}
-
-.quest-loader-text {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: .01em;
-}
-
-@keyframes quest-loader-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes quest-loader-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: .35; transform: scale(.82); }
-}
-
-/* Continuous motion is a genuine problem for vestibular disorders, and a loading screen
-   is unavoidable — you cannot look away from it. Hold the shape still and fade instead. */
-@media (prefers-reduced-motion: reduce) {
-  .quest-loader-outer,
-  .quest-loader-inner,
-  .quest-loader-dot {
-    animation: quest-loader-fade 1.8s ease-in-out infinite;
-  }
-  @keyframes quest-loader-fade {
-    0%, 100% { opacity: 1; }
-    50% { opacity: .45; }
-  }
-}
-
-/* The initial company fetch keeps the real application silhouette on screen. */
+/* Blocking waits preserve the shape of the interface instead of showing a spinner. */
 .workspace-skeleton-layout {
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
@@ -29186,7 +29111,7 @@ html[data-card-style="glass"] .message-context-rail {
   justify-content: flex-end;
   gap: 12px;
   padding: 12px 22px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
 
@@ -29194,7 +29119,7 @@ html[data-card-style="glass"] .message-context-rail {
 .workspace-skeleton-content { min-width: 0; padding: 34px 40px; }
 .workspace-skeleton-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 28px 0 18px; }
 .workspace-skeleton-panels { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 18px; }
-.workspace-skeleton-panel { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.workspace-skeleton-panel { padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
 .workspace-skeleton-panel .is-row + .is-row,
 .workspace-skeleton-panel .is-card + .is-card { margin-top: 12px; }
 
@@ -29229,6 +29154,70 @@ html[data-card-style="glass"] .message-context-rail {
 .workspace-skeleton-block.is-row { height: 54px; }
 .workspace-skeleton-block.is-card { height: 114px; }
 
+.quest-content-skeleton {
+  width: 100%;
+  min-height: 160px;
+  padding: 14px 0;
+}
+
+.quest-content-skeleton-frame {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.quest-content-skeleton-eyebrow { width: 92px; height: 10px; }
+.quest-content-skeleton-title { width: min(330px, 66%); height: 28px; }
+.quest-content-skeleton-grid { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 10px 0 2px; }
+.quest-content-skeleton-stat { height: 104px; }
+.quest-content-skeleton-panels { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.quest-content-skeleton-panel { padding: 18px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); }
+.quest-content-skeleton-side { display: none; }
+.quest-content-skeleton-panel-title { width: 34%; height: 17px; margin-bottom: 20px; }
+.quest-content-skeleton-row { height: 48px; }
+.quest-content-skeleton-row + .quest-content-skeleton-row,
+.quest-content-skeleton-card + .quest-content-skeleton-card { margin-top: 10px; }
+.quest-content-skeleton-card { height: 92px; }
+
+/* A route owns the whole work surface, so its placeholder can describe the full page. */
+.work-surface > .quest-content-skeleton {
+  min-height: min(520px, 58vh);
+  padding: clamp(20px, 3vw, 38px);
+}
+
+.work-surface > .quest-content-skeleton .quest-content-skeleton-grid { display: grid; }
+.work-surface > .quest-content-skeleton .quest-content-skeleton-panels { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); }
+.work-surface > .quest-content-skeleton .quest-content-skeleton-side { display: block; }
+
+/* Dialogs and embedded widgets need the same visual language at a smaller scale. */
+.modal-body .quest-content-skeleton,
+.wb-modal-body .quest-content-skeleton,
+.msgdock-panel .quest-content-skeleton,
+.dashboard-widget-modal .quest-content-skeleton,
+.company-setup-shell .quest-content-skeleton {
+  min-height: 160px;
+  padding: 14px 0;
+}
+
+.modal-body .quest-content-skeleton-grid,
+.modal-body .quest-content-skeleton-side,
+.wb-modal-body .quest-content-skeleton-grid,
+.wb-modal-body .quest-content-skeleton-side,
+.msgdock-panel .quest-content-skeleton-grid,
+.msgdock-panel .quest-content-skeleton-side,
+.dashboard-widget-modal .quest-content-skeleton-grid,
+.dashboard-widget-modal .quest-content-skeleton-side,
+.company-setup-shell .quest-content-skeleton-grid,
+.company-setup-shell .quest-content-skeleton-side { display: none; }
+
+.modal-body .quest-content-skeleton-panels,
+.wb-modal-body .quest-content-skeleton-panels,
+.msgdock-panel .quest-content-skeleton-panels,
+.dashboard-widget-modal .quest-content-skeleton-panels,
+.company-setup-shell .quest-content-skeleton-panels { grid-template-columns: 1fr; }
+
 @keyframes workspace-skeleton-shimmer {
   to { transform: translateX(100%); }
 }
@@ -29242,6 +29231,10 @@ html[data-card-style="glass"] .message-context-rail {
   .workspace-skeleton-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-skeleton-panels { grid-template-columns: 1fr; }
   .workspace-skeleton-block.is-search { width: min(100%, 420px); }
+  .quest-content-skeleton { padding: 20px 16px; }
+  .quest-content-skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quest-content-skeleton-panels,
+  .work-surface > .quest-content-skeleton .quest-content-skeleton-panels { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {
@@ -29249,6 +29242,9 @@ html[data-card-style="glass"] .message-context-rail {
   .workspace-skeleton-actions .is-action:last-of-type { display: none; }
   .workspace-skeleton-stat-grid { grid-template-columns: 1fr; }
   .workspace-skeleton-block.is-stat { min-height: 88px; }
+  .quest-content-skeleton-grid { grid-template-columns: 1fr; }
+  .quest-content-skeleton-side,
+  .work-surface > .quest-content-skeleton .quest-content-skeleton-side { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

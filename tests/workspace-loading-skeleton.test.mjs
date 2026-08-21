@@ -44,3 +44,19 @@ test('the workspace skeleton is responsive and stops shimmering for reduced moti
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.workspace-skeleton-rail/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.workspace-skeleton-block/);
 });
+
+test('content loading uses a reusable skeleton rather than a centered spinner', () => {
+  assert.ok(loadingModule?.renderContentSkeleton, 'content skeleton renderer must exist');
+
+  const markup = loadingModule.renderContentSkeleton({
+    statusText: '<b>Loading clock</b>',
+  });
+
+  assert.match(markup, /class="quest-content-skeleton"/);
+  assert.match(markup, /class="quest-content-skeleton-grid"/);
+  assert.match(markup, /role="status"/);
+  assert.match(markup, /aria-busy="true"/);
+  assert.match(markup, /&lt;b&gt;Loading clock&lt;\/b&gt;/);
+  assert.ok((markup.match(/workspace-skeleton-block/g) || []).length >= 10);
+  assert.doesNotMatch(markup, /<svg|quest-loader/);
+});

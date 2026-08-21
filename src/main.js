@@ -73,7 +73,7 @@ import {
   canonicalSettingsDestination, renderSettingsSurfaceLoadError, settingsSurfaceTabs,
 } from './settings/navigation-model.js';
 import { applyReadOnlyControlState } from './ui/read-only-controls.js';
-import { renderWorkspaceSkeleton } from './ui/workspace-loading.js';
+import { renderContentSkeleton, renderWorkspaceSkeleton } from './ui/workspace-loading.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -44103,31 +44103,10 @@ function localDateTimeToIso(value) {
   return date.toISOString();
 }
 
-// A loading state that looks like this product rather than like a generic spinner.
-//
-// The Questbase mark is three arcs and a dot arranged as a Q, which is already the shape
-// of a loader — so the indicator echoes that geometry instead of borrowing gears from
-// somewhere else. The arcs counter-rotate at different speeds and the dot pulses, which
-// reads as machinery working without pretending to be a machine.
-//
-// Drawn as SVG rather than animating the logo PNG: a raster cannot have its parts moved
-// independently, and this way the whole thing is a few hundred bytes and stays crisp.
+// Compatibility entry point for every lazy route, panel, widget, and modal. Keeping this
+// helper centralized means older call sites also receive the standard content skeleton.
 function questLoader(text) {
-  return `
-    <div class="quest-loader" role="status" aria-live="polite">
-      <svg class="quest-loader-mark" viewBox="0 0 48 48" aria-hidden="true">
-        <g class="quest-loader-outer">
-          <path d="M24 6a18 18 0 0 1 15.6 9" />
-          <path d="M39.6 33A18 18 0 0 1 24 42" />
-        </g>
-        <g class="quest-loader-inner">
-          <path d="M24 13a11 11 0 0 0-9.5 5.5" />
-          <path d="M14.5 29.5A11 11 0 0 0 24 35" />
-        </g>
-        <circle class="quest-loader-dot" cx="33" cy="33" r="3.5" />
-      </svg>
-      <span class="quest-loader-text">${h(text)}</span>
-    </div>`;
+  return renderContentSkeleton({ statusText: text });
 }
 
 function emptyState(text) {

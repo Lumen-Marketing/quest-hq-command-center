@@ -7,6 +7,37 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+export function renderContentSkeleton({ statusText = 'Loading...' } = {}) {
+  return `
+    <div class="quest-content-skeleton" role="status" aria-live="polite" aria-busy="true">
+      <span class="sr-only">${escapeHtml(statusText)}</span>
+      <div class="quest-content-skeleton-frame" aria-hidden="true">
+        <div class="workspace-skeleton-block quest-content-skeleton-eyebrow"></div>
+        <div class="workspace-skeleton-block quest-content-skeleton-title"></div>
+        <div class="quest-content-skeleton-grid">
+          <div class="workspace-skeleton-block quest-content-skeleton-stat"></div>
+          <div class="workspace-skeleton-block quest-content-skeleton-stat"></div>
+          <div class="workspace-skeleton-block quest-content-skeleton-stat"></div>
+        </div>
+        <div class="quest-content-skeleton-panels">
+          <div class="quest-content-skeleton-panel">
+            <div class="workspace-skeleton-block quest-content-skeleton-panel-title"></div>
+            <div class="workspace-skeleton-block quest-content-skeleton-row"></div>
+            <div class="workspace-skeleton-block quest-content-skeleton-row"></div>
+            <div class="workspace-skeleton-block quest-content-skeleton-row"></div>
+            <div class="workspace-skeleton-block quest-content-skeleton-row"></div>
+          </div>
+          <div class="quest-content-skeleton-panel quest-content-skeleton-side">
+            <div class="workspace-skeleton-block quest-content-skeleton-panel-title"></div>
+            <div class="workspace-skeleton-block quest-content-skeleton-card"></div>
+            <div class="workspace-skeleton-block quest-content-skeleton-card"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export function renderWorkspaceSkeleton({
   brandMarkup = '',
   statusText = 'Loading workspace data...',

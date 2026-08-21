@@ -4,8 +4,9 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const setupPanel = readFileSync(new URL('../src/onboarding/company-setup-panel.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
-test('full bootstrap screens use a skeleton while compact waiting screens keep the loader', () => {
+test('full bootstrap screens and lazy content share the skeleton loading system', () => {
   const workspaceLoading = main.slice(main.indexOf('function renderWorkspaceLoading('), main.indexOf('function workspacePresetSelect('));
   const authLoading = main.slice(main.indexOf('function renderAuthLoading('), main.indexOf('function ensureDataLoad('));
   assert.match(workspaceLoading, /renderWorkspaceSkeleton\(\{/);
@@ -17,44 +18,21 @@ test('full bootstrap screens use a skeleton while compact waiting screens keep t
   assert.match(main, /function emptyState\(text\) \{/);
 });
 
-test('the loader announces itself to assistive tech', () => {
+test('every legacy loader call now resolves to a content skeleton', () => {
   const fn = main.slice(main.indexOf('function questLoader('));
   const body = fn.slice(0, fn.indexOf('\n}\n'));
-  // Without a live region, a screen reader gets silence while the app waits.
-  assert.match(body, /role="status"/);
-  assert.match(body, /aria-live="polite"/);
-  // The decorative artwork must not be announced alongside the text.
-  assert.match(body, /<svg class="quest-loader-mark" viewBox="0 0 48 48" aria-hidden="true">/);
+  assert.match(body, /renderContentSkeleton\(\{/);
+  assert.doesNotMatch(body, /<svg|quest-loader-mark/);
 });
 
-test('the rings turn at different speeds and opposite directions', () => {
-  // Two rings turning together read as one ring; the contrast is what makes it look like
-  // something working rather than something merely spinning.
-  // Match the declarations directly. Matching `.quest-loader-inner {` would find the
-  // shared transform-origin rule first, where that selector is simply the last in a list.
-  assert.match(css, /\.quest-loader-outer \{[^}]*animation: quest-loader-spin 1\.6s linear infinite;/s);
-  assert.match(css, /\.quest-loader-inner \{[^}]*animation: quest-loader-spin 2\.4s linear infinite reverse;/s);
-  assert.match(css, /@keyframes quest-loader-spin \{\s*to \{ transform: rotate\(360deg\); \}/);
-});
-
-test('rotation is anchored to the artwork centre, not the box corner', () => {
-  // Without transform-origin an SVG group rotates about (0,0) and swings off screen.
-  assert.match(css, /\.quest-loader-outer,\s*\n\.quest-loader-inner \{\s*transform-origin: 24px 24px;/);
-  assert.match(css, /\.quest-loader-dot \{[^}]*transform-origin: 24px 24px;/s);
-});
-
-test('it uses brand colour tokens rather than hard-coded hexes', () => {
-  assert.match(css, /\.quest-loader-outer \{[^}]*stroke: var\(--orange\);/s);
-  assert.match(css, /\.quest-loader-inner \{[^}]*stroke: var\(--ink\);/s);
-  assert.match(css, /\.quest-loader-dot \{[^}]*fill: var\(--orange\);/s);
-});
-
-test('reduced motion stops the spin instead of only slowing it', () => {
-  // A loading screen is the one thing you cannot look away from, so continuous rotation
-  // is a real problem for vestibular disorders. The shape holds still and fades.
-  const block = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce) {\n  .quest-loader-outer'));
-  assert.match(block, /animation: quest-loader-fade/);
-  assert.ok(!/quest-loader-spin/.test(block.slice(0, block.indexOf('}\n}'))), 'no rotation under reduced motion');
+test('module loading placeholders use page structure and compact safely in dialogs', () => {
+  assert.match(css, /\.quest-content-skeleton\s*\{/);
+  assert.match(css, /\.quest-content-skeleton-grid\s*\{/);
+  assert.match(css, /\.modal-body \.quest-content-skeleton/);
+  assert.match(css, /\.work-surface > \.quest-content-skeleton/);
+  assert.doesNotMatch(css, /@keyframes quest-loader-spin/);
+  assert.match(setupPanel, /renderContentSkeleton\(\{/);
+  assert.doesNotMatch(setupPanel, /company-setup-spinner/);
 });
 
 // The bug found alongside this: every empty state rendered a solid black blob.

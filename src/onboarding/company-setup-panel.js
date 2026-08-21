@@ -8,6 +8,7 @@ import {
   validateWorkspaceSetupPlan,
 } from './company-setup-model.js';
 import { WORKSPACE_PLUGIN_REGISTRY, pluginDataScopeDetails } from '../workspaces/plugin-catalog.js';
+import { renderContentSkeleton } from '../ui/workspace-loading.js';
 
 export const RESET_WORKSPACE_SETUP_COPY = 'This clears the setup answers and reopens the guide for the selected workspace. It keeps the applied configuration and does not delete your company, people, sibling workspaces, customers, jobs, tasks, files, or messages.';
 export const RESET_COMPANY_SETUP_COPY = RESET_WORKSPACE_SETUP_COPY;
@@ -318,13 +319,9 @@ export function createWorkspaceSetupPanel({
   }
 
   function renderLoading(workspaceId, workspaceLabel, state) {
-    return renderShell(workspaceId, workspaceLabel, `
-      <div class="company-setup-loading" role="status">
-        <span class="company-setup-spinner" aria-hidden="true"></span>
-        <strong>Loading your setup</strong>
-        <span>Checking for saved answers on this workspace.</span>
-      </div>
-    `, state);
+    return renderShell(workspaceId, workspaceLabel, renderContentSkeleton({
+      statusText: 'Loading your setup. Checking for saved answers on this workspace.',
+    }), state);
   }
 
   function renderLoadError(workspaceId, workspaceLabel, state) {
