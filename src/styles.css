@@ -29068,7 +29068,12 @@ html[data-card-style="glass"] .message-context-rail {
 .workspace-skeleton-rail {
   grid-row: 1 / -1;
   padding: 20px 16px;
-  background: var(--rail);
+  border-right: 1px solid var(--deck-hairline, var(--border));
+  background: var(--deck-bg, linear-gradient(180deg, #fbfcfd 0%, #f4f6f8 100%));
+}
+
+:root[data-theme="dark"]:not([data-sidebar-theme]) .workspace-skeleton-rail {
+  background: linear-gradient(180deg, #14181e 0%, #0c0f13 100%);
 }
 
 .workspace-skeleton-brand {
@@ -29076,7 +29081,7 @@ html[data-card-style="glass"] .message-context-rail {
   align-items: center;
   gap: 10px;
   min-height: 38px;
-  color: #fff;
+  color: var(--deck-strong, var(--ink));
 }
 
 .workspace-skeleton-brand-mark,
@@ -29085,8 +29090,14 @@ html[data-card-style="glass"] .message-context-rail {
   height: 34px;
 }
 
-.workspace-skeleton-brand-mark .quest-logo-on-light { display: none; }
-.workspace-skeleton-brand-mark .quest-logo-on-dark { display: block; }
+.workspace-skeleton-brand-mark .quest-logo-on-light { display: block; }
+.workspace-skeleton-brand-mark .quest-logo-on-dark { display: none; }
+
+[data-sidebar-surface="dark"] .workspace-skeleton-brand-mark .quest-logo-on-light,
+:root[data-theme="dark"]:not([data-sidebar-theme]) .workspace-skeleton-brand-mark .quest-logo-on-light { display: none; }
+
+[data-sidebar-surface="dark"] .workspace-skeleton-brand-mark .quest-logo-on-dark,
+:root[data-theme="dark"]:not([data-sidebar-theme]) .workspace-skeleton-brand-mark .quest-logo-on-dark { display: block; }
 
 .workspace-skeleton-brand span:last-child {
   display: grid;
@@ -29094,16 +29105,16 @@ html[data-card-style="glass"] .message-context-rail {
 }
 
 .workspace-skeleton-brand strong { font-size: 14px; }
-.workspace-skeleton-brand small { margin-top: 4px; color: rgba(255, 255, 255, .48); font-size: 9px; letter-spacing: .08em; }
+.workspace-skeleton-brand small { margin-top: 4px; color: var(--deck-label, var(--muted)); font-size: 9px; letter-spacing: .08em; }
 
 .workspace-skeleton-switch {
   height: 56px;
   margin: 24px 0 28px;
-  background: rgba(255, 255, 255, .1);
+  background: color-mix(in srgb, var(--deck-text, var(--ink-2)) 12%, transparent);
 }
 
 .workspace-skeleton-nav { display: grid; gap: 18px; }
-.workspace-skeleton-nav .workspace-skeleton-block { background: rgba(255, 255, 255, .09); }
+.workspace-skeleton-nav .workspace-skeleton-block { background: color-mix(in srgb, var(--deck-text, var(--ink-2)) 12%, transparent); }
 
 .workspace-skeleton-topbar {
   display: flex;

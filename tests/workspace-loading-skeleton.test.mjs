@@ -45,6 +45,19 @@ test('the workspace skeleton is responsive and stops shimmering for reduced moti
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.workspace-skeleton-block/);
 });
 
+test('the skeleton rail keeps readable branding on light, dark, and custom sidebars', () => {
+  const rail = css.match(/\.workspace-skeleton-rail\s*\{[^}]*\}/s)?.[0] || '';
+  const brand = css.match(/\.workspace-skeleton-brand\s*\{[^}]*\}/s)?.[0] || '';
+  const small = css.match(/\.workspace-skeleton-brand small\s*\{[^}]*\}/s)?.[0] || '';
+
+  assert.match(rail, /background:\s*var\(--deck-bg,/);
+  assert.match(brand, /color:\s*var\(--deck-strong,\s*var\(--ink\)\)/);
+  assert.doesNotMatch(brand, /color:\s*#fff/);
+  assert.match(small, /color:\s*var\(--deck-label,\s*var\(--muted\)\)/);
+  assert.match(css, /\[data-sidebar-surface="dark"\] \.workspace-skeleton-brand-mark \.quest-logo-on-light/);
+  assert.match(css, /:root\[data-theme="dark"\]:not\(\[data-sidebar-theme\]\) \.workspace-skeleton-rail/);
+});
+
 test('content loading uses a reusable skeleton rather than a centered spinner', () => {
   assert.ok(loadingModule?.renderContentSkeleton, 'content skeleton renderer must exist');
 

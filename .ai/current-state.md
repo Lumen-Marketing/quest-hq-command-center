@@ -5,6 +5,7 @@ Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational s
 ## 2026-08-22 maintenance release
 
 - Every blocking workspace wait now preserves interface structure: the secure-session check and first authenticated fetch use the full app-shaped skeleton, while lazy route, panel, widget, and modal loads use a responsive content skeleton. Centered spinner-only screens are removed, compact contexts collapse safely, and reduced-motion users receive static placeholders.
+- The full app skeleton now follows the active sidebar surface and appearance tokens, including the correct light/dark logo asset and readable brand, subtitle, divider, and rail placeholders instead of assuming a dark sidebar.
 - Remaining customer-visible `Job Center`, `Command Center`, and `Quest HQ` fallback labels in the estimate/proposal dialogs, Calls guidance, public forms, generated-document metadata, and install manifest now use the market-facing Questbase name. Internal repository identifiers and compatibility routes remain unchanged by design.
 - The Vite/PostCSS transitive `nanoid` dependency is locked to `3.3.18` or newer within the compatible 3.x line. `npm audit --audit-level=high` reports zero vulnerabilities after the lockfile refresh.
 - Runtime import-graph inspection found no accidental orphan source modules. The two unreachable files are the deliberately unwired native-Tasks write engine documented in known issues.
