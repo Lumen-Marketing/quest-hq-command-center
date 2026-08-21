@@ -1,4 +1,4 @@
-import { cp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -31,11 +31,31 @@ export async function syncSpaAssets(outDirArg = 'dist') {
     const outDir = path.resolve(outDirArg);
     const taskRuntimeSource = path.join(root, 'taskmanagement');
     const taskRuntimeTarget = path.join(outDir, 'taskmanagement');
+    const taskSupabaseSource = path.join(
+        root,
+        'node_modules',
+        '@supabase',
+        'supabase-js',
+        'dist',
+        'umd',
+        'supabase.js',
+    );
+    const taskSupabaseTarget = path.join(
+        taskRuntimeTarget,
+        'vendor',
+        'supabase',
+        'supabase.js',
+    );
     const faviconSource = path.join(root, 'favicon.svg');
     const faviconDarkSource = path.join(root, 'favicon-dark.svg');
 
     await rm(taskRuntimeTarget, { recursive: true, force: true });
     await cp(taskRuntimeSource, taskRuntimeTarget, { recursive: true });
+    // Tasks is copied as a standalone static app, so Vite does not bundle its
+    // scripts. Ship Supabase's browser build on our own origin instead of
+    // relying on jsDelivr, which the production script-src 'self' policy blocks.
+    await mkdir(path.dirname(taskSupabaseTarget), { recursive: true });
+    await cp(taskSupabaseSource, taskSupabaseTarget);
     await cp(faviconSource, path.join(outDir, 'favicon.svg'));
     // index.html references both; shipping only one means a 404 for every visitor
     // whose browser prefers a dark colour scheme.
