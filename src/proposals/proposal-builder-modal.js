@@ -11,7 +11,7 @@ export function createProposalBuilderModal(ctx) {
 
   function renderProposalBuilderModal(companyId) {
     const ctx = currentProposalContext();
-    if (!ctx || ctx.company_id !== companyId) return renderModalShell('Job Center', 'Proposal', emptyState('Choose a contact, quote, or job before creating a proposal.'));
+    if (!ctx || ctx.company_id !== companyId) return renderModalShell('Questbase', 'Proposal', emptyState('Choose a contact, quote, or job before creating a proposal.'));
     const draft = proposalDraftForContext(ctx);
     const addressOptions = contactAddressOptions(companyId);
     const saved = proposalsFor(ctx.type, ctx.id);
@@ -27,7 +27,7 @@ export function createProposalBuilderModal(ctx) {
         `).join('')}
       </section>
     ` : '';
-    return renderModalShell('Job Center', `${ctx.label} proposal`, `
+    return renderModalShell('Questbase', `${ctx.label} proposal`, `
       <form id="proposal-builder-form" class="proposal-builder" data-proposal-builder-form>
         <input type="hidden" name="proposal_id" value="${h(ctx.proposalId || '')}" />
         <input type="hidden" name="related_type" value="${h(ctx.type)}" />

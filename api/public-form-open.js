@@ -21,7 +21,7 @@ export default defineEndpoint(
     const form = rows[0];
     if (!form) throw new HttpError(404, 'Form not found or not published.');
 
-    let company = { id: form.company_id, name: 'Quest HQ' };
+    let company = { id: form.company_id, name: 'Questbase' };
     // The form is still usable without company decoration.
     const compRes = await db(`/rest/v1/companies?id=eq.${encodeURIComponent(form.company_id)}&select=id,name,icon_key,icon_image`, { headers: { Accept: 'application/json' } }).catch(() => null);
     if (compRes && compRes.ok) {

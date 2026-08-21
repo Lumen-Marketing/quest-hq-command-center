@@ -107,7 +107,7 @@ const CONFIG = {
   demoModeEnabled: import.meta.env.VITE_DEMO_MODE_ENABLED !== 'false',
   demoReadonly: import.meta.env.VITE_DEMO_READONLY !== 'false',
   billingMode: import.meta.env.VITE_BILLING_MODE || 'manual',
-  // Roll out the native Command Center Tasks module independently while the
+  // Roll out the native Questbase Tasks module independently while the
   // current embedded task app remains available as a safe fallback.
   nativeTasksModule: import.meta.env.VITE_NATIVE_TASKS_MODULE === 'true',
   // No baked-in default credentials — must be supplied via env when used in dev.
@@ -12395,7 +12395,7 @@ function renderEmbeddedTasksPage(route, companyId) {
   const workspaceId = workspaceIdForCompany(companyId);
   // The vendored task module at /taskmanagement/ replaces the former native
   // placeholder. It runs embedded: ?embed=1 makes it hide its own topbar
-  // (.embedded-in-job-center) so Command Center's chrome is the only chrome, and
+  // (.embedded-in-job-center) so Questbase's chrome is the only chrome, and
   // project_id scopes it to the job. The session is shared automatically — same
   // origin, same Supabase project — so there is no second login.
   // The module authenticates against the same Supabase project as the host, so it
@@ -12431,7 +12431,7 @@ function renderEmbeddedTasksPage(route, companyId) {
   if (job) params.set('project_id', job.id);
   params.set('return_url', window.location.href);
   // Forward CC's deep-link params to the task app's own hash routes so every
-  // existing "open this task" link across Command Center keeps working:
+  // existing "open this task" link across Questbase keeps working:
   //   ?task_id=X -> #/task/X      ?new=1 / ?edit=1 -> #/new
   const taskId = route.params.get('task_id');
   const wantsNew = route.params.get('new') === '1' || route.params.get('edit') === '1';

@@ -345,7 +345,7 @@ export function writePdf({ page, items = [], images = [], title = '' }) {
     })),
     // Last, and its own object: /Info in the trailer has to be an indirect reference, not the
     // dictionary itself. This is what puts the document's name in the reader's title bar.
-    `<< /Title (${pdfString(title || 'Document')}) /Producer (Quest HQ) >>`,
+    `<< /Title (${pdfString(title || 'Document')}) /Producer (Questbase) >>`,
   ];
   const infoObject = objects.length;
 

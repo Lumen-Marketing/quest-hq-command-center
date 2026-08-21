@@ -1,4 +1,4 @@
-/* Quest HQ service worker.
+/* Questbase service worker.
  *
  * Deliberately conservative. A service worker is the easiest way to ship a bug
  * that outlives the deploy that fixed it, so the rules here are narrow:

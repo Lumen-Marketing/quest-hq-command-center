@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "Questbase Command Center",
+  "name": "Questbase",
   "short_name": "Questbase",
   "description": "Company operations workspace: jobs, CRM, quotes, files, forms, approvals and billing.",
   "start_url": "/command",

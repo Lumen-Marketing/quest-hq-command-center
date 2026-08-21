@@ -28,7 +28,7 @@ export function createCallsPage(ctx) {
             <td class="calls-conversations">${Number(row.conversations || 0)}</td>
           </tr>`).join('')}</tbody>
         </table>`
-      : emptyState(`No calls in this range. If you expected to see your own, we couldn't match you to a RingCentral extension — ask your admin to check that your RingCentral email matches your Command Center login.`);
+      : emptyState(`No calls in this range. If you expected to see your own, we couldn't match you to a RingCentral extension — ask your admin to check that your RingCentral email matches your Questbase login.`);
 
     return `
       <section class="calls-page">

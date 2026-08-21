@@ -42,10 +42,10 @@ export function createEstimateBuilder(ctx) {
 
   function renderEstimateBuilderModal(companyId) {
     const ctx = currentEstimateContext();
-    if (!ctx || ctx.company_id !== companyId) return renderModalShell('Job Center', 'Estimate', emptyState('Choose a contact, quote, or job before creating an estimate.'));
+    if (!ctx || ctx.company_id !== companyId) return renderModalShell('Questbase', 'Estimate', emptyState('Choose a contact, quote, or job before creating an estimate.'));
     const draft = estimateDraftForContext(ctx);
     const totals = calculateEstimateTotals(draft);
-    return renderModalShell('Job Center', `${ctx.label} estimate`, `
+    return renderModalShell('Questbase', `${ctx.label} estimate`, `
       <form class="estimate-builder" data-estimate-builder-form>
         <input type="hidden" name="related_type" value="${h(ctx.type)}" />
         <input type="hidden" name="related_id" value="${h(ctx.id)}" />

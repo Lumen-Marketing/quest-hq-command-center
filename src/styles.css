@@ -20310,7 +20310,7 @@ button[aria-busy="true"] { cursor: progress; opacity: 1; }
 
 /* ===========================================================================
    COMMAND CENTER FIDELITY - typography (IBM Plex Sans + IBM Plex Mono) + single
-   orange accent, matching the Quest Command Center reference. Appended last so
+   orange accent, matching the Questbase command-rail reference. Appended last so
    it wins the cascade. Purely visual: no layout/behaviour changes.
    =========================================================================== */
 :root {
@@ -24639,7 +24639,7 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
   }
 }
 
-/* Front-page refresh: current Quest HQ launch modules and generated command-center art. */
+/* Front-page refresh: current Questbase launch modules and generated command-center art. */
 .landing-shell {
   background: #f6f0e6;
 }
@@ -24803,7 +24803,7 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
   text-shadow: 0 1px 0 rgba(0, 0, 0, .45);
 }
 
-/* Generated Quest HQ logo mark. Keep it image-led across shell, landing, login, and portal surfaces. */
+/* Generated Questbase logo mark. Keep it image-led across shell, landing, login, and portal surfaces. */
 .logo.logo-image-mark,
 .side-mark.logo-image-mark,
 .landing-nav .landing-brand .side-mark.logo-image-mark,

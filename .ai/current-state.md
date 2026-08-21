@@ -2,6 +2,12 @@
 
 Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-08-22 maintenance release
+
+- Remaining customer-visible `Job Center`, `Command Center`, and `Quest HQ` fallback labels in the estimate/proposal dialogs, Calls guidance, public forms, generated-document metadata, and install manifest now use the market-facing Questbase name. Internal repository identifiers and compatibility routes remain unchanged by design.
+- The Vite/PostCSS transitive `nanoid` dependency is locked to `3.3.18` or newer within the compatible 3.x line. `npm audit --audit-level=high` reports zero vulnerabilities after the lockfile refresh.
+- Runtime import-graph inspection found no accidental orphan source modules. The two unreachable files are the deliberately unwired native-Tasks write engine documented in known issues.
+
 ## 2026-08-21 release hardening
 
 - Company Drive folder and document glyphs now use Questbase's bundled icon pack instead of the third-party vscode-icons CDN, so the enforced image policy cannot turn Drive rows into broken-image alt text.
