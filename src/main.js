@@ -73,6 +73,7 @@ import {
   canonicalSettingsDestination, renderSettingsSurfaceLoadError, settingsSurfaceTabs,
 } from './settings/navigation-model.js';
 import { applyReadOnlyControlState } from './ui/read-only-controls.js';
+import { renderWorkspaceSkeleton } from './ui/workspace-loading.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -4547,17 +4548,10 @@ function shouldHoldCompanyRouteForLiveData(route) {
 
 function renderWorkspaceLoading(route) {
   document.title = `${routeTitle(route)} | Questbase`;
-  app.innerHTML = `
-    <main class="login-shell">
-      <section class="login-panel">
-        <div class="login-brand">
-          <span class="side-mark logo-image-mark">${questLogoImage()}</span>
-          <span><strong>Questbase</strong><small>Secure workspace</small></span>
-        </div>
-        ${questLoader('Loading workspace data...')}
-      </section>
-    </main>
-  `;
+  app.innerHTML = renderWorkspaceSkeleton({
+    brandMarkup: questLogoImage(),
+    statusText: 'Loading workspace data...',
+  });
 }
 
 function workspacePresetSelect(selected = 'generic') {

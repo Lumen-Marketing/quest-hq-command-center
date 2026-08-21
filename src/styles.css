@@ -29130,6 +29130,131 @@ html[data-card-style="glass"] .message-context-rail {
   }
 }
 
+/* The initial company fetch keeps the real application silhouette on screen. */
+.workspace-skeleton-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-rows: 68px minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--surface-3);
+}
+
+.workspace-skeleton-rail {
+  grid-row: 1 / -1;
+  padding: 20px 16px;
+  background: var(--rail);
+}
+
+.workspace-skeleton-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  color: #fff;
+}
+
+.workspace-skeleton-brand-mark,
+.workspace-skeleton-brand-mark .quest-logo-image {
+  width: 34px;
+  height: 34px;
+}
+
+.workspace-skeleton-brand-mark .quest-logo-on-light { display: none; }
+.workspace-skeleton-brand-mark .quest-logo-on-dark { display: block; }
+
+.workspace-skeleton-brand span:last-child {
+  display: grid;
+  line-height: 1.05;
+}
+
+.workspace-skeleton-brand strong { font-size: 14px; }
+.workspace-skeleton-brand small { margin-top: 4px; color: rgba(255, 255, 255, .48); font-size: 9px; letter-spacing: .08em; }
+
+.workspace-skeleton-switch {
+  height: 56px;
+  margin: 24px 0 28px;
+  background: rgba(255, 255, 255, .1);
+}
+
+.workspace-skeleton-nav { display: grid; gap: 18px; }
+.workspace-skeleton-nav .workspace-skeleton-block { background: rgba(255, 255, 255, .09); }
+
+.workspace-skeleton-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.workspace-skeleton-actions { display: flex; gap: 9px; }
+.workspace-skeleton-content { min-width: 0; padding: 34px 40px; }
+.workspace-skeleton-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 28px 0 18px; }
+.workspace-skeleton-panels { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 18px; }
+.workspace-skeleton-panel { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.workspace-skeleton-panel .is-row + .is-row,
+.workspace-skeleton-panel .is-card + .is-card { margin-top: 12px; }
+
+.workspace-skeleton-block {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--muted) 14%, var(--surface));
+}
+
+.workspace-skeleton-block::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 15%, rgba(255, 255, 255, .72) 45%, transparent 75%);
+  transform: translateX(-100%);
+  animation: workspace-skeleton-shimmer 1.55s ease-in-out infinite;
+  content: '';
+}
+
+.workspace-skeleton-block.is-nav { width: 72%; height: 13px; }
+.workspace-skeleton-block.is-nav.is-wide { width: 88%; }
+.workspace-skeleton-block.is-nav.is-medium { width: 62%; }
+.workspace-skeleton-block.is-nav.is-short { width: 48%; }
+.workspace-skeleton-block.is-search { width: min(560px, 52vw); height: 38px; border-radius: 999px; }
+.workspace-skeleton-block.is-action,
+.workspace-skeleton-block.is-avatar { width: 38px; height: 38px; }
+.workspace-skeleton-block.is-avatar { border-radius: 50%; }
+.workspace-skeleton-block.is-eyebrow { width: 96px; height: 10px; }
+.workspace-skeleton-block.is-title { width: min(340px, 72%); height: 30px; margin-top: 13px; }
+.workspace-skeleton-block.is-stat { min-height: 112px; }
+.workspace-skeleton-block.is-panel-title { width: 36%; height: 18px; margin-bottom: 24px; }
+.workspace-skeleton-block.is-row { height: 54px; }
+.workspace-skeleton-block.is-card { height: 114px; }
+
+@keyframes workspace-skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (max-width: 760px) {
+  .workspace-skeleton-layout { grid-template-columns: 1fr; grid-template-rows: 60px minmax(0, 1fr); }
+  .workspace-skeleton-rail { display: none; }
+  .workspace-skeleton-topbar,
+  .workspace-skeleton-content { grid-column: 1; }
+  .workspace-skeleton-content { padding: 24px 18px; }
+  .workspace-skeleton-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-skeleton-panels { grid-template-columns: 1fr; }
+  .workspace-skeleton-block.is-search { width: min(100%, 420px); }
+}
+
+@media (max-width: 520px) {
+  .workspace-skeleton-topbar { justify-content: space-between; padding-inline: 14px; }
+  .workspace-skeleton-actions .is-action:last-of-type { display: none; }
+  .workspace-skeleton-stat-grid { grid-template-columns: 1fr; }
+  .workspace-skeleton-block.is-stat { min-height: 88px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-skeleton-block::after { display: none; animation: none; }
+}
+
 /* Sidebar: the toggle stays put, and the panel glides ---------------------- */
 /* The chevron belongs on the brand row, top-aligned, in BOTH states. Collapsing turned
    .deck-brand into a centred single column, which pushed the button below the logo — so
