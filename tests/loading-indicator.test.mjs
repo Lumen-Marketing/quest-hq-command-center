@@ -5,11 +5,14 @@ import test from 'node:test';
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
-test('workspace bootstrap uses a skeleton while compact waiting screens keep the loader', () => {
+test('full bootstrap screens use a skeleton while compact waiting screens keep the loader', () => {
   const workspaceLoading = main.slice(main.indexOf('function renderWorkspaceLoading('), main.indexOf('function workspacePresetSelect('));
-  assert.match(main, /renderWorkspaceSkeleton\(\{/);
+  const authLoading = main.slice(main.indexOf('function renderAuthLoading('), main.indexOf('function ensureDataLoad('));
+  assert.match(workspaceLoading, /renderWorkspaceSkeleton\(\{/);
   assert.doesNotMatch(workspaceLoading, /questLoader\(/);
-  assert.match(main, /\$\{questLoader\('Checking secure session\.\.\.'\)\}/);
+  assert.match(authLoading, /renderWorkspaceSkeleton\(\{/);
+  assert.doesNotMatch(authLoading, /questLoader\(/);
+  assert.match(main, /return questLoader\('Loading'\);/);
   // An empty list is not a thing in progress, so ordinary empty states keep their icon.
   assert.match(main, /function emptyState\(text\) \{/);
 });

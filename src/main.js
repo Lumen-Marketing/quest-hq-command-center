@@ -4671,17 +4671,10 @@ function renderFatalPage(headline, error) {
 
 function renderAuthLoading() {
   document.title = 'Loading | Questbase';
-  app.innerHTML = `
-    <main class="login-shell">
-      <section class="login-panel">
-        <div class="login-brand">
-          <span class="side-mark logo-image-mark">${questLogoImage()}</span>
-          <span><strong>Questbase</strong><small>Secure workspace</small></span>
-        </div>
-        ${questLoader('Checking secure session...')}
-      </section>
-    </main>
-  `;
+  app.innerHTML = renderWorkspaceSkeleton({
+    brandMarkup: questLogoImage(),
+    statusText: 'Checking secure session...',
+  });
 }
 
 function ensureDataLoad() {
