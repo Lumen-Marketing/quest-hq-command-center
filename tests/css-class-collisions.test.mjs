@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 // fix: nothing in either file looks broken, and the failure is only visible on screen.
 
 const srcDir = fileURLToPath(new URL('../src/', import.meta.url));
-const css = readFileSync(join(srcDir, 'styles.css'), 'utf8');
+const css = (readFileSync(join(srcDir, 'styles.css'), 'utf8') + '\n' + readFileSync(join(srcDir, 'workspace', 'builder.css'), 'utf8'));
 
 const walk = (dir) => readdirSync(dir).flatMap((entry) => {
   const full = join(dir, entry);

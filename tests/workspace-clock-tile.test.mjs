@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 const modal = readFileSync(join(root, 'src', 'workspace', 'builder-modal.js'), 'utf8').replace(/\r\n/g, '\n');
-const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8'));
 
 // Includes the closing brace, which matters here: two of these are handed to Function() and
 // run, and a function body missing its last character is a syntax error rather than a failure.

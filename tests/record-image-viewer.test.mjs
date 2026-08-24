@@ -18,7 +18,7 @@ const recordPage = readFileSync(new URL('../src/workspace/record-page.js', impor
 // chunk had 18 bytes of headroom left and a photo viewer does not fit in 18 bytes.
 const fileField = readFileSync(new URL('../src/workspace/file-field.js', import.meta.url), 'utf8');
 const builderModal = readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 const imageCell = main.slice(main.indexOf("    case 'image': {"), main.indexOf("    case 'rating'"));
 

@@ -20,6 +20,10 @@ The app uses:
 - A lazy-loaded workspace-setup modal turns owner answers or a selected blueprint into an editable app/pipeline/role plan for exactly one selected operational workspace; the pure planning model, broad searchable work-type catalog, Supabase controller, and Setup > Workspaces launcher remain separate.
 - Setup and Admin page composition is lazy-loaded from `src/settings/settings-surfaces.js`; it reuses the existing company, workspace, plugin, role, billing, backup, recycle, audit, and diagnostics renderers rather than creating parallel stores or writes.
 - A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
+- Content-hashed Vite assets are immutable at the CDN/browser layer. The copied Tasks runtime adds the deployment revision to script/style/vendor URLs before applying the same policy; its HTML and environment JSON remain revalidated.
+- Workspace Builder styling is a route-loaded chunk. The shared shell loads it through a retryable singleton before rendering Builder markup, so other routes do not parse Builder-only CSS.
+- The authenticated startup query plan lives in `src/data/initial-data-queries.js`: independent reads start together, including Automations, and each read plus the pre-shell profile lookup has a 15-second ceiling so one stalled request cannot hold the workspace loader indefinitely.
+- The embedded Tasks runtime retries its same-origin Supabase SDK once when the original deferred script request fails, then presents its existing terminal auth error if recovery also fails.
 
 ## Request and data flow
 
@@ -60,6 +64,9 @@ The SPA supports:
 | Funnel next-action selection and record matching | [src/crm/next-action.js](../src/crm/next-action.js) |
 | Password, upload, realtime policy helpers | [src](../src) |
 | Shared CSV parser | [src/data/csv.js](../src/data/csv.js) |
+| Authenticated startup query plan and timeout | [src/data/initial-data-queries.js](../src/data/initial-data-queries.js) |
+| Workspace Builder route stylesheet and loader | [src/workspace/builder.css](../src/workspace/builder.css), [src/workspace/builder-style-loader.js](../src/workspace/builder-style-loader.js) |
+| Copied Tasks asset versioning and SDK recovery | [scripts/sync-spa-assets.mjs](../scripts/sync-spa-assets.mjs), [taskmanagement/js/sdk-loader.js](../taskmanagement/js/sdk-loader.js) |
 | Imported/persisted color validation | [src/security/color.js](../src/security/color.js) |
 | First-run launch checklist | [src/launch/pilot-readiness.js](../src/launch/pilot-readiness.js) |
 | Workspace setup planner and blueprints | [src/onboarding/company-setup-model.js](../src/onboarding/company-setup-model.js) |

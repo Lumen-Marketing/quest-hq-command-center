@@ -11,7 +11,7 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/proposals/proposal-builder-modal.js', import.meta.url), 'utf8')
   // Quote detail is fetched on demand too; same surface, more files.
   + readFileSync(new URL('../src/crm/deal-detail.js', import.meta.url), 'utf8');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 const migrationUrl = new URL('../supabase/migrations/202607020945_contact_workspace_intake_fields.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
 const migrationDir = new URL('../supabase/migrations/', import.meta.url);

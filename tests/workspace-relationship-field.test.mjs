@@ -17,7 +17,7 @@ const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
 // behaviour is read from the module; main.js is still read for the shim and everything else.
 const picker = readFileSync(join(root, 'src', 'workspace', 'relationship-picker.js'), 'utf8');
 const fieldUi = readFileSync(join(root, 'src', 'workspace', 'field-config-ui.js'), 'utf8');
-const css = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
+const css = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8')).replace(/\r\n/g, '\n');
 
 function fn(source, name) {
   // LAST occurrence: an extracted module leaves a loader shim of the same name in main.js.

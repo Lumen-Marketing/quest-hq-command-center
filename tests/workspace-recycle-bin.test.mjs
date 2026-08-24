@@ -229,7 +229,7 @@ test('a long-sitting record is pointed out, with the rule stated', () => {
 });
 
 test('every class the bin uses is styled', () => {
-  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+  const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8'));
   const a = app();
   sendToTrash(a, ['i1']);
   a.trash[0].deletedAt = new Date(Date.now() - ((TRASH_DAYS + 2) * 86400000)).toISOString();

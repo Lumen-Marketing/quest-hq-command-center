@@ -17,7 +17,7 @@ const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
 const page = readFileSync(join(root, 'src', 'company-contacts', 'page.js'), 'utf8');
 const fieldUi = readFileSync(join(root, 'src', 'workspace', 'field-config-ui.js'), 'utf8');
 const catalog = readFileSync(join(root, 'src', 'workspaces', 'plugin-catalog.js'), 'utf8');
-const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
+const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8')).replace(/\r\n/g, '\n');
 
 const fn = (name, source = main) => {
   const at = source.lastIndexOf(`function ${name}(`);

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
-const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8'));
 
 test("an app's actions sit with the tabs that govern them", () => {
   // Every one is tab-specific -- Add field only exists on Fields, Print only on Items and

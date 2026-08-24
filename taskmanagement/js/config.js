@@ -105,6 +105,9 @@ App.configReady = (async function loadRuntimeConfig() {
       throw new Error('env.json supabaseAnonKey is not a publishable / anon key.');
     }
     if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+      await App.loadSupabaseSdk?.();
+    }
+    if (!window.supabase || typeof window.supabase.createClient !== 'function') {
       throw new Error('Supabase JS SDK failed to load.');
     }
 

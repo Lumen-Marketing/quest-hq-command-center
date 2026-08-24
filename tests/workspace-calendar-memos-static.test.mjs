@@ -5,7 +5,7 @@ import test from 'node:test';
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const views = readFileSync(new URL('../src/workspace/app-views.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const modal = readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const css = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 const alarms = readFileSync(new URL('../src/workspace/memo-runtime.js', import.meta.url), 'utf8');
 
 

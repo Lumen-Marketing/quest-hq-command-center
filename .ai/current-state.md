@@ -2,6 +2,14 @@
 
 Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-08-25 performance release candidate
+
+- Content-hashed Vite assets now carry a one-year immutable cache policy, while HTML, service-worker, manifest, environment, auth, and API responses retain update-safe behavior.
+- The copied Tasks scripts, styles, and vendor runtime are deployment-versioned and cacheable. Its Supabase SDK retries once after a transient asset failure instead of leaving Tasks on a permanent configuration error.
+- Workspace Builder's 79.9 KB of route-only CSS moved out of the shared stylesheet. Shared CSS fell from 711,230 to 631,388 raw bytes and from 121,599 to 110,398 gzip bytes; the tightened 110 KiB entry-CSS gate passes.
+- All independent first-workspace Supabase reads now begin in one batch, including Automations. The profile lookup and each initial read settle within 15 seconds so a single degraded request cannot hold either loading skeleton for minutes.
+- No database migration or production-row change is part of this candidate. The detailed baseline and verification record is in `docs/reports/questbase-optimization-2026-08-25.md`.
+
 ## 2026-08-22 maintenance release
 
 - Every blocking workspace wait now preserves interface structure: the secure-session check and first authenticated fetch use the full app-shaped skeleton, while lazy route, panel, widget, and modal loads use a responsive content skeleton. Centered spinner-only screens are removed, compact contexts collapse safely, and reduced-motion users receive static placeholders.

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 const settings = readFileSync(join(root, 'src', 'workspace', 'app-settings.js'), 'utf8').replace(/\r\n/g, '\n');
-const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8'));
 
 // The real chooser, lifted out of main.js and run.
 const wbAppTabs = Function(`

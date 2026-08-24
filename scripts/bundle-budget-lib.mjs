@@ -92,7 +92,9 @@ export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
   // and the refusal of a seventh raise stands.
   entryJs: 356 * 1024,
   initialJs: 440 * 1024,
-  entryCss: 120 * 1024,
+  // Workspace Builder styles are route-loaded, so the shared shell no longer
+  // pays for that module before somebody opens it. Keep that reduction.
+  entryCss: 110 * 1024,
 });
 
 // zlib patch versions can encode the same minified asset a few bytes

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+const initialQueries = readFileSync(join(root, 'src', 'data', 'initial-data-queries.js'), 'utf8');
 const migration = readFileSync(
   join(root, 'supabase', 'migrations', '202608081000_company_time_clock.sql'),
   'utf8',
@@ -42,7 +43,7 @@ test('stopping the clock stores the shift and clears the running row', () => {
 
 test('the running clock is fetched on first paint, not on demand', () => {
   // The module grid paints an "On" badge for it before anything is clicked.
-  assert.match(main, /safeSupabaseQuery\(client\.from\('company_active_timers'\)\.select\('\*'\)\)/);
+  assert.match(initialQueries, /activeTimerResult: client\.from\('company_active_timers'\)\.select\('\*'\)/);
   assert.match(main, /if \(!activeTimerResult\.error\) state\.activeTimer = normalizeActiveTimer\(\(activeTimerResult\.data \|\| \[\]\)\[0\]\)/);
   assert.match(main, /if \(!timeEntriesResult\.error\) state\.timeEntries = \(timeEntriesResult\.data \|\| \[\]\)\.map\(normalizeTimeEntry\)/);
 });

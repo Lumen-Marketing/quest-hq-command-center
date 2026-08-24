@@ -13,7 +13,7 @@ const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 // assertions about the drop zone and the upload path read it there.
 const fileField = readFileSync(new URL('../src/workspace/file-field.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const ui = readFileSync(new URL('../src/workspace/field-config-ui.js', import.meta.url), 'utf8');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 test('the choice is offered on an Image field, not only on File', () => {
   assert.match(ui, /if \(t === 'file' \|\| t === 'image'\) \{/);

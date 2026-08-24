@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 const drag = readFileSync(new URL('../src/workspace/topbar-drag.js', import.meta.url), 'utf8');
 const header = source.match(/function wbWorkspaceHeader\([\s\S]*?\n\}/)[0];
 
@@ -16,7 +16,7 @@ test('every app is rendered, not a page of them', () => {
 });
 
 test('the track scrolls horizontally and can be swiped', () => {
-  const rule = styles.match(/\.wb-topbar-apps \{[^}]*\}/)[0];
+  const rule = styles.match(/\.wb-topbar-apps \{[^}]*overflow-x: auto;[^}]*\}/)[0];
   // overflow-x: hidden would silently kill touch swiping.
   assert.match(rule, /overflow-x: auto;/);
   assert.doesNotMatch(rule, /overflow: hidden;/);
@@ -160,7 +160,7 @@ test('the drag module needs nothing from main.js', () => {
 test('the field palette scrolls itself instead of setting the builder height', () => {
   // It lists every field type, which is taller than most screens. Left unbounded it made the
   // whole builder that tall and pushed everything below it off the page.
-  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
   const rule = styles.match(/\.wb-palette \{([\s\S]*?)\}/)?.[1] || '';
   assert.match(rule, /max-height: calc\(100vh - 140px - var\(--wb-tab-strip/);
   // Sticky, so the types stay reachable however far down the field list you are -- but below

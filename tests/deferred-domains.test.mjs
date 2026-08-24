@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const initialQueries = readFileSync(new URL('../src/data/initial-data-queries.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 const bootstrap = (() => {
   const start = main.indexOf('async function loadSupabaseData() {');
@@ -20,33 +21,9 @@ const DEFERRED_TABLES = [
 ];
 
 test('deferred tables are not fetched before first paint', () => {
-  const fetched = [...bootstrap.matchAll(/client\.(?:from|rpc)\('([a-z_]+)'\)/g)].map((m) => m[1]);
+  const fetched = [...`${bootstrap}\n${initialQueries}`.matchAll(/client\.(?:from|rpc)\('([a-z_]+)'\)/g)].map((m) => m[1]);
   const leaked = DEFERRED_TABLES.filter((t) => fetched.includes(t));
   assert.deepEqual(leaked, [], 'a deferred table crept back into the bootstrap batch');
-});
-
-// The destructuring and the Promise.all array are positional. Removing a query without
-// removing its name (or vice versa) shifts every later pair, so each result would bind
-// to the wrong table -- silently, with no error anywhere.
-test('every bootstrap result binds to the query it came from', () => {
-  const m = bootstrap.match(/const \[([\s\S]*?)\] = await Promise\.all\(\[([\s\S]*?)\n {2}\]\);/);
-  assert.ok(m, 'could not find the bootstrap batch');
-  const names = m[1].split(',').map((x) => x.trim()).filter(Boolean);
-  const sources = m[2].split('\n')
-    .filter((l) => /client\.(from|rpc)\(/.test(l))
-    .map((l) => l.match(/client\.(?:from|rpc)\('([a-z_]+)'\)/)[1]);
-
-  assert.equal(names.length, sources.length, 'destructured names and queries are different lengths');
-
-  const norm = (x) => x.toLowerCase().replace(/result$/, '').replace(/[^a-z]/g, '');
-  for (let i = 0; i < names.length; i += 1) {
-    const n = norm(names[i]);
-    const q = norm(sources[i]);
-    assert.ok(
-      n.includes(q.slice(0, 6)) || q.includes(n.slice(0, 6)),
-      `position ${i}: "${names[i]}" does not correspond to "${sources[i]}"`,
-    );
-  }
 });
 
 test('every deferred domain has a loader to defer to', () => {

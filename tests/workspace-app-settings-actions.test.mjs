@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const settings = readFileSync(new URL('../src/workspace/app-settings.js', import.meta.url), 'utf8');
-const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const css = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 const view = main.match(/function wbViewApp\(route, companyId, workspace, app, appLinked = false\)[\s\S]*?\n\}/)[0];
 const block = view.match(/if \(tab === 'settings' && !appLinked\) \{[\s\S]*?\n {2}\}/)[0];

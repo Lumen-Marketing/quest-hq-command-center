@@ -12,7 +12,7 @@ import test from 'node:test';
 // declaration under it was dead, and nine tests passed anyway.
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const styles = read('../src/styles.css');
+const styles = (read('../src/styles.css') + '\n' + read('../src/workspace/builder.css'));
 const main = read('../src/main.js');
 const recordPage = read('../src/workspace/record-page.js');
 const layout = read('../src/workspace/record-layout.js');

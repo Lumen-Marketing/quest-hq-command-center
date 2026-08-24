@@ -88,6 +88,20 @@ export async function syncSpaAssets(outDirArg = 'dist') {
         'utf8',
     );
 
+    // Vite hashes the host assets, but the absorbed Tasks runtime is copied as
+    // static files. Give every local script/style a release query so Vercel can
+    // cache those large, otherwise-stable files immutably without serving an old
+    // file after a deploy. app.html and env.json deliberately remain revalidated.
+    const taskRelease = String(
+        process.env.VERCEL_GIT_COMMIT_SHA
+        || process.env.GITHUB_SHA
+        || process.env.GIT_COMMIT_SHA
+        || 'local-build',
+    ).trim().replace(/[^a-z0-9._-]/gi, '').slice(0, 40) || 'local-build';
+    const taskAppPath = path.join(taskRuntimeTarget, 'app.html');
+    const taskAppHtml = await readFile(taskAppPath, 'utf8');
+    await writeFile(taskAppPath, versionTaskStaticReferences(taskAppHtml, taskRelease), 'utf8');
+
     const indexHtml = await readFile(path.join(outDir, 'index.html'), 'utf8');
     await writeFile(path.join(outDir, '404.html'), indexHtml);
     await writeFile(path.join(outDir, '.nojekyll'), '');
@@ -187,4 +201,12 @@ function legacyRedirect(file) {
   </body>
 </html>
 `;
+}
+
+export function versionTaskStaticReferences(html, version) {
+    const release = encodeURIComponent(String(version || 'local-build'));
+    return String(html || '').replace(
+        /(<(?:script|link)\b[^>]*\b(?:src|href)=["'])(?!https?:|\/\/|\/|data:|#)([^"'?#]+)(?:\?[^"']*)?(["'])/gi,
+        (_match, prefix, asset, suffix) => `${prefix}${asset}?v=${release}${suffix}`,
+    );
 }

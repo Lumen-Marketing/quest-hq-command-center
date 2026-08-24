@@ -10,7 +10,7 @@ import test from 'node:test';
 // lands near 300px. A 78px tile plus its gaps left room for exactly one per line, and an inline
 // row that wraps did the only thing it could.
 
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 const rule = (selector) => {
   const at = styles.indexOf(`${selector} {`);

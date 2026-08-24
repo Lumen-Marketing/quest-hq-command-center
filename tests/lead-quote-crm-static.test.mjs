@@ -17,7 +17,7 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/deal-detail.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/contact-table.js', import.meta.url), 'utf8');
 const contactQuoteWorkflow = readFileSync(new URL('../src/crm/contact-to-quote.js', import.meta.url), 'utf8');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 test('crm navigation uses contacts quotes and production funnels', () => {
   assert.match(source, /\{ id: 'workday', group: 'Quest CRM', label: 'Workday'/);

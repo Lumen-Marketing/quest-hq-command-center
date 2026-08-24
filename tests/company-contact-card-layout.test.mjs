@@ -479,7 +479,7 @@ test('nothing in the CSS pins a card block to a fixed column span', () => {
   //
   // It only looked like it worked while editing, because an element being arranged is wrapped
   // and the rule stopped matching. Defaults belong in DEFAULT_PANEL_LAYOUT, not in CSS.
-  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
   const offenders = [...styles.matchAll(/^\s*(\.cc-[^{]*?)\{[^}]*grid-column:\s*span\s*(\d+)/gm)]
     .map((match) => `${match[1].trim()} -> span ${match[2]}`)
     // The one legitimate fixed span: the phone breakpoint, where everything is one column.

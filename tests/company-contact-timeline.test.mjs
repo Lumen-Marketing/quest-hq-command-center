@@ -25,7 +25,7 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = readFileSync(join(root, 'src', 'company-contacts', 'page.js'), 'utf8');
-const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8'));
 
 const doc = () => ({
   workspaces: [{

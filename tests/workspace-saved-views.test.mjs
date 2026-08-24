@@ -11,7 +11,7 @@ const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').re
 const mod = readFileSync(new URL('../src/workspace/saved-views.js', import.meta.url), 'utf8');
 const settings = readFileSync(new URL('../src/workspace/app-settings.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const itemsView = readFileSync(new URL('../src/workspace/items-view.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 const ids = () => { let n = 0; return () => `v${(n += 1)}`; };
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

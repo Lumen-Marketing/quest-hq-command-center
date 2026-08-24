@@ -74,6 +74,7 @@ import {
 } from './settings/navigation-model.js';
 import { applyReadOnlyControlState } from './ui/read-only-controls.js';
 import { renderContentSkeleton, renderWorkspaceSkeleton } from './ui/workspace-loading.js';
+import { workspaceBuilderStyles } from './workspace/builder-style-loader.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -3615,7 +3616,11 @@ async function fetchSupabaseProfile(user) {
   };
   const client = createSupabaseClient();
   if (!client) return fallback;
-  const result = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  // This query sits before the app can leave its secure-session skeleton. Give it
+  // the same ceiling as the workspace batch so a degraded network cannot strand
+  // the entire shell before the normal data loader even starts.
+  const { safeInitialDataQuery } = await import('./data/initial-data-queries.js');
+  const result = await safeInitialDataQuery(client.from('profiles').select('*').eq('id', user.id).maybeSingle());
   if (result.error || !result.data) return fallback;
   return normalizeProfile(result.data, fallback);
 }
@@ -4786,7 +4791,8 @@ async function loadSupabaseData() {
     return;
   }
 
-  const [
+  const { loadInitialDataQueries, safeInitialDataQuery } = await import('./data/initial-data-queries.js');
+  const {
     companiesResult,
     jobsResult,
     tasksResult,
@@ -4826,53 +4832,8 @@ async function loadSupabaseData() {
     platformAdminResult,
     activeTimerResult,
     timeEntriesResult,
-  ] = await Promise.all([
-    client.from('companies').select('*').order('name', { ascending: true }),
-    client.from('jobs').select('*').order('updated_at', { ascending: false }),
-    client.from('tasks').select('*').order('updated_at', { ascending: false }),
-    client.from('job_files').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-    client.from('team_members').select('*').order('name', { ascending: true }),
-    client.from('company_memberships').select('*'),
-    client.from('profiles').select('*'),
-    client.from('company_subscriptions').select('*'),
-    client.from('roles').select('*').order('priority', { ascending: false }),
-    client.from('role_permissions').select('*'),
-    client.from('user_role_assignments').select('*'),
-    client.from('resource_acl').select('*'),
-    client.from('field_permissions').select('*'),
-    client.from('company_invites').select('*').order('created_at', { ascending: false }),
-    client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
-    client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
-    client.from('message_conversation_access').select('*'),
-    client.from('messages').select('*').order('created_at', { ascending: true }).limit(500),
-    client.from('message_attachments').select('*').order('created_at', { ascending: true }).limit(500),
-    client.from('message_reads').select('*'),
-    client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
-    client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
-    client.from('contacts').select('*').order('updated_at', { ascending: false }),
-    // Not deferred: the directory is a first-class nav item in My work, and the App Builder
-    // resolves company_contact fields to names on any grid that carries one -- so a deferred
-    // load would paint raw ids across every workspace until somebody opened Contacts.
-    safeSupabaseQuery(client.from('company_contacts').select('*').order('name', { ascending: true })),
-    safeSupabaseQuery(client.from('company_contact_fields').select('*').order('position', { ascending: true })),
-    client.from('pipeline_stages').select('*').order('position', { ascending: true }),
-    client.from('accounts').select('*').order('name', { ascending: true }),
-    client.from('deals').select('*').order('updated_at', { ascending: false }),
-    safeSupabaseQuery(client.from('crm_sites').select('*').order('updated_at', { ascending: false })),
-    client.from('activities').select('*').order('created_at', { ascending: false }).limit(500),
-    safeSupabaseQuery(client.from('company_plugins').select('*')),
-    client.from('workspaces').select('*').order('name', { ascending: true }),
-    client.from('workspace_memberships').select('*'),
-    client.from('workspace_plugins').select('*'),
-    safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
-    safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
-    safeSupabaseQuery(client.rpc('is_platform_admin')),
-    // The running clock is fetched here rather than in a deferred domain: the module grid
-    // paints an "On" badge for it on first paint, and a badge that reads blank while the
-    // clock is actually running is worse than one more row in the bootstrap.
-    safeSupabaseQuery(client.from('company_active_timers').select('*')),
-    safeSupabaseQuery(client.from('company_time_entries').select('*').order('started_at', { ascending: false }).limit(500)),
-  ]);
+    automationsResult,
+  } = await loadInitialDataQueries(client);
 
   let liveTables = 0;
   if (!companiesResult.error) {
@@ -4978,17 +4939,13 @@ async function loadSupabaseData() {
   if (!workspaceBuilderResult.error) applyWorkspaceBuilderRows(workspaceBuilderResult.data);
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
-  // Automations load in their own query (not the aligned batch above) and through
-  // safeSupabaseQuery, so a workspace whose automations migration hasn't been
-  // applied yet simply gets an empty set instead of breaking the whole load.
-  const automationsResult = await safeSupabaseQuery(client.from('automations').select('*'));
   if (!automationsResult.error) state.automations = (automationsResult.data || []).map(normalizeAutomation);
 
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult, platformBackupCopiesResult] = await Promise.all([
-      safeSupabaseQuery(client.rpc('list_platform_companies_v2')),
-      safeSupabaseQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
-      safeSupabaseQuery(client.rpc('list_platform_backup_copies', { filter_company_id: null, filter_status: null, filter_kind: null })),
+      safeInitialDataQuery(client.rpc('list_platform_companies_v2')),
+      safeInitialDataQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
+      safeInitialDataQuery(client.rpc('list_platform_backup_copies', { filter_company_id: null, filter_status: null, filter_kind: null })),
     ]);
     if (platformCompaniesResult.error) throw platformCompaniesResult.error;
     if (!platformCompaniesResult.error) {
@@ -5014,7 +4971,7 @@ async function loadSupabaseData() {
   }
 
   if (isQuestDeveloper() && !state.platformCompanies.length) {
-    const reviewsResult = await safeSupabaseQuery(client.rpc('list_workspace_reviews_v2'));
+    const reviewsResult = await safeInitialDataQuery(client.rpc('list_workspace_reviews_v2'));
     if (reviewsResult.error) throw reviewsResult.error;
     if (!reviewsResult.error) {
       state.workspaceReviews = (reviewsResult.data || []).map(normalizeWorkspaceReview);
@@ -13783,6 +13740,18 @@ function wbCompanyWorkspace(companyId) {
 }
 
 function renderWorkspaceBuilderPage(route, companyId) {
+  if (!workspaceBuilderStyles.ready) {
+    if (workspaceBuilderStyles.error) {
+      return `<section class="tool-page"><div class="empty-state"><i class="ti ti-alert-triangle" aria-hidden="true"></i><h2>Workspace tools could not load</h2><p>Reload this page to try the workspace again.</p></div></section>`;
+    }
+    workspaceBuilderStyles.load()
+      .then(() => render())
+      .catch((error) => {
+        console.error('Workspace Builder styles failed to load', error);
+        render();
+      });
+    return questLoader('Loading workspace tools');
+  }
   if (!ensureWorkspaceBuilderLoaded(companyId)) {
     return `<section class="tool-page"><div class="wb-loading">Loading workspaces…</div></section>`;
   }

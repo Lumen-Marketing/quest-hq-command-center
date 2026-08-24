@@ -9,6 +9,9 @@ const indexHtml = read('../index.html');
 const main = read('../src/main.js');
 const vercel = JSON.parse(read('../vercel.json'));
 
+const header = (source, key) =>
+  vercel.headers.find((entry) => entry.source === source)?.headers.find((entry) => entry.key === key)?.value;
+
 // PNG stores width/height as big-endian uint32 at bytes 16..24, right after IHDR.
 function pngSize(rel) {
   const buf = readFileSync(new URL(rel, import.meta.url));
@@ -73,11 +76,22 @@ test('stale caches are dropped when the version changes', () => {
 });
 
 test('vercel serves the worker and manifest so they can update', () => {
-  const header = (source, key) =>
-    vercel.headers.find((h) => h.source === source)?.headers.find((h) => h.key === key)?.value;
   // A long-lived worker would pin itself and every asset it caches.
   assert.match(header('/sw.js', 'Cache-Control') || '', /max-age=0/);
   assert.equal(header('/sw.js', 'Service-Worker-Allowed'), '/');
   // Chrome silently refuses a manifest served under the wrong content type.
   assert.equal(header('/manifest.webmanifest', 'Content-Type'), 'application/manifest+json');
+});
+
+test('vercel caches only content-hashed build assets for one year', () => {
+  assert.equal(
+    header('/assets/(.*)', 'Cache-Control'),
+    'public, max-age=31536000, immutable',
+    'hashed Vite assets should not be downloaded again when their filename has not changed',
+  );
+  assert.doesNotMatch(
+    header('/(.*)', 'Cache-Control') || '',
+    /immutable/,
+    'HTML, API, auth, and compatibility routes must keep revalidating',
+  );
 });

@@ -27,7 +27,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
 const picker = readFileSync(join(root, 'src', 'workspace', 'relationship-picker.js'), 'utf8');
 const fieldUi = readFileSync(join(root, 'src', 'workspace', 'field-config-ui.js'), 'utf8');
-const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8'));
 
 const fn = (source, name) => {
   const at = source.lastIndexOf(`function ${name}(`);

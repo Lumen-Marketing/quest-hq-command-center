@@ -158,7 +158,7 @@ test('the name, the time and the text each get their own place', () => {
   const body = fn('wbActivityComments');
   assert.match(body, /<div class="wb-cmt-head"><b>\$\{h\(name\)\}<\/b><em>/);
   assert.match(body, /<div class="wb-cmt-text">/);
-  const css = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
+  const css = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8')).replace(/\r\n/g, '\n');
   assert.match(css, /\.wb-cmt \{\n  display: flex;/);
   assert.match(css, /\.wb-cmt-head \{\n  display: flex;[\s\S]*?gap: 8px;/);
   assert.match(css, /\.wb-cmt-text \{[\s\S]*?overflow-wrap: anywhere;/);

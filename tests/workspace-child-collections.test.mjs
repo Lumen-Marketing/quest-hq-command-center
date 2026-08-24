@@ -309,7 +309,7 @@ test('the field builder is not squeezed into the settings column', () => {
   // It is a two-column layout itself, so it renders BELOW the settings cards rather than inside
   // one. The settings card used to be 560px, which cost it two thirds of its width; both are now
   // 1100px, so the three cards on this tab line up as one column of equal width.
-  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
   assert.match(main, /<\/div>\n\s*\$\{wbCollectionsSettings\(companyId, app, canManage\)\}/, 'it renders below the card');
   const settingsWidth = /\.wb-settings\.card \{ max-width: (\d+)px/.exec(styles)?.[1];
   const collectionsWidth = /\.wb-collections \{ margin-top: 18px; max-width: (\d+)px; \}/.exec(styles)?.[1];

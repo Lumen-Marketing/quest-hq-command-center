@@ -7,7 +7,7 @@ import test from 'node:test';
 // every assertion below matches the shim and proves nothing.
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   + readFileSync(new URL('../src/crm/bulk-modals.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const css = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 // The list follows the v1 structure now and lives in its own fetched-on-demand module.
 const jobList = readFileSync(new URL('../src/jobs/job-list.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // The dialog lives in the module and main.js keeps a shim of the same name, so search the

@@ -6,7 +6,7 @@ import test from 'node:test';
 // the record has a URL, can be linked or bookmarked, and browser-back returns to the list.
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 // The record page is its own fetched-on-demand module now, so slicing `main` for it would
 // match the loader shim, whose body fetches rather than renders.
 const recordPage = readFileSync(new URL('../src/workspace/record-page.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');

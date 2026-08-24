@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 const picker = source.match(/function wbFeedPicker\(workspace\)[\s\S]*?\n\}/)[0];
 const stream = source.match(/function wbFeedStream\(companyId, workspace\)[\s\S]*?\n\}/)[0];

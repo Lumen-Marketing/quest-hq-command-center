@@ -7,7 +7,7 @@ const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').re
   + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8')
   // The Items tab is fetched on demand now; what it renders is unchanged.
   + readFileSync(new URL('../src/workspace/items-view.js', import.meta.url), 'utf8');
-const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const css = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 // The Automations tab and its rule editor are fetched on demand now, so the stage-trigger
 // UI is read from its own module rather than from main.js.
 const automations = readFileSync(new URL('../src/workspace/automations-ui.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');

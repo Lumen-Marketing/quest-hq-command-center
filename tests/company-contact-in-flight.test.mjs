@@ -336,6 +336,6 @@ test('the panel draws the mark beside the name, and nothing when there is none',
   assert.match(page, /\$\{use\.appIcon \? `<span class="cc-use-ic"/);
   assert.match(page, /style="background:\$\{h\(use\.appColor \|\| '#6b7280'\)\}"/, 'a colourless app still needs a chip');
   assert.match(page, /<i class="ti \$\{h\(use\.appIcon\)\}"><\/i>/);
-  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+  const styles = (readFileSync(join(root, 'src', 'styles.css'), 'utf8') + '\n' + readFileSync(join(root, 'src', 'workspace', 'builder.css'), 'utf8'));
   assert.match(styles, /\.cc-use-ic \{/, 'unstyled it is a bare glyph on the page background');
 });

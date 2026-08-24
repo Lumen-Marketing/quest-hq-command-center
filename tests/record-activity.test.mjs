@@ -255,7 +255,7 @@ test('the feed scrolls, and column-reverse is not how it opens at the bottom', (
   // "The newest is the first thing I want to see when I open the item, so I just scroll up to
   // see the oldest." That is a scroll position, not an order. A column-reverse scrollport
   // starts at its bottom, which is where the newest line is.
-  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8');
   const at = styles.indexOf('.wb-rec-body {');
   assert.notEqual(at, -1, 'the feed scrollport has moved');
   const rule = styles.slice(at, styles.indexOf('}', at));

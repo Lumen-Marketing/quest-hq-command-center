@@ -12,7 +12,7 @@ import test from 'node:test';
 // The App Builder makes wide tables the ordinary case: seventeen fields on one app in the report.
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 
 const fn = (name) => main.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`))?.[0] || '';
 
