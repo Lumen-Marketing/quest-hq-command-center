@@ -52,7 +52,7 @@
 
 /* ── Workspace dashboard (Podio-style): persistent app-switcher header,
    activity feed (main column), and widget tiles (side column). ── */
-.wb-topbar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border, #e2d5bf); overflow: hidden; }
+.wb-topbar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border, #e2d5bf); overflow: visible; }
 /* Swipeable app strip: scrolls horizontally on touch, wheel and drag, with the arrows
    as an optional desktop affordance. overflow-x must be auto (not hidden) or a touch
    swipe does nothing. */
@@ -81,7 +81,6 @@
 @media (prefers-reduced-motion: reduce) {
   .wb-topbar-apps { scroll-behavior: auto; }
 }
-.wb-topbar-spacer { flex: 1 1 auto; }
 .wb-topbar-nav { display: flex; align-items: center; gap: 4px; flex: none; }
 .wb-topbar-arrow { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0); color: var(--text-muted, #72695d); cursor: pointer; display: grid; place-items: center; font-size: 16px; }
 .wb-topbar-arrow:hover:not(:disabled) { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }

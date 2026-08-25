@@ -55,6 +55,17 @@ test('Activity app strip layout does not depend on the lazy builder stylesheet',
   assert.match(label, /-webkit-line-clamp:\s*2;/);
 });
 
+test('the app strip is the only flexible region in the topbar', () => {
+  assert.match(header, /<div class="wb-topbar-apps"/);
+  assert.doesNotMatch(header, /wb-topbar-spacer/, 'a second flex child steals width from the app scroller');
+});
+
+test('the lazy builder stylesheet does not clip the topbar strip', () => {
+  const builderCss = readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8');
+  const rule = builderCss.match(/\.wb-topbar \{[^}]*\}/)?.[0] || '';
+  assert.doesNotMatch(rule, /overflow:\s*hidden;/, 'builder.css loads late and must not clip the app strip');
+});
+
 test('the arrows stay, but now scroll the same track', () => {
   assert.match(header, /data-wb-topbar-scroll="-1"/);
   assert.match(header, /data-wb-topbar-scroll="1"/);

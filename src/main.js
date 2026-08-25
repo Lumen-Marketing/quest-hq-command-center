@@ -14714,7 +14714,7 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   const addBtn = can('workspaces.manage', companyId)
     ? `<button class="wb-topbar-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus" aria-hidden="true"></i><span>Add app</span></button>`
     : '';
-  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps"><div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0"${canReorderApps ? ' data-wb-reorder="1"' : ''}>${strip}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
+  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps"><div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0"${canReorderApps ? ' data-wb-reorder="1"' : ''}>${strip}</div>${nav}${addBtn}</nav>`;
 }
 
 // Where the app strip was scrolled to. Kept in a variable rather than on the element:
