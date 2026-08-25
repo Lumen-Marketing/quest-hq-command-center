@@ -24664,6 +24664,15 @@ button {
 }
 .wb-chip:hover { border-color: var(--chip, #6b7280); background: color-mix(in srgb, var(--chip, #6b7280) 10%, transparent); }
 .wb-chip.on { background: var(--chip, #6b7280); border-color: var(--chip, #6b7280); color: #fff; }
+/* A hint of the option's own colour on the chips that are NOT selected: the rim only.
+   The selected chip is a solid block of its colour, so anything stronger here would leave a picker
+   that cannot say which one is picked. A colour dot was tried and taken out again -- with the rim
+   already carrying it, the dot was a second answer to a question that only has one.
+   Scoped to [data-wb-chip-pick], the option picker's own hook: the Button field's link-inserter
+   reuses the wb-chip-pick CLASS for chips that carry no colour at all. */
+[data-wb-chip-pick] .wb-chip:not(.wb-chip-other) {
+  border-color: color-mix(in srgb, var(--chip, #6b7280) 40%, var(--border, #e2d5bf));
+}
 /* Keyboard focus has to survive the colour swap in both states, so it rides outside the pill. */
 .wb-chip:focus-visible { outline: 2px solid var(--chip, #6b7280); outline-offset: 2px; }
 .wb-chip-other { border-style: dashed; color: var(--text-muted, #72695d); font-weight: 600; }
@@ -29991,10 +30000,15 @@ a.wb-cal-more:hover { color: var(--orange); }
   cursor: pointer; white-space: nowrap;
 }
 .wb-chip:hover { border-color: var(--border-strong); color: var(--ink); }
-.wb-chip.on { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+/* Scoped to the FILTER BAR. This block sits after the option picker's rules, so an unscoped
+   .wb-chip.on won the cascade everywhere and painted every selected chip near-black -- including
+   the choice chips, whose whole point is the colour somebody gave the option. A filter toggle is
+   a different thing from an option: it is on or off, it carries its colour in its own dot, and
+   near-black is the right answer for it. It just has no business being the answer for both. */
+.wb-chip-bar .wb-chip.on { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 .wb-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .wb-chip-n { font-variant-numeric: tabular-nums; font-size: .72rem; color: var(--muted); font-weight: 700; }
-.wb-chip.on .wb-chip-n { color: color-mix(in srgb, var(--surface) 70%, transparent); }
+.wb-chip-bar .wb-chip.on .wb-chip-n { color: color-mix(in srgb, var(--surface) 70%, transparent); }
 .wb-chip-off { font-size: .8rem; color: var(--muted); flex: none; }
 .wb-chip-manage { margin-left: auto; flex: none; padding-left: 8px; }
 .wb-chip-select {
@@ -34623,7 +34637,10 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
    only useful if it is filled in by something that cannot see it. */
 .intake-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 
-.intake-manage .modal-body { display: flex; flex-direction: column; gap: 6px; }
+/* min-height:0 as well as overflow: a flex child will not shrink below its content without it,
+   so a long list of links would push the dialog past the bottom of the window instead of
+   scrolling inside it. */
+.intake-manage .modal-body { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; }
 .intake-manage h3 { margin: 18px 0 8px; font-size: 14px; }
 .intake-create { border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
 .intake-link-row, .intake-sub-row {

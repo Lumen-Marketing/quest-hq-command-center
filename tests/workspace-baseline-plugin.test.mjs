@@ -93,7 +93,7 @@ test('the live path reads back what the server installed', () => {
 
 test('the module really is gated on this plugin', () => {
   // If 'workspaces' ever becomes core, or the plugin is renamed, everything above is moot.
-  assert.match(main, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
+  assert.match(main, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'users', 'settings', 'automations'\]\);/);
   const catalog = readFileSync(join(root, 'src', 'workspaces', 'plugin-catalog.js'), 'utf8');
   assert.match(catalog, /id: 'workspace_builder',[^}]*module_ids: \['workspaces'\]/);
 });

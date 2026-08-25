@@ -36,7 +36,7 @@ const pluginAmbiguityMigration = pluginAmbiguityMigrationName
 const pluginById = (id) => WORKSPACE_PLUGIN_REGISTRY.find((plugin) => plugin.id === id);
 
 test('plugin registry maps every non-core route to a workspace plugin', () => {
-  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
+  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'users', 'settings', 'automations'\]\);/);
   assert.match(source, /const WORKSPACE_PLUGIN_REGISTRY = \[/);
   // Workday is a generic 'today's work' queue over contacts, quotes, jobs and tasks. It was
   // declared only by crm_2, and the two CRM plugins are mutually exclusive, so every company

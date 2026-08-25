@@ -1,0 +1,238 @@
+%PDF-1.4
+%âãÏÓ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 10017 >>
+stream
+BT 0.827 0.310 0.153 rg /F2 8.5 Tf 1 0 0 1 54 787.89 Tm (QUESTBASE) Tj ET
+BT 0.14 0.11 0.09 rg /F2 22 Tf 1 0 0 1 54 765.89 Tm (Workspace Apps - Function Check) Tj ET
+BT 0.42 0.38 0.33 rg /F1 9 Tf 1 0 0 1 54 749.89 Tm (20 August 2026  ·  main @ cdb732b, plus 19 uncommitted files) Tj ET
+0.827 0.310 0.153 RG 2 w 54 737.89 m 541.28 737.89 l S
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 54 711.89 Tm (A pass over every function of a workspace app, verified against the project's automated checks and its four release) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 54 698.79 Tm (gates. It records what was tested, what the result was, and - just as deliberately - what these checks cannot tell) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 54 685.69 Tm (you.) Tj ET
+BT 0.14 0.11 0.09 rg /F2 13 Tf 1 0 0 1 54 658.59 Tm (How this was checked) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 651.59 m 541.28 651.59 l S
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 635.59 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 635.59 Tm (343 test files, 4,099 tests, run in full. These are unit and static checks over the real modules: pure logic is) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 622.59 Tm (executed, and rendered markup is asserted against the source that draws it.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 607.59 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 607.59 Tm (The four project gates: the AI project brain, the tenancy matrix, the production build, and the bundle budget.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 592.59 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 592.59 Tm (NOT a browser walkthrough. .ai/README.md instructs that a local development or preview server must not be) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 579.59 Tm (started, so nothing below was clicked through in a running app. Where a function depends on live behaviour - a) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 566.59 Tm (real Supabase round trip, a drag, a print dialog - that is named under "Not verified" at the end rather than) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 553.59 Tm (implied to be working.) Tj ET
+BT 0.14 0.11 0.09 rg /F2 13 Tf 1 0 0 1 54 528.59 Tm (Gates) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 521.59 m 541.28 521.59 l S
+BT 0.42 0.38 0.33 rg /F2 8 Tf 1 0 0 1 56 505.59 Tm (GATE) Tj ET
+BT 0.42 0.38 0.33 rg /F2 8 Tf 1 0 0 1 176 505.59 Tm (RESULT) Tj ET
+BT 0.42 0.38 0.33 rg /F2 8 Tf 1 0 0 1 238 505.59 Tm (DETAIL) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 499.59 m 541.28 499.59 l S
+BT 0.14 0.11 0.09 rg /F2 9 Tf 1 0 0 1 56 486.59 Tm (Automated tests) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 176 486.59 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 238 486.59 Tm (4,099 of 4,099 · 343 files · 0 failing, 0 skipped) Tj ET
+BT 0.14 0.11 0.09 rg /F2 9 Tf 1 0 0 1 56 472.59 Tm (Project brain) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 176 472.59 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 238 472.59 Tm (21 required files · 18 markdown · migration marker current) Tj ET
+BT 0.14 0.11 0.09 rg /F2 9 Tf 1 0 0 1 56 458.59 Tm (Tenancy matrix) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 176 458.59 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 238 458.59 Tm (76 tenant-scoped tables, all with RLS and a readable policy) Tj ET
+BT 0.14 0.11 0.09 rg /F2 9 Tf 1 0 0 1 56 444.59 Tm (Production build) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 176 444.59 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 238 444.59 Tm (Vite build succeeded · no top-level throw on module init) Tj ET
+BT 0.14 0.11 0.09 rg /F2 9 Tf 1 0 0 1 56 430.59 Tm (Bundle budget) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 176 430.59 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 238 430.59 Tm (entry 363,996 of 364,544 gzip bytes · 548 bytes spare) Tj ET
+BT 0.14 0.11 0.09 rg /F2 13 Tf 1 0 0 1 54 400.59 Tm (Function by function) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 393.59 m 541.28 393.59 l S
+BT 0.42 0.38 0.33 rg /F1 9 Tf 1 0 0 1 54 377.59 Tm (Every function a workspace app offers, with the automated checks that cover it. "Tests" counts the assertions in the files) Tj ET
+BT 0.42 0.38 0.33 rg /F1 9 Tf 1 0 0 1 54 364.99 Tm (exercising that area; a file serving two areas is counted in both. All of them pass.) Tj ET
+BT 0.42 0.38 0.33 rg /F2 8 Tf 1 0 0 1 56 348.39 Tm (FUNCTION) Tj ET
+BT 0.42 0.38 0.33 rg /F2 8 Tf 1 0 0 1 392.61 348.39 Tm (FILES) Tj ET
+BT 0.42 0.38 0.33 rg /F2 8 Tf 1 0 0 1 444.5 348.39 Tm (TESTS) Tj ET
+BT 0.42 0.38 0.33 rg /F2 8 Tf 1 0 0 1 503.28 348.39 Tm (RESULT) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 342.39 m 541.28 342.39 l S
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 329.39 Tm (Records - the Items tab) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 329.39 Tm (20) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 329.39 Tm (234) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 329.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 315.39 Tm (Records - the record page) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 315.39 Tm (6) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 315.39 Tm (108) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 315.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 301.39 Tm (Fields - the builder & 30 types) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 301.39 Tm (12) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 301.39 Tm (234) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 301.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 287.39 Tm (Fields - import & export) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 287.39 Tm (2) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 287.39 Tm (49) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 287.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 273.39 Tm (Button field - push, move, set, link) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 273.39 Tm (10) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 273.39 Tm (163) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 273.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 259.39 Tm (Relationships, rollups & calculations) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 259.39 Tm (5) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 259.39 Tm (87) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 259.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 245.39 Tm (Sub-item lists \(collections\)) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 245.39 Tm (1) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 245.39 Tm (57) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 245.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 231.39 Tm (The Form field - document builder) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 231.39 Tm (16) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 231.39 Tm (301) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 231.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 217.39 Tm (The Sheet field - spreadsheet) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 217.39 Tm (5) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 217.39 Tm (86) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 217.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 203.39 Tm (Views, filters, sort & search) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 203.39 Tm (16) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 203.39 Tm (254) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 203.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 189.39 Tm (The Calendar tab) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 189.39 Tm (5) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 189.39 Tm (70) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 189.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 175.39 Tm (The Dashboard tab) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 175.39 Tm (12) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 175.39 Tm (168) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 175.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 161.39 Tm (Reports tab) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 161.39 Tm (3) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 161.39 Tm (36) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 161.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 147.39 Tm (Automations) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 147.39 Tm (2) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 147.39 Tm (18) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 147.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 133.39 Tm (Recycle bin & restore) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 133.39 Tm (3) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 133.39 Tm (42) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 133.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 119.39 Tm (Comments & activity feed) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 410.28 119.39 Tm (9) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 119.39 Tm (158) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 119.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 105.39 Tm (Quick Create - Task, Field, Call, SMS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 105.39 Tm (18) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 105.39 Tm (188) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 105.39 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 91.39 Tm (Import & export of data \(CSV, app files\)) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 91.39 Tm (10) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 91.39 Tm (112) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 91.39 Tm (PASS) Tj ET
+BT 0.42 0.38 0.33 rg /F1 7.5 Tf 1 0 0 1 54 38 Tm (Questbase · Workspace Apps Function Check · 20 Aug 2026) Tj ET BT 0.42 0.38 0.33 rg /F1 7.5 Tf 1 0 0 1 501.28 38 Tm (Page 1 of 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 7686 >>
+stream
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 787.89 Tm (App & workspace settings) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 787.89 Tm (17) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 787.89 Tm (195) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 787.89 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 773.89 Tm (Sharing, intake links & the app market) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 773.89 Tm (11) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 460.27 773.89 Tm (94) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 773.89 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 759.89 Tm (Files, photos & uploads) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 759.89 Tm (16) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 759.89 Tm (134) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 759.89 Tm (PASS) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 56 745.89 Tm (Permissions, roles & tenancy) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 405.27 745.89 Tm (18) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9 Tf 1 0 0 1 455.27 745.89 Tm (120) Tj ET
+BT 0.184 0.490 0.263 rg /F2 9 Tf 1 0 0 1 510.77 745.89 Tm (PASS) Tj ET
+BT 0.42 0.38 0.33 rg /F1 9 Tf 1 0 0 1 54 725.89 Tm (The app itself offers 8 tabs - Dashboard, Calendar, Items, Fields, Reports, Automations, Recycle bin and Settings - and) Tj ET
+BT 0.42 0.38 0.33 rg /F1 9 Tf 1 0 0 1 54 713.29 Tm (30 field types. Every tab and every field type is reached by at least one of the areas above.) Tj ET
+BT 0.14 0.11 0.09 rg /F2 13 Tf 1 0 0 1 54 686.69 Tm (Fixed during this check) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 679.69 m 541.28 679.69 l S
+BT 0.42 0.38 0.33 rg /F1 9 Tf 1 0 0 1 54 663.69 Tm (Six defects were found and repaired while checking. Each has a regression test.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 647.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 647.09 Tm (Call said "This record has no phone number" over a record displaying one. The phone picker excluded fields) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 634.09 Tm (hidden from the ITEMS TABLE - a column-width setting that leaves the field visible and editable on the record.) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 621.09 Tm (Per-app, which is why it struck some apps and not others.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 606.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 606.09 Tm (The Call and SMS dialog could stick on "Saving..." for ever. The insert was awaited with no try/catch and no) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 593.09 Tm (timeout, and the caller never caught, so any throw left the dialog disabled with its retry guard swallowing further) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 580.09 Tm (presses. Now caught, bounded at 20 seconds, and cancellable.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 565.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 565.09 Tm (Scheduling a call waited on a write of the WHOLE company document - every app and every record - for two) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 552.09 Tm (lines of bookkeeping. The call is durable the moment its own row lands, so the dialog no longer waits for the) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 539.09 Tm (rest.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 524.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 524.09 Tm (A push or move between two apps in the same company serialised and uploaded that whole document TWICE,) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 511.09 Tm (once for the arrival and once for the removal. It is one write now, which also makes a move atomic instead of) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 498.09 Tm (merely well-ordered.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 483.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 483.09 Tm (A timer left running after a successful save held the event loop open for 20 seconds.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 468.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 468.09 Tm (The Call dialog still claimed nothing rings on its own. The alarm shipped on 19 August.) Tj ET
+BT 0.14 0.11 0.09 rg /F2 13 Tf 1 0 0 1 54 443.09 Tm (Open - needs a decision) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 436.09 m 541.28 436.09 l S
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 420.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 420.09 Tm (Every workspace edit rewrites the entire company document, JSON.stringify'd synchronously into localStorage) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 407.09 Tm (before it is uploaded. Cost scales with everything you own rather than with what you changed, so photos and) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 394.09 Tm (spreadsheets on unrelated records slow unrelated saves. This is the root cause behind the lag reports. Halving it) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 381.09 Tm (helped; fixing it is per-record storage, which is a piece of work in its own right.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 366.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 366.09 Tm (A button-enable pass calls .closest\(\) on `document`, which has no such method - so the "only inside a modal or) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 353.09 Tm (record page" guard silently never applies, and opening any modal disables buttons page-wide.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 338.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 338.09 Tm (A reported failure of a Move button could not be reproduced. The move path, its ordering and its id handling) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 325.09 Tm (were all read and are sound; the surface it fails on is still needed.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 310.09 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 310.09 Tm (Nineteen files are uncommitted, including three finished features: field-setup import and export, Form-layout) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 297.09 Tm (import and export, and the +N photo badge. None of it is deployed.) Tj ET
+BT 0.14 0.11 0.09 rg /F2 13 Tf 1 0 0 1 54 272.09 Tm (Not verified) Tj ET
+0.86 0.82 0.74 RG 0.75 w 54 265.09 m 541.28 265.09 l S
+BT 0.42 0.38 0.33 rg /F1 9 Tf 1 0 0 1 54 249.09 Tm (These are outside what the checks above can reach, and are listed so the report is not read as saying more than it does.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 232.49 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 232.49 Tm (Anything in a real browser: clicks, drags, focus, scroll, printing, the PDF and PNG exports.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 217.49 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 217.49 Tm (Live Supabase round trips - RLS as the database actually enforces it, realtime refresh, and save conflicts) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 204.49 Tm (between two people editing at once.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 189.49 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 189.49 Tm (SMS delivery. The routing contract is not implemented, and the dialog says so.) Tj ET
+BT 0.827 0.310 0.153 rg /F2 9.5 Tf 1 0 0 1 56 174.49 Tm (-) Tj ET
+BT 0.14 0.11 0.09 rg /F1 9.5 Tf 1 0 0 1 68 174.49 Tm (Performance under real data volume. The lag reports are diagnosed by reading the code, not measured.) Tj ET
+BT 0.42 0.38 0.33 rg /F1 7.5 Tf 1 0 0 1 54 38 Tm (Questbase · Workspace Apps Function Check · 20 Aug 2026) Tj ET BT 0.42 0.38 0.33 rg /F1 7.5 Tf 1 0 0 1 501.28 38 Tm (Page 2 of 2) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000224 00000 n 
+0000000326 00000 n 
+0000010396 00000 n 
+0000010538 00000 n 
+0000018276 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+18418
+%%EOF

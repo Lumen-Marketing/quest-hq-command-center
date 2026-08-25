@@ -12,7 +12,7 @@ const smokeScript = readFileSync(new URL('../scripts/production-smoke-lib.mjs', 
 const dashboardRepOptionsBody = source.slice(source.indexOf('function dashboardRepOptions(companyId)'), source.indexOf('function dashboardOwnerKey'));
 
 test('dashboard replaces home as the canonical core workspace route', () => {
-  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
+  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'users', 'settings', 'automations'\]\);/);
   assert.match(source, /\{ id: 'dashboard', group: 'Workspace', label: 'Dashboard'/);
   // Company Contacts joined this group: it is company-wide, so it belongs beside Home and
   // Inbox in My work rather than under any one workspace. The three that were here before

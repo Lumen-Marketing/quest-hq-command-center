@@ -31,15 +31,15 @@ export function createSettingsSurfaces(ctx) {
     return `
       <article class="panel span-3 setup-pipeline-surface">
         <div class="section-head">
-          <div><h2>Pipelines</h2><p>Packaged Quest CRM stages and custom Workspace Builder pipelines are managed from their real records.</p></div>
-          <a class="btn btn-primary" href="${appHref(companyPath('workspaces', {}, companyId))}" data-router><i class="ti ti-layout-grid-add"></i>Open Workspace Builder</a>
+          <div><h2>Pipelines</h2><p>Packaged Quest CRM stages and custom Workspace Apps pipelines are managed from their real records.</p></div>
+          <a class="btn btn-primary" href="${appHref(companyPath('workspaces', {}, companyId))}" data-router><i class="ti ti-layout-grid-add"></i>Open Workspace Apps</a>
         </div>
         <div class="setup-action-grid">
           <button class="btn" type="button" data-action="open-stage-manager" data-module="contacts" ${canManageCrm ? '' : 'disabled'}><i class="ti ti-address-book"></i>Contact stages</button>
           <button class="btn" type="button" data-action="open-stage-manager" data-module="deals" ${canManageCrm ? '' : 'disabled'}><i class="ti ti-briefcase"></i>Quote stages</button>
           <button class="btn" type="button" data-action="open-stage-manager" data-module="jobs" ${canManageJobs ? '' : 'disabled'}><i class="ti ti-hammer"></i>Job stages</button>
         </div>
-        <p class="form-note">Quest CRM keeps its ready-made lifecycle. Regular CRM and Workspace Builder apps stay customizable per workspace.</p>
+        <p class="form-note">Quest CRM keeps its ready-made lifecycle. Regular CRM and Workspace Apps stay customizable per workspace.</p>
       </article>
     `;
   }

@@ -331,12 +331,12 @@ export const HELP_TOPICS = [
     readingMinutes: 4,
     moduleId: 'workspaces',
     permission: 'workspaces.manage',
-    route: { section: 'workspaces', label: 'Open Workspace Builder' },
+    route: { section: 'workspaces', label: 'Open Workspace Apps' },
     answer: 'Apps are custom no-code tools you build in Workspaces: design fields, add records, and charts and automations follow.',
     guide: {
       intro: 'Apps are custom, no-code tools you build inside a workspace — a tracker, a pipeline, an onboarding checklist, anything. You design the fields (the columns of data it holds), then add items (the rows), and reports and automations build on top.',
       steps: [
-        'Open Workspace Builder (or its tile on your dashboard).',
+        'Open Workspace Apps (or its tile on your dashboard).',
         'Click Add app (the + on the Apps list).',
         'Give the app a name, an icon, a color, and an optional short description, then Create app.',
         'Design its structure first: from the field palette, add the fields this app should hold (drag to reorder any time). You must add fields before you can add records.',
@@ -368,7 +368,7 @@ export const HELP_TOPICS = [
     readingMinutes: 3,
     moduleId: 'workspaces',
     permission: 'workspaces.manage',
-    route: { section: 'workspaces', label: 'Open Workspace Builder' },
+    route: { section: 'workspaces', label: 'Open Workspace Apps' },
     answer: 'Automations run no-code rules on an app: "When [something happens] → Then [do something]", like set a field or notify the team.',
     guide: {
       intro: 'Automations let an app act on its own — no code. Each automation is one rule with two parts: a trigger (When…) and one or more actions (Then…). They run automatically as items are created and updated.',

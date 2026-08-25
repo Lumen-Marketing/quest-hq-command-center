@@ -23,7 +23,7 @@ function sourceBetween(source, start, end) {
 }
 
 test('Tasks uses company entitlement plus independent workspace activation', () => {
-  assert.match(hostSource, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
+  assert.match(hostSource, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'users', 'settings', 'automations'\]\);/);
   assert.doesNotMatch(hostSource, /CORE_MODULE_IDS = new Set\([^\n]*'tasks'/);
 
   const taskPlugin = WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'tasks');

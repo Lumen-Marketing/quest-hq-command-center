@@ -13,7 +13,7 @@ test('command center uses the approved IBM Plex typography system', () => {
 });
 
 test('navigation follows the approved job center information architecture', () => {
-  assert.match(source, /const NAVIGATION_LABELS = \{[\s\S]*dashboard:\s*'Home'[\s\S]*workspaces:\s*'Workspace Builder'[\s\S]*messages:\s*'Inbox'[\s\S]*underwriter:\s*'Estimator'[\s\S]*analytics:\s*'Reports'[\s\S]*users:\s*'People & Access'[\s\S]*calendar:\s*'Meetings'/);
+  assert.match(source, /const NAVIGATION_LABELS = \{[\s\S]*dashboard:\s*'Home'[\s\S]*workspaces:\s*'Workspace Apps'[\s\S]*messages:\s*'Inbox'[\s\S]*underwriter:\s*'Estimator'[\s\S]*analytics:\s*'Reports'[\s\S]*users:\s*'People & Access'[\s\S]*calendar:\s*'Meetings'/);
   assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   // Company Contacts moved OUT of Work and into its own Company group, above Workspace and
   // first in the Company tab. A contact belongs to the company -- that is the whole point of

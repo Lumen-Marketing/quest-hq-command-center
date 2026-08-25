@@ -186,9 +186,18 @@ function submissionRow(submission) {
 export function renderIntakeManage() {
   if (!view) return '';
   const made = view.justMade;
+  // .modal-overlay is what fixes a dialog over the page: position:fixed, inset:0, a z-index
+  // and place-items:center. This markup had a bare .modal-backdrop and .modal instead, and
+  // NEITHER of those carries any positioning -- between them they are a background colour, a
+  // radius and a shadow. So the dialog rendered as two ordinary blocks at the foot of the
+  // document, below everything, and pressing Share link looked like pressing nothing.
+  //
+  // The scrim comes from the overlay now, so the separate backdrop element is gone with it. No
+  // close action rides on the overlay: a click inside the dialog bubbles out to it, and
+  // data-intake-close is matched with closest(), so it would shut on its own controls.
   return `
-    <div class="modal-backdrop" data-intake-close></div>
-    <div class="modal wb-modal intake-manage" role="dialog" aria-label="Share link">
+    <div class="modal-overlay intake-overlay">
+    <div class="modal wb-modal intake-manage" role="dialog" aria-modal="true" aria-label="Share link">
       <header class="modal-head">
         <h2><i class="ti ti-link"></i> Share a link to ${h(view.app?.name || 'this app')}</h2>
         <button class="btn" data-intake-close><i class="ti ti-x"></i></button>
@@ -235,6 +244,7 @@ export function renderIntakeManage() {
         <h3>Waiting to be added ${view.submissions?.length ? `<span class="pill">${view.submissions.length}</span>` : ''}</h3>
         ${view.submissions?.length ? view.submissions.map(submissionRow).join('') : '<p class="muted">Nothing has been sent in yet.</p>'}
       </div>
+    </div>
     </div>
   `;
 }

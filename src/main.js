@@ -1024,7 +1024,12 @@ const DASHBOARD_WIDGET_DEFAULTS = {
 // Core modules are always visible. Tasks is intentionally excluded: the
 // company plugin is the entitlement and each operational workspace controls
 // its own Tasks activation/configuration through workspace_plugins.
-const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'users', 'settings', 'automations']);
+// Core means "reachable whatever plugins a workspace has" -- isModuleInstalled returns true for
+// these before it ever looks at a plugin. jobs USED to be here, which is why the Production group
+// stayed on the rail with Quest CRM switched off: the catalog has always listed jobs among that
+// plugin's modules ("...and production jobs workspace"), and this set was short-circuiting the
+// check that would have honoured it.
+const CORE_MODULE_IDS = new Set(['dashboard', 'users', 'settings', 'automations']);
 // Not core -- it is a real plugin with real permissions -- but installed for every new
 // company and workspace regardless of preset, because creating a workspace leads into the
 // workspace app and a workspace without this lands on a module that is not installed.
@@ -1262,9 +1267,10 @@ const MODULE_REGISTRY = [
 
 const NAVIGATION_LABELS = {
   dashboard: 'Home',
-  // 'Workspaces' sat inside the group already called WORKSPACE, so the rail read as though
-  // it repeated itself. What the module actually holds is the apps you build.
-  workspaces: 'Workspace Builder',
+  // 'Workspaces' sat inside the group already called WORKSPACE, so the rail read as though it
+  // repeated itself. What the module actually holds is apps, so that is what it is called -- it
+  // was briefly "Workspace Builder", which named the tool rather than the thing you came for.
+  workspaces: 'Workspace Apps',
   messages: 'Inbox',
   underwriter: 'Estimator',
   analytics: 'Reports',
@@ -3901,6 +3907,11 @@ function openIntakeManage(companyId, workspaceId, appId) {
       createSupabaseClient, isLiveSupabaseSession, render, showToast, wbFind, wbSave, wbUid,
       setIntakeView: (value) => { state.intakeView = value; },
     });
+  // Caught, because the alternative is a button that does nothing and says nothing. A fetched
+  // module can fail to arrive, and this one is reached from a single click with no other path.
+  }).catch((error) => {
+    console.error('Share link failed to open', error);
+    showToast('Could not open the share link panel — check your connection and try again.', 'local', 'Workspaces');
   });
 }
 
@@ -7921,7 +7932,8 @@ function loadCompanyDashboard() {
   if (!companyDashboardPending) {
     companyDashboardPending = import('./home/company-dashboard.js').then((mod) => {
       companyDashboardModule = mod.createCompanyDashboard({
-        DASHBOARD_RANGE_OPTIONS, activeSession, appHref, canViewModule, companyMessageUnreadCount, companyName,
+        DASHBOARD_RANGE_OPTIONS, activeSession, activeWorkspaceId, allowedOperationalWorkspaces,
+        appHref, canViewModule, companyMessageUnreadCount, companyName,
         companyPath, dashboardActivityItems, dashboardContext, dashboardRepOptions, dashboardVisibleRoleViews, dashboardWidgetLayout,
         dashboardWidgetRegistry, dayPart, emptyState, field, firstName, h,
         homeNextTasks, homeUnreadMessages, isLaunchHiddenDashboardWidget, moduleById, renderAvatar, renderCompanySwitch,
@@ -34161,6 +34173,14 @@ function onDocumentChange(event) {
   if (event.target.matches('[data-dashboard-rep]')) {
     state.dashboardRep = event.target.value || 'all';
     render();
+    return;
+  }
+  // The SAME switch the left rail makes, not a second idea of which workspace is open. Two
+  // places that each remembered their own answer would sooner or later disagree, and the
+  // dashboard would be showing one workspace's numbers under another one's name.
+  if (event.target.matches('[data-dashboard-workspace]')) {
+    const next = event.target.value || '';
+    if (next && next !== activeWorkspaceId()) setActiveWorkspace(next);
     return;
   }
   if (event.target.matches('[data-calls-widget-custom]')) {

@@ -179,7 +179,7 @@ The desktop command rail separates daily modules into My work and company-wide/c
 
 ## Job Center navigation uses stakeholder language at the presentation layer
 
-The desktop rail groups daily work as Work, Pipeline, Production, Tools, Review, and Build, with user-facing aliases such as Home, Inbox, Estimator, Reports, People & Access, Workspace Builder, and Meetings. Compatibility module IDs and permission names remain unchanged where existing links or authorization depend on them; new Setup and Admin sections use the existing `settings.view` permission. The rail and dense estimator screens use IBM Plex Sans for interface copy and IBM Plex Mono for labels and numeric data.
+The desktop rail groups daily work as Work, Pipeline, Production, Tools, Review, and Build, with user-facing aliases such as Home, Inbox, Estimator, Reports, People & Access, Workspace Apps, and Meetings. Compatibility module IDs and permission names remain unchanged where existing links or authorization depend on them; new Setup and Admin sections use the existing `settings.view` permission. The rail and dense estimator screens use IBM Plex Sans for interface copy and IBM Plex Mono for labels and numeric data.
 
 ## Underwriter is a decision workbench, not a guidance dashboard
 
