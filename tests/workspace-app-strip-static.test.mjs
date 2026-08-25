@@ -38,6 +38,22 @@ test('Activity has enough height from the shared shell CSS before builder CSS lo
   assert.match(sharedRule, /min-height:\s*64px;/);
 });
 
+test('Activity app strip layout does not depend on the lazy builder stylesheet', () => {
+  const strip = shellStyles.match(/\.quest-app\[data-section="workspaces"\] \.wb-topbar\s*\{[^}]*\}/)?.[0] || '';
+  const track = shellStyles.match(/\.quest-app\[data-section="workspaces"\] \.wb-topbar-apps\s*\{[^}]*\}/)?.[0] || '';
+  const tab = shellStyles.match(/\.quest-app\[data-section="workspaces"\] \.wb-topbar-tab\s*\{[^}]*\}/)?.[0] || '';
+  const icon = shellStyles.match(/\.quest-app\[data-section="workspaces"\] \.wb-topbar-ic\s*\{[^}]*\}/)?.[0] || '';
+  const label = shellStyles.match(/\.quest-app\[data-section="workspaces"\] \.wb-topbar-label\s*\{[^}]*\}/)?.[0] || '';
+
+  assert.match(strip, /display:\s*flex;/);
+  assert.match(track, /display:\s*flex;/);
+  assert.match(track, /overflow-x:\s*auto;/);
+  assert.match(tab, /display:\s*flex;/);
+  assert.match(tab, /flex-direction:\s*column;/);
+  assert.match(icon, /display:\s*grid;/);
+  assert.match(label, /-webkit-line-clamp:\s*2;/);
+});
+
 test('the arrows stay, but now scroll the same track', () => {
   assert.match(header, /data-wb-topbar-scroll="-1"/);
   assert.match(header, /data-wb-topbar-scroll="1"/);

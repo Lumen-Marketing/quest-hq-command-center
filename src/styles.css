@@ -31436,7 +31436,45 @@ a.wb-cal-more:hover { color: var(--orange); }
    removed at its source instead -- the surface's own top padding, dropped for this section
    only. The sides still bleed through its 24px so the strip spans the full width. */
 .quest-app[data-section="workspaces"] .work-surface { padding-top: 0; }
-.quest-app[data-section="workspaces"] .wb-topbar-apps { min-height: 64px; }
+.quest-app[data-section="workspaces"] .wb-topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quest-app[data-section="workspaces"] .wb-topbar-apps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 64px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.quest-app[data-section="workspaces"] .wb-topbar-apps::-webkit-scrollbar { display: none; }
+.quest-app[data-section="workspaces"] .wb-topbar-tab {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.quest-app[data-section="workspaces"] .wb-topbar-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.quest-app[data-section="workspaces"] .wb-topbar-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 
 /* How tall the app strip is when it is stuck, and therefore where the tab row underneath has
    to stop.
