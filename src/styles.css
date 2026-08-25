@@ -31442,6 +31442,7 @@ a.wb-cal-more:hover { color: var(--orange); }
   gap: 8px;
 }
 .quest-app[data-section="workspaces"] .wb-topbar-apps {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 6px;

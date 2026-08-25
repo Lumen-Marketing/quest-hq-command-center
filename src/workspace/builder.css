@@ -57,6 +57,7 @@
    as an optional desktop affordance. overflow-x must be auto (not hidden) or a touch
    swipe does nothing. */
 .wb-topbar-apps {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 6px;

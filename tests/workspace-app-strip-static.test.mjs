@@ -47,6 +47,7 @@ test('Activity app strip layout does not depend on the lazy builder stylesheet',
 
   assert.match(strip, /display:\s*flex;/);
   assert.match(track, /display:\s*flex;/);
+  assert.match(track, /flex:\s*1 1 auto;/);
   assert.match(track, /overflow-x:\s*auto;/);
   assert.match(tab, /display:\s*flex;/);
   assert.match(tab, /flex-direction:\s*column;/);
