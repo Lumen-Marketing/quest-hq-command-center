@@ -228,3 +228,56 @@ sample values and rebuilding a category's options from the distinct values in us
 
 **Worth fixing properly:** the table should carry `deleted_at` and join the recycle bin, the way
 records already do. Until then a mis-click plus Save is unrecoverable through the product.
+
+## Proposal and Client Portal PDF export are blocked by the enforced CSP
+
+Confirmed 2026-08-25 against production at `9dcf312`.
+
+`ca0839e` began enforcing a CSP whose `script-src` is `'self' 'unsafe-eval' 'wasm-unsafe-eval'`.
+Three export paths still fetch their PDF engine from a CDN through `loadExternalScript()`:
+
+- `exportProposalPdf()` (src/main.js:26173) -- Proposals > Export PDF, and the public proposal export
+- `exportClientPortalMarkedPdf()` (src/main.js:36681-36682) -- Client Portal > Export marked PDF
+
+Both load `https://cdnjs.cloudflare.com/.../jspdf.umd.min.js`, and the second also asks for
+`canvas2svg`. cdnjs is not an allowed script source, so the request is blocked, the promise
+rejects, and the user gets "Could not export proposal." or "Could not export marked PDF.". jsPDF
+is not a bundled dependency, so there is no same-origin copy to fall back to.
+
+The release note in `current-state.md` claiming the current PDF tooling remains supported was
+written from the ZIP and PDF.js paths, which ARE bundled and do still work. Only these two jsPDF
+exports are affected.
+
+Fix by self-hosting jsPDF the way the Tasks Supabase SDK was handled in `fd6e704`, or by moving
+these exports onto the project's own writer at `src/form/doc-pdf.js`, which is already verified
+byte-for-byte by `tests/doc-pdf.test.mjs`. Adding cdnjs to `script-src` would also work but
+weakens the policy this same release set out to tighten.
+
+## The workspace app strip is styled by two stylesheets that disagree
+
+Confirmed 2026-08-25 by rendering the deployed stylesheets in headless Chromium.
+
+`.wb-topbar*` is declared in both `src/styles.css` and `src/workspace/builder.css`, with different
+values. builder.css is a lazily appended `<link>`, so it loads last and wins every tie. The scoped
+`.quest-app[data-section="workspaces"]` block added in `72fd9b6` was meant to make the shell
+authoritative, but it restates only the layout properties, so builder.css still decides the rest.
+
+Two consequences on the Activity route:
+
+- App names are truncated to one line. builder.css sets `white-space: nowrap`, which the scoped
+  block does not restate, so the two-line clamp it does restate never has anything to clamp.
+  "Underwriter" renders as "Underwri..." and "Change Orders" as "Change O...". Adding
+  `white-space: normal` to the scoped label rule fixes it; verified against the deployed CSS.
+- The strip renders at builder.css's sizes, not the tuned ones: tab font-size 12.48px against the
+  intended .63rem, padding 8px 6px against 5px 4px, icon 34x34 against 26x26, strip height 104.9px
+  against 81.2px. The larger type is what pushes names past the 84px tab in the first place.
+
+`tests/workspace-app-strip-static.test.mjs` cannot catch either: several assertions concatenate the
+two stylesheets into one string, which erases the load order that decides the outcome, and the
+scoped-block test asserts only that properties are present, never that they win.
+
+Note also that the pre-builder-CSS window the scoped block is described as guarding cannot occur:
+`renderWorkspaceBuilderPage` (src/main.js:13755) returns a loader until `workspaceBuilderStyles.ready`,
+and all three `wbWorkspaceHeader` call sites sit behind that gate. The durable fix is one source of
+truth for these rules -- the strip only ever renders inside `.quest-app[data-section="workspaces"]`,
+so the duplicate has no other consumer.
