@@ -31436,6 +31436,7 @@ a.wb-cal-more:hover { color: var(--orange); }
    removed at its source instead -- the surface's own top padding, dropped for this section
    only. The sides still bleed through its 24px so the strip spans the full width. */
 .quest-app[data-section="workspaces"] .work-surface { padding-top: 0; }
+.quest-app[data-section="workspaces"] .wb-topbar-apps { min-height: 64px; }
 
 /* How tall the app strip is when it is stuck, and therefore where the tab row underneath has
    to stop.

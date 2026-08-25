@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
+const shellStyles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const styles = (shellStyles + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 const drag = readFileSync(new URL('../src/workspace/topbar-drag.js', import.meta.url), 'utf8');
 const header = source.match(/function wbWorkspaceHeader\([\s\S]*?\n\}/)[0];
 
@@ -22,6 +23,19 @@ test('the track scrolls horizontally and can be swiped', () => {
   assert.doesNotMatch(rule, /overflow: hidden;/);
   assert.match(rule, /-webkit-overflow-scrolling: touch;/);
   assert.match(rule, /overscroll-behavior-x: contain;/);
+});
+
+test('the horizontal track leaves room for app labels before clipping the y axis', () => {
+  // The app strip needs overflow-y clipped so horizontal scrolling does not grow a second
+  // scrollport, but that clipping used to shave the labels off the Activity/app tiles.
+  const rule = styles.match(/\.wb-topbar-apps \{[^}]*overflow-x: auto;[^}]*\}/)[0];
+  assert.match(rule, /min-height:\s*64px;/);
+  assert.match(rule, /overflow-y: hidden;/);
+});
+
+test('Activity has enough height from the shared shell CSS before builder CSS loads', () => {
+  const sharedRule = shellStyles.match(/\.quest-app\[data-section="workspaces"\] \.wb-topbar-apps \{[^}]*\}/)?.[0] || '';
+  assert.match(sharedRule, /min-height:\s*64px;/);
 });
 
 test('the arrows stay, but now scroll the same track', () => {
