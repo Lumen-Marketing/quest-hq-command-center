@@ -5931,19 +5931,35 @@ textarea:focus {
    width. Identity on top, controls beneath it at full width: nothing is cramped and there is
    no dead space. */
 .access-user-row {
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 10px 14px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px 12px;
+  /* Tighter than the other rows in this list, because a shut one is a single line and 14px
+     around it reads as a card rather than a list entry. It opens back out below. */
+  padding: 9px 12px;
 }
 
-.access-user-row > .avatar { grid-area: 1 / 1; }
+.access-user-row.is-open { padding: 14px 12px; }
+
+/* Sized here rather than by class, so the avatar cannot fight the grid column it sits in. */
+.access-user-row > .avatar {
+  grid-area: 1 / 1;
+  width: 34px;
+  height: 34px;
+  font-size: 12px;
+}
+
 .access-user-main { grid-area: 1 / 2; }
-.access-role-form { grid-area: 2 / 2; }
+/* Auto-flowed rather than pinned to a row number: the notices sit between the identity and
+   the form, and a fixed grid-area meant adding anything cost a renumber of everything under
+   it -- which is how two things end up stacked in the same cell. */
+.access-user-notes,
+.access-role-form { grid-column: 2; }
 
 /* Suspend and Remove sit below the save button, separated by a rule: they are not part of
    filling the form in, and putting them beside Save is how somebody removes a person while
    reaching for it. */
 .access-user-danger {
-  grid-area: 3 / 2;
+  grid-column: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -5959,10 +5975,14 @@ textarea:focus {
    Hidden with display:none rather than the hidden attribute, so the grid areas below stay
    where they are and a closed row leaves no gap. It also keeps the closed form out of the
    accessibility tree, which the attribute would do too but the CSS already handles. */
+.access-user-row:not(.is-open) > .access-user-notes,
 .access-user-row:not(.is-open) > .access-role-form,
 .access-user-row:not(.is-open) > .access-user-danger {
   display: none;
 }
+
+/* Empty for most people, and an empty grid item still takes its gap. */
+.access-user-notes:empty { display: none; }
 
 /* The identity block IS the control, so it has to stop looking like a button while still
    behaving as one -- and keep its own focus ring, because removing the border removes the
@@ -6005,14 +6025,13 @@ button.access-user-main:focus-visible {
   }
 }
 
-/* What the row still says while shut: the role, and how many workspaces they actually reach.
-   Those are the two things a member list is scanned for, and hiding the form hides both. */
-.access-user-summary {
-  display: block;
-  color: var(--ink-2);
-  font-size: 12.5px;
-  font-weight: 700;
-  margin-top: 4px;
+/* The one meta line: email, status, role, reach. It has to stay ONE line for the row to read
+   as a list entry, so it ellipses rather than wrapping -- the name above it is the identifier
+   and the row opens if you need the rest. */
+.access-user-main > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .access-user-row.muted {

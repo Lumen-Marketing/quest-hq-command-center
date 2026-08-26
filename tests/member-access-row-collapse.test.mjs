@@ -23,7 +23,7 @@ const h = (value) => String(value ?? '').replace(/[&<>"]/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
 }[char]));
 
-function rowFor({ expanded = [], user, workspaces = 2 } = {}) {
+function rowFor({ expanded = [], user, workspaces = 2, primaryOwner = false } = {}) {
   const state = {
     operationalWorkspaces: Array.from({ length: workspaces }, (_, index) => ({
       id: `w${index + 1}`, company_id: 'c1', status: 'active', name: `Workspace ${index + 1}`,
@@ -34,7 +34,7 @@ function rowFor({ expanded = [], user, workspaces = 2 } = {}) {
     companyRoles: () => [{ id: 'r1', name: 'Owner' }, { id: 'r2', name: 'Member' }],
     h,
     isLastActiveOwner: () => false,
-    isPrimaryOwner: () => false,
+    isPrimaryOwner: () => primaryOwner,
     renderAvatar: () => '<span class="avatar"></span>',
     roleIdForName: () => 'r2',
     state,
@@ -68,18 +68,30 @@ test('opening one row does not open the others', () => {
 test('the whole identity block is the control, and it says what it controls', () => {
   const html = rowFor({ user: member });
   assert.match(html, /<button class="access-user-main" type="button" data-member-expand="p1"/);
-  // Both regions it reveals, so a screen reader is told what opening the row does.
-  assert.match(html, /aria-controls="access-user-p1-form access-user-p1-actions"/);
+  // Every region it reveals, so a screen reader is told what opening the row does.
+  assert.match(html, /aria-controls="access-user-p1-notes access-user-p1-form access-user-p1-actions"/);
+  assert.match(html, /<div class="access-user-notes" id="access-user-p1-notes">/);
   assert.match(html, /<form class="access-role-form" id="access-user-p1-form"/);
   assert.match(html, /<div class="access-user-danger" id="access-user-p1-actions"/);
 });
 
-test('a shut row still says what the person is and how far they reach', () => {
-  // Closing must not hide the two things a member list is actually scanned for.
+test('a shut row is one line that answers who, whether, what and how much', () => {
+  // The four things a member list is scanned for, left to right, without opening anything.
   const html = rowFor({ user: member, workspaces: 3 });
-  assert.match(html, /class="access-user-summary">Member — 1 of 3 workspaces</);
-  // And it is not repeated once the form below is showing the same thing.
-  assert.doesNotMatch(rowFor({ expanded: ['p1'], user: member, workspaces: 3 }), /access-user-summary/);
+  assert.match(html, /<strong>Jane Roe<\/strong>/);
+  assert.match(html, /<span>jane@example\.com · Active · Member · 1 of 3 workspaces<\/span>/);
+  // Same line open or shut, so opening a row does not shuffle what is above it.
+  assert.match(rowFor({ expanded: ['p1'], user: member, workspaces: 3 }), /jane@example\.com · Active · Member · 1 of 3 workspaces/);
+});
+
+test('the notices sit with the controls they explain, not on the list row', () => {
+  // "their role and status cannot be changed" is about the selects below it. On a shut row it
+  // was three lines of prose on top of a list entry, which is what stopped it reading as a list.
+  const owner = rowFor({ user: member, primaryOwner: true });
+  assert.match(owner, /<div class="access-user-notes" id="[^"]*">\s*<small class="access-note">Main owner/);
+  // And nothing but the identity is inside the button.
+  const button = owner.slice(owner.indexOf('<button class="access-user-main"'), owner.indexOf('</button>'));
+  assert.doesNotMatch(button, /access-note/);
 });
 
 test('the form is still rendered when shut, so saving is untouched', () => {
@@ -97,7 +109,7 @@ test('a membership with no profile yet is keyed by email, so it still collapses'
   assert.match(html, /data-member-expand="p@example.com"/);
   // The id has to survive being put in an attribute and pointed at by aria-controls, so the
   // characters an email brings with it are replaced rather than emitted raw.
-  assert.match(html, /aria-controls="access-user-p-example-com-form access-user-p-example-com-actions"/);
+  assert.match(html, /aria-controls="access-user-p-example-com-notes access-user-p-example-com-form access-user-p-example-com-actions"/);
 });
 
 test('a row with nothing to key on has no toggle, and stays open', () => {
@@ -111,8 +123,16 @@ test('a row with nothing to key on has no toggle, and stays open', () => {
 test('the stylesheet is what hides a shut row', () => {
   assert.match(
     styles,
-    /\.access-user-row:not\(\.is-open\) > \.access-role-form,\s*\.access-user-row:not\(\.is-open\) > \.access-user-danger \{\s*display: none;/,
+    /\.access-user-row:not\(\.is-open\) > \.access-user-notes,\s*\.access-user-row:not\(\.is-open\) > \.access-role-form,\s*\.access-user-row:not\(\.is-open\) > \.access-user-danger \{\s*display: none;/,
   );
+  // Most people have no notice, and an empty grid item still takes its gap.
+  assert.match(styles, /\.access-user-notes:empty \{ display: none; \}/);
+  // The rows below the identity auto-flow, so adding one does not renumber the others into
+  // the same cell.
+  assert.match(styles, /\.access-user-notes,\s*\.access-role-form \{ grid-column: 2; \}/);
+  assert.doesNotMatch(styles, /\.access-user-danger \{\s*grid-area: 3 \/ 2;/);
+  // The meta line has to stay one line or the row stops reading as a list entry.
+  assert.match(styles, /\.access-user-main > span \{[^}]*white-space: nowrap;/);
   // The caret turns over, but not for anyone who asked for less motion.
   assert.match(styles, /\.access-user-row\.is-open \.access-user-caret \{\s*transform: rotate\(180deg\);/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.access-user-caret \{\s*transition: none;/);

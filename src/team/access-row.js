@@ -38,31 +38,41 @@ export function createAccessRow(ctx) {
     const isOpen = !toggleKey || (expandedIds instanceof Set && expandedIds.has(toggleKey));
     const domId = `access-user-${String(toggleKey).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
-    // What the row says about itself while it is shut. Without this, closing it would hide the
-    // two things somebody scans a member list FOR -- what they are, and how much they reach.
+    // One line, so a shut row is a list row. Everything somebody scans a member list for --
+    // who, whether they are active, what they are, and how much they reach -- reads left to
+    // right without opening anything.
     const assignedCount = workspaces.filter((workspace) => implicitWorkspaceAccess
       || workspaceMembershipForProfile(workspace.id, user.profile_id)?.status === 'active').length;
     const roleLabel = roles.find((role) => role.id === selectedRoleId)?.name
       || user.role_label || titleCase(user.role || 'Member');
-    const summary = `${roleLabel} — ${assignedCount} of ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'}`;
+    const meta = [
+      userDisplayMeta(user),
+      membershipStatusLabel(user.status),
+      roleLabel,
+      workspaces.length ? `${assignedCount} of ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(' · ');
+
+    // The notices explain why the CONTROLS below are restricted, so they belong with the
+    // controls. On the shut row they were three lines of prose on top of a list entry, which
+    // is what stopped it reading as a list at all.
+    const notes = `${isMainOwner ? '<small class="access-note">Main owner of this company - their role and status cannot be changed.</small>'
+    : isLastOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}`
+      + `${user.status === 'disabled' ? '<small class="access-note">Suspended. They keep their account and everything they did, and can reach nothing here until they are set back to Active.</small>' : ''}`;
 
     const identity = `
           <strong>${h(userDisplayName(user))}</strong>
-          <span>${h(userDisplayMeta(user))} / ${h(membershipStatusLabel(user.status))}</span>
-          ${isMainOwner ? '<small class="access-note">Main owner of this company - their role and status cannot be changed.</small>'
-    : isLastOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}
-          ${user.status === 'disabled' ? '<small class="access-note">Suspended. They keep their account and everything they did, and can reach nothing here until they are set back to Active.</small>' : ''}
-          ${isOpen || !workspaces.length ? '' : `<small class="access-user-summary">${h(summary)}</small>`}`;
+          <span>${h(meta)}</span>`;
 
     return `
       <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''} ${isOpen ? 'is-open' : ''}">
         ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
         ${toggleKey ? `
         <button class="access-user-main" type="button" data-member-expand="${h(toggleKey)}"
-          aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${h(domId)}-form ${h(domId)}-actions">
+          aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${h(domId)}-notes ${h(domId)}-form ${h(domId)}-actions">
           ${identity}
           <i class="ti ti-chevron-down access-user-caret" aria-hidden="true"></i>
         </button>` : `<div class="access-user-main">${identity}</div>`}
+        <div class="access-user-notes" id="${h(domId)}-notes">${notes}</div>
         <form class="access-role-form" id="${h(domId)}-form" data-user-role-form>
           <input type="hidden" name="company_id" value="${h(companyId)}" />
           <input type="hidden" name="profile_id" value="${h(user.profile_id)}" />

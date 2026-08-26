@@ -66,11 +66,16 @@ test('no select is given a height its own padding cannot fit', () => {
 
 test('the member row stacks instead of squeezing the controls into a third', () => {
   // Side by side, the controls were four rows tall against a two-line name: a block of empty
-  // row under every member, and the selects crushed.
+  // row under every member, and the selects crushed. One narrow column for the avatar, one for
+  // everything else, and the controls sit BELOW the identity rather than beside it.
   const rule = css.slice(css.indexOf('.access-user-row {'));
   const body = rule.slice(0, rule.indexOf('}'));
-  assert.match(body, /grid-template-columns: 42px minmax\(0, 1fr\);/);
-  assert.match(css, /\.access-role-form \{ grid-area: 2 \/ 2; \}/);
+  assert.match(body, /grid-template-columns: 34px minmax\(0, 1fr\);/);
+  // Auto-flowed down column 2 rather than pinned to a row number: the row gained a notices
+  // block between the identity and the form, and fixed rows would have stacked two of them
+  // into the same cell.
+  assert.match(css, /\.access-user-notes,\s*\.access-role-form \{ grid-column: 2; \}/);
+  assert.match(css, /\.access-user-main \{ grid-area: 1 \/ 2; \}/);
 });
 
 test('the email is readable rather than tiny bold grey', () => {
