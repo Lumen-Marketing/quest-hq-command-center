@@ -78,11 +78,13 @@ export function createCompanyContactsPage(ctx) {
 
   async function saveCompanyContactForm(form) {
     const companyId = canonicalCompanyId(form.querySelector('[name="company_id"]')?.value || activeCompanyId());
-    if (!requirePermission('company_contacts.manage', companyId)) return;
     const data = Object.fromEntries(new FormData(form).entries());
     const name = String(data.name || '').trim();
     if (!name) { showToast('A contact needs a name.', 'local', 'Company Contacts'); return; }
     const existing = data.id ? companyContactById(String(data.id)) : null;
+    // Checked here rather than on the way in: which permission this needs depends on whether
+    // the form is filing somebody new or changing somebody already in the directory.
+    if (!requirePermission(existing ? 'company_contacts.edit' : 'company_contacts.create', companyId)) return;
 
     // Everything named field:<id> belongs to a customer-defined field. Read against the
     // field list rather than the form, so a field deleted mid-edit does not linger in the
@@ -160,7 +162,7 @@ export function createCompanyContactsPage(ctx) {
     const companyId = activeCompanyId();
     const field = companyContactFieldsFor(companyId).find((item) => item.id === fieldId);
     if (!field || field.type !== 'category' || !String(label || '').trim()) return;
-    if (!can('company_contacts.manage', companyId)) return;
+    if (!can('company_contacts.fields.manage', companyId)) return;
     await ensureCompanyContactFieldOption(companyId, field, label);
   }
 
@@ -171,7 +173,7 @@ export function createCompanyContactsPage(ctx) {
     const field = companyContactFieldsFor(activeCompanyId()).find((item) => item.id === fieldId)
       || state.companyContactFields.find((item) => item.id === fieldId);
     if (!field) return;
-    if (!requirePermission('company_contacts.manage', field.company_id)) return;
+    if (!requirePermission('company_contacts.fields.manage', field.company_id)) return;
     const clean = String(label || '').trim().toLowerCase();
     const next = normalizeCompanyContactField({
       ...field,
@@ -200,7 +202,7 @@ export function createCompanyContactsPage(ctx) {
     const existing = companyContactsFor(target)
       .find((contact) => String(contact.name || '').trim().toLowerCase() === clean.toLowerCase());
     if (existing) return existing;
-    if (!requirePermission('company_contacts.manage', target)) return null;
+    if (!requirePermission('company_contacts.create', target)) return null;
     const saved = await persistCompanyContact({ id: '', company_id: target, name: clean, field_values: {} });
     return saved || null;
   }
@@ -230,9 +232,6 @@ export function createCompanyContactsPage(ctx) {
     const target = canonicalCompanyId(companyId);
     const clean = String(name || '').trim();
     if (!clean) return { ok: false, error: 'A contact needs a name.' };
-    if (!can('company_contacts.manage', target)) {
-      return { ok: false, error: 'Your role cannot add contacts.' };
-    }
 
     const fields = companyContactFieldsFor(target);
     const existing = companyContactsFor(target)
@@ -250,6 +249,23 @@ export function createCompanyContactsPage(ctx) {
       values[field.id] = next;
       landed += 1;
     });
+
+    // The person is already in the directory and the record brought nothing that was missing,
+    // so there is nothing to write. Returning the existing contact rather than re-saving it
+    // means linking a lead to somebody already on file needs no write permission at all --
+    // and it stops a button press bumping a contact's timestamp for no reason.
+    if (existing && !landed) return { ok: true, landed: 0, reused: true, contact: existing };
+
+    // Filing somebody new and filling in blanks on somebody already here are different powers.
+    const needed = existing ? 'company_contacts.edit' : 'company_contacts.create';
+    if (!can(needed, target)) {
+      return {
+        ok: false,
+        error: existing
+          ? 'Your role cannot edit company contacts.'
+          : 'Your role cannot add company contacts.',
+      };
+    }
 
     if (!existing) {
       fields.filter((field) => field.type === 'autonumber').forEach((field) => {
@@ -303,7 +319,7 @@ export function createCompanyContactsPage(ctx) {
   async function deleteCompanyContact(contactId) {
     const contact = companyContactById(contactId);
     if (!contact) return;
-    if (!requirePermission('company_contacts.manage', contact.company_id)) return;
+    if (!requirePermission('company_contacts.delete', contact.company_id)) return;
     const { ok } = await supabaseWrite('company_contacts', {
       id: contact.id, company_id: contact.company_id, name: contact.name, deleted_at: new Date().toISOString(),
     });
@@ -386,7 +402,7 @@ export function createCompanyContactsPage(ctx) {
    */
   async function deleteSelectedContacts() {
     const companyId = canonicalCompanyId(activeCompanyId());
-    if (!requirePermission('company_contacts.manage', companyId)) return;
+    if (!requirePermission('company_contacts.delete', companyId)) return;
     const contacts = selectedContacts(companyId);
     if (!contacts.length) { clearContactSelection(); return; }
 
@@ -737,7 +753,11 @@ export function createCompanyContactsPage(ctx) {
     const chipField = companyContactChipField(companyId);
     const phoneField = firstFieldOf(companyId, 'phone');
     const active = state.companyContactTypeFilter || 'all';
-    const canManage = can('company_contacts.manage', companyId);
+    // Three different powers, and they used to share one flag: bulk select exists in order to
+    // delete, the settings button opens the field and card editor, New contact files somebody.
+    const canDelete = can('company_contacts.delete', companyId);
+    const canCreate = can('company_contacts.create', companyId);
+    const canFields = can('company_contacts.fields.manage', companyId);
 
     // Name, Active with us, Open balance and Last touch are this view's own — they are what a
     // directory is for, and no field of yours produces them. Everything between is YOUR fields,
@@ -748,7 +768,7 @@ export function createCompanyContactsPage(ctx) {
     // Picking several at once adds a column, so it has to go into the SAME track list the head
     // and every row share -- a checkbox added to the rows alone would shunt every cell one
     // column left of its heading.
-    const selecting = canManage && !!state.companyContactSelecting;
+    const selecting = canDelete && !!state.companyContactSelecting;
     const ticked = new Set(selecting ? selectedIds() : []);
     const tracks = [...(selecting ? ['34px'] : []), 'minmax(200px, 1.4fr)', ...columns.map(() => 'minmax(130px, .9fr)'),
       'minmax(180px, 1.2fr)', '120px', '110px'].join(' ');
@@ -797,12 +817,13 @@ export function createCompanyContactsPage(ctx) {
               <i class="ti ti-search"></i>
               <input type="search" data-company-contact-search value="${h(state.companyContactQuery || '')}" placeholder="Search every field…" aria-label="Search company contacts" />
             </label>
-            ${canManage && (rows.length || selecting) ? `
+            ${canDelete && (rows.length || selecting) ? `
               <button class="btn ${selecting ? 'btn-primary' : ''}" type="button" data-action="toggle-company-contact-select" aria-pressed="${selecting}">
                 <i class="ti ti-${selecting ? 'x' : 'checkbox'}"></i>${selecting ? 'Cancel' : 'Select'}
               </button>` : ''}
-            ${canManage ? `
-              <button class="btn btn-icon cc-settings-btn" type="button" data-action="open-company-contact-fields" title="Settings — fields and the contact card" aria-label="Company Contacts settings"><i class="ti ti-settings"></i></button>
+            ${canFields ? `
+              <button class="btn btn-icon cc-settings-btn" type="button" data-action="open-company-contact-fields" title="Settings — fields and the contact card" aria-label="Company Contacts settings"><i class="ti ti-settings"></i></button>` : ''}
+            ${canCreate ? `
               <button class="btn btn-primary" type="button" data-action="open-company-record-form" data-mode="new"><i class="ti ti-plus"></i>New contact</button>` : ''}
           </div>
         </div>
@@ -1404,7 +1425,7 @@ export function createCompanyContactsPage(ctx) {
   function panelSettingsHtml(element) {
     // A button's settings are its own; a panel's are what it shows about itself.
     if (element.kind === 'button') {
-      return `<div class="cc-el-settings is-button">${cardButtonConfigHtml(activeCompanyId(), element.button, can('company_contacts.manage', activeCompanyId()))}</div>`;
+      return `<div class="cc-el-settings is-button">${cardButtonConfigHtml(activeCompanyId(), element.button, can('company_contacts.fields.manage', activeCompanyId()))}</div>`;
     }
     const spec = PANEL_OPTIONS[element.panel?.id];
     if (!spec) return '';
@@ -1505,10 +1526,13 @@ export function createCompanyContactsPage(ctx) {
   function renderCard(companyId, contact) {
     const doc = wbDoc(companyId);
     const uses = contactUsage(doc, contact.id, { nameValue: wbNameValue });
-    const canManage = can('company_contacts.manage', companyId);
+    // Rearranging the card changes the layout everyone sees, which is schema; Edit info
+    // changes one person's details, which is data.
+    const canArrange = can('company_contacts.fields.manage', companyId);
+    const canManage = can('company_contacts.edit', companyId);
     const chipField = companyContactChipField(companyId);
     const chip = companyContactValue(contact, chipField);
-    const arranging = canManage && state.ccCardArrange === true;
+    const arranging = canArrange && state.ccCardArrange === true;
 
     // Reading a card, a field with nothing in it is noise, so an empty one is left off.
     //
@@ -1986,7 +2010,7 @@ export function createCompanyContactsPage(ctx) {
     syncFieldDraft();
     syncCardDraft();
     const companyId = fieldDraft.companyId;
-    if (!requirePermission('company_contacts.manage', companyId)) return;
+    if (!requirePermission('company_contacts.fields.manage', companyId)) return;
 
     const unnamed = fieldDraft.fields.find((field) => !String(field.label || '').trim());
     if (unnamed) { showToast('Every field needs a label.', 'local', 'Company Contacts'); return; }
@@ -2097,7 +2121,7 @@ export function createCompanyContactsPage(ctx) {
 
   function renderCompanyContactCardSettings(companyId) {
     if (!fieldDraft || fieldDraft.companyId !== companyId) openCompanyContactFieldEditor(companyId);
-    const canManage = can('company_contacts.manage', companyId);
+    const canManage = can('company_contacts.fields.manage', companyId);
     const canTiles = can('workspaces.manage', companyId);
     const badgeable = fieldDraft.fields.filter((field) => field.type === 'category' || field.type === 'status');
     const current = companyContactChipField(companyId);
@@ -2387,7 +2411,7 @@ export function createCompanyContactsPage(ctx) {
 
   function renderCompanyContactFieldsEditor(companyId) {
     if (!fieldDraft || fieldDraft.companyId !== companyId) openCompanyContactFieldEditor(companyId);
-    const canManage = can('company_contacts.manage', companyId);
+    const canManage = can('company_contacts.fields.manage', companyId);
     return `
       <div class="cc-field-builder" data-cc-field-builder>
         <p class="ccf-intro">Every contact in this company carries these fields. <b>Name</b> is always there — it is the title in every list and link. Everything below is yours.</p>
@@ -2417,7 +2441,7 @@ export function createCompanyContactsPage(ctx) {
   async function persistFieldPlacement(companyId, fieldId, placement) {
     const field = companyContactFieldsFor(companyId).find((item) => item.id === fieldId);
     if (!field) return false;
-    if (!requirePermission('company_contacts.manage', companyId)) return false;
+    if (!requirePermission('company_contacts.fields.manage', companyId)) return false;
     const next = normalizeCompanyContactField({ ...field, config: { ...field.config, ...placement } });
     const { ok } = await supabaseWrite('company_contact_fields', supabaseRow(next, COMPANY_CONTACT_FIELD_COLS));
     if (!ok) { showToast('Could not save that placement.', 'local', 'Company Contacts'); return false; }
@@ -2530,7 +2554,7 @@ export function createCompanyContactsPage(ctx) {
 
   /** Apply one change to the live layout and write it. */
   async function editCardLayout(companyId, change) {
-    if (!requirePermission('company_contacts.manage', companyId)) return;
+    if (!requirePermission('company_contacts.fields.manage', companyId)) return;
     const elements = liveElements(companyId);
     const next = change(elements);
     if (!next) return;
@@ -2621,7 +2645,7 @@ export function createCompanyContactsPage(ctx) {
    * anything, which is what the settings panel is for.
    */
   async function addCardButtonHere(companyId) {
-    if (!requirePermission('company_contacts.manage', companyId)) return;
+    if (!requirePermission('company_contacts.fields.manage', companyId)) return;
     const buttons = cardSettings(companyId).buttons;
     let label = 'Button';
     if (buttons.some((button) => button.label === label)) {
@@ -2643,7 +2667,7 @@ export function createCompanyContactsPage(ctx) {
 
   /** Change one button's configuration. */
   async function updateCardButton(companyId, buttonId, patch) {
-    if (!requirePermission('company_contacts.manage', companyId)) return;
+    if (!requirePermission('company_contacts.fields.manage', companyId)) return;
     const buttons = cardSettings(companyId).buttons;
     const next = patchCardButtons(buttons, buttonId, patch);
     if (!await saveCardButtons(companyId, next)) return;
@@ -2652,7 +2676,7 @@ export function createCompanyContactsPage(ctx) {
 
   /** Remove a button from the card. It is a card object, so this really does delete it. */
   async function removeCardButton(companyId, buttonId) {
-    if (!requirePermission('company_contacts.manage', companyId)) return;
+    if (!requirePermission('company_contacts.fields.manage', companyId)) return;
     const buttons = cardSettings(companyId).buttons.filter((button) => button.id !== buttonId);
     if (!await saveCardButtons(companyId, buttons)) return;
     showToast('Button removed.', isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');

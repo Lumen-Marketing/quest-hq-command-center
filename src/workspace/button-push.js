@@ -240,12 +240,23 @@ export function createButtonPush(ctx) {
         if (filed?.ok && filed.contact?.id) {
           values[pair.to.id] = filed.contact.id;
           minted.push({ field: pair.to.label, name, reused: !!filed.reused });
-        } else failures.push(pair.to.label);
+        } else failures.push({ label: pair.to.label, reason: filed?.error || '' });
       }
       if (failures.length) {
         // The record still goes. Losing the link is worse than losing the record, but a move
         // that stopped here would leave the record nowhere at all.
-        showToast(`Sent, but ${failures.join(', ')} could not be filed in Company Contacts.`, 'error', 'Workspaces');
+        //
+        // The REASON travels with it. The intake knows exactly why it refused -- a role that
+        // cannot add contacts, a name it could not read, a save that failed -- and reporting
+        // only that it "could not be filed" turned a one-line permission answer into a
+        // support question, because all three refusals read identically.
+        const labels = failures.map((failure) => failure.label).join(', ');
+        const reasons = [...new Set(failures.map((failure) => failure.reason).filter(Boolean))];
+        showToast(
+          `Sent, but ${labels} could not be filed in Company Contacts.${reasons.length ? ` ${reasons.join(' ')}` : ''}`,
+          'error',
+          'Workspaces',
+        );
       }
     }
 

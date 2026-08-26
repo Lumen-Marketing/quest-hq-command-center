@@ -587,7 +587,16 @@ const PERMISSION_KEYS = [
   ['crm.view', 'View CRM'],
   ['crm.manage', 'Delete CRM records'],
   ['company_contacts.view', 'View company contacts'],
-  ['company_contacts.manage', 'Add/edit company contacts'],
+  // Four separable powers, not one. Filing a lead into the directory is what an ordinary
+  // worker does; restructuring the directory's fields is unrecoverable (a field delete has no
+  // recycle bin). Bundled under one key, letting somebody do the first meant granting the
+  // second. company_contacts.manage stays as the "everything" grant so existing roles are
+  // untouched -- see PERMISSION_ALIASES below and the 20260826090000 migration.
+  ['company_contacts.create', 'Add company contacts'],
+  ['company_contacts.edit', 'Edit company contacts'],
+  ['company_contacts.delete', 'Delete company contacts'],
+  ['company_contacts.fields.manage', 'Add/edit contact fields and card layout'],
+  ['company_contacts.manage', 'Full company contacts access (all of the above)'],
   ['underwriter.view', 'View underwriter'],
   ['underwriter.manage', 'Manage underwriter'],
   ['finance.view', 'View finance'],
@@ -630,6 +639,14 @@ const PERMISSION_KEYS = [
 const PERMISSION_ALIASES = {
   'messages.manage': ['messages.manage_groups'],
   'messages.manage_groups': ['messages.manage'],
+  // The legacy super-grant satisfies each power it used to bundle, so a role created before
+  // the split keeps working unchanged and no assignment has to be rewritten. This mirrors the
+  // `or ... 'company_contacts.manage'` in every policy the 20260826090000 migration rewrote:
+  // if the two disagreed, the UI would offer an action the database then refused.
+  'company_contacts.create': ['company_contacts.manage'],
+  'company_contacts.edit': ['company_contacts.manage'],
+  'company_contacts.delete': ['company_contacts.manage'],
+  'company_contacts.fields.manage': ['company_contacts.manage'],
 };
 
 const ACTIVITY_FILTER_OPTIONS = [
@@ -6766,6 +6783,11 @@ function permissionPluginIds(permission) {
   if (clean.startsWith('finance.')) return ['finance'];
   if (clean.startsWith('price_book.')) return ['price_book'];
   if (clean.startsWith('client_portals.')) return ['client_portal'];
+  // The SQL side has mapped company_contacts.% onto its plugin since 20260813180000; this
+  // copy never did, so the browser treated the module as always-available while the database
+  // gated it. Any company that uninstalled Company Contacts saw the UI offer actions RLS
+  // refused -- the same over-promise can() warns about.
+  if (clean.startsWith('company_contacts.')) return ['company_contacts'];
   if (clean.startsWith('workspaces.')) return ['workspace_builder'];
   if (clean.startsWith('messages.')) return ['messages'];
   if (clean.startsWith('calendar.')) return ['calendar'];
@@ -29806,15 +29828,19 @@ function handleAction(event, node) {
   }
   if (action === 'open-company-record-form') {
     event.preventDefault();
-    if (!requirePermission('company_contacts.manage', activeCompanyId())) return;
-    state.selectedCompanyContactId = node.dataset.mode === 'edit' ? (node.dataset.contactId || '') : '';
+    // The same button opens the form for a new contact and for an existing one, and those are
+    // now two different permissions.
+    const editing = node.dataset.mode === 'edit';
+    if (!requirePermission(editing ? 'company_contacts.edit' : 'company_contacts.create', activeCompanyId())) return;
+    state.selectedCompanyContactId = editing ? (node.dataset.contactId || '') : '';
     state.modal = 'company-record-form';
     render();
     return;
   }
   if (action === 'open-company-contact-fields') {
     event.preventDefault();
-    if (!requirePermission('company_contacts.manage', activeCompanyId())) return;
+    // The gear opens the field list and the card layout, which is the schema half.
+    if (!requirePermission('company_contacts.fields.manage', activeCompanyId())) return;
     companyContactWrites()?.openCompanyContactFieldEditor(activeCompanyId());
     // Always on Fields: it is what the dialog is opened for nine times in ten, and landing on
     // whichever tab was left open last means the gear does something different each time.

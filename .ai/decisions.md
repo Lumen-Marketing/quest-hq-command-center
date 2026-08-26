@@ -1632,3 +1632,46 @@ a ReferenceError nobody sees until they try to attach something. `file-field.js`
 in `tests/extracted-module-references.test.mjs`, which asserts `main.js` passes every key the
 ctx destructures. That guard already existed for fifteen other modules; it is the reason this
 was a safe thing to do in the same change as a feature.
+
+## company_contacts.manage is split into the powers it was bundling
+
+2026-08-26. Migration `20260826090000_company_contacts_permission_split`.
+
+One key granted four unrelated powers: file a contact, edit one, delete one, and restructure
+the directory's field definitions and card layout. Those carry very different risk. A field
+delete has no recycle bin and has already cost a company its entire field set (see
+known-issues), while filing a contact is what an ordinary worker does whenever a Workspace
+button sends a lead across.
+
+Because they shared a key, the only way to let a worker file a lead was to also hand them the
+power to destroy the directory's structure. In practice nobody granted it, so the Workspace
+"Lead" button answered `Sent, but Name could not be filed in Company Contacts` for every
+non-elevated role.
+
+Now `company_contacts.create`, `.edit`, `.delete` and `.fields.manage`, each grantable on its
+own. Decisions taken deliberately:
+
+- **`company_contacts.manage` survives as the everything-grant.** Every rewritten policy
+  accepts it alongside the specific key, and `PERMISSION_ALIASES` mirrors that in the browser.
+  No existing role loses access and no assignment had to be rewritten. An administrator who
+  wants fine control simply stops granting it.
+- **A specific deny does not beat an allowed `manage`**, because the two are OR-ed. That is
+  what manage means. Fine-grained control requires not granting it.
+- **No new SECURITY DEFINER function.** Each policy calls the existing
+  `app_private.has_company_permission` twice rather than introducing a helper, so plugin
+  gating, deny handling and owner/admin/developer elevation keep their reviewed behaviour and
+  the advisor gains no new surface.
+- **Reads were not narrowed.** Any active member still reads the directory.
+- **Filing a lead against somebody already on file, with nothing left to fill in, now writes
+  nothing** and needs no write permission at all. It also stops a button press bumping an
+  unrelated contact's timestamp.
+
+The browser's `permissionPluginIds` gained the `company_contacts.` branch the SQL side has had
+since 20260813180000. Without it the module gate disagreed across the two layers: a company
+that uninstalled Company Contacts still saw the UI offer actions RLS refused.
+
+Only the Company Contacts half of the permission work is done. The equivalent split for
+Workspaces cannot be enforced today: every workspace, app, field and record for a company
+lives in one `workspace_builder_state` row behind a single `workspaces.manage` write policy,
+so editing one record and deleting every app are the same UPDATE. Splitting it needs records
+moved into their own table first.

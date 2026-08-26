@@ -2,6 +2,28 @@
 
 Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-08-26 company contacts permission split
+
+- `company_contacts.manage` is split into `company_contacts.create`, `.edit`, `.delete` and
+  `.fields.manage`, each grantable on its own from the Roles editor. The legacy key is retained
+  as the everything-grant and is accepted by every rewritten policy, so no existing role loses
+  access and no role assignment had to be rewritten.
+- Migration `20260826090000_company_contacts_permission_split` rewrites the insert, update and
+  delete policies on `company_contacts` and the write policies on `company_contact_fields` and
+  `company_contact_types`. Read access is unchanged: any active member still reads the directory.
+- No new SECURITY DEFINER function was added; the policies call the existing
+  `app_private.has_company_permission` twice, so plugin gating, deny handling and
+  owner/admin/developer elevation keep their reviewed behaviour.
+- This is what stopped a non-elevated role using the Workspace "Lead" button: filing a contact
+  and destroying the directory's field definitions shared one key, so the permission was never
+  granted. A refused filing now reports the reason instead of a generic failure.
+- The browser's module gate gained the `company_contacts.` branch the SQL side has had since
+  20260813180000, so an uninstalled Company Contacts module no longer looks available in the UI.
+- **The migration is written but NOT yet applied to Supabase.** Until it is, the new keys are
+  enforced in the browser only and the database still requires `company_contacts.manage` for
+  every write. Apply it through the Supabase migration workflow, then re-run the advisors and
+  refresh the database map.
+
 ## 2026-08-25 performance release candidate
 
 - Content-hashed Vite assets now carry a one-year immutable cache policy, while HTML, service-worker, manifest, environment, auth, and API responses retain update-safe behavior.

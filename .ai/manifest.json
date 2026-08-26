@@ -7,7 +7,7 @@
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "5c69f6e8dc0bbdeec6e25a26c9448cc0a88a8591",
-    "latest_migration": "20260820201503_harden_setup_function_and_foreign_keys.sql"
+    "latest_migration": "20260826090000_company_contacts_permission_split.sql"
   },
   "live": {
     "supabase_verified_at": "2026-08-20T20:21:42.574Z",

@@ -248,7 +248,11 @@ test('the plugin is company-shared and auto-installed', () => {
   assert.match(catalog, /id: 'company_contacts'[^}]*dataScope: PLUGIN_DATA_SCOPES\.COMPANY_SHARED/);
   assert.match(catalog, /module_ids: \['company-contacts'\]/);
   assert.match(main, /\['company_contacts\.view', 'View company contacts'\]/);
-  assert.match(main, /\['company_contacts\.manage', 'Add\/edit company contacts'\]/);
+  // manage survives as the everything-grant; the powers it used to bundle are grantable
+  // on their own since 20260826090000.
+  assert.match(main, /\['company_contacts\.create', 'Add company contacts'\]/);
+  assert.match(main, /\['company_contacts\.fields\.manage', '[^']+'\]/);
+  assert.match(main, /\['company_contacts\.manage', 'Full company contacts access \(all of the above\)'\]/);
   assert.match(main, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   assert.match(main, /id: 'company-contacts', group: 'Work'[^}]*permission: 'company_contacts\.view'/);
   assert.match(main, /route\.section === 'company-contacts'/, 'the nav item needs somewhere to go');

@@ -356,7 +356,9 @@ test('nothing is written until Save, and Save renumbers the order', () => {
   // Dragging a field to the top and having it come back third is the bug that makes
   // reordering not worth using.
   assert.match(body, /normalizeCompanyContactField\(\{ \.\.\.field, position: index \+ 1 \}\)/);
-  assert.match(body, /requirePermission\('company_contacts\.manage', companyId\)/);
+  // The field editor writes the directory's SCHEMA, which the 20260826090000 split gave its
+  // own key -- deleting a field here is unrecoverable, unlike editing one contact.
+  assert.match(body, /requirePermission\('company_contacts\.fields\.manage', companyId\)/);
   assert.match(body, /\.delete\(\)\.in\('id', fieldDraft\.removed\)/);
   // Adding a field then changing your mind must cost nothing: only fields that were really
   // stored are queued for deletion.

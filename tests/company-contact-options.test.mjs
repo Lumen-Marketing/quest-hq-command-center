@@ -102,7 +102,8 @@ test('removing a label leaves the contacts that already carry it alone', () => {
   // stays on the record and simply stops being offered.
   const body = fn('removeCompanyContactFieldOption', page);
   assert.ok(!/companyContacts\b/.test(body), 'removal must not touch contact records');
-  assert.match(body, /requirePermission\('company_contacts\.manage'/);
+  // An option list belongs to a field, so pruning it is a schema change.
+  assert.match(body, /requirePermission\('company_contacts\.fields\.manage'/);
   assert.match(body, /options: \(field\.config\.options \|\| \[\]\)\.filter/);
 });
 

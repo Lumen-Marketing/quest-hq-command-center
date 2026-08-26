@@ -362,7 +362,11 @@ test('move is offered for the directory, and says what it will do', async () => 
 test('the contacts page fills an existing contact in rather than duplicating them', () => {
   const src = readSrc('src/company-contacts/page.js');
   assert.match(src, /async function receiveContactFromApp\(companyId, \{ name = '', plain = \{\} \} = \{\}\)/);
-  assert.match(src, /if \(!can\('company_contacts\.manage', target\)\)/);
+  // Filing somebody new and filling in blanks on somebody already here are different powers
+  // since the 20260826090000 split; the old company_contacts.manage bundled both with the
+  // power to delete the directory's fields, which is why a worker could not file a lead.
+  assert.match(src, /const needed = existing \? 'company_contacts\.edit' : 'company_contacts\.create';/);
+  assert.match(src, /if \(!can\(needed, target\)\)/);
   // Additive: a field somebody has already filled in is left alone.
   assert.match(src, /if \(String\(values\[field\.id\] \?\? ''\) !== ''\) return;/);
   assert.match(src, /receiveContactFromApp,/);
