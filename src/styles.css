@@ -2074,6 +2074,12 @@ button { cursor: pointer; }
 .avatar.small { width: 32px; height: 32px; font-size: 11px; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 
+/* The two member-directory summaries. Both sit in a flex row beside a name that can be long,
+   and an avatar is the one thing in that row that must not be squeezed out of round --
+   flex-shrink would turn the circle into an oval before the text gave up any width. */
+.avatar.member-card-avatar { width: 34px; height: 34px; font-size: 11.5px; flex: none; }
+.avatar.member-tag-avatar { width: 24px; height: 24px; font-size: 9.5px; flex: none; }
+
 .account-popover {
   position: absolute;
   top: 50px;
@@ -5943,6 +5949,70 @@ textarea:focus {
   gap: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--line, #e7ded1);
+}
+
+/* The row opens on click. A company with a dozen members was a dozen open forms -- the same
+   five selects repeated down the page -- so reaching one person meant scrolling past all of
+   them. Only the identity line and the caret stay; the form and the danger actions are laid
+   out exactly as before once the row is open, so nothing about filling it in changes.
+
+   Hidden with display:none rather than the hidden attribute, so the grid areas below stay
+   where they are and a closed row leaves no gap. It also keeps the closed form out of the
+   accessibility tree, which the attribute would do too but the CSS already handles. */
+.access-user-row:not(.is-open) > .access-role-form,
+.access-user-row:not(.is-open) > .access-user-danger {
+  display: none;
+}
+
+/* The identity block IS the control, so it has to stop looking like a button while still
+   behaving as one -- and keep its own focus ring, because removing the border removes the
+   default one with it. */
+button.access-user-main {
+  appearance: none;
+  position: relative;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0 28px 0 0;
+  min-width: 0;
+}
+
+button.access-user-main:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+}
+
+.access-user-caret {
+  position: absolute;
+  top: 1px;
+  right: 4px;
+  color: var(--text-muted, #72695d);
+  font-size: 17px;
+  transition: transform .15s ease;
+}
+
+.access-user-row.is-open .access-user-caret {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .access-user-caret {
+    transition: none;
+  }
+}
+
+/* What the row still says while shut: the role, and how many workspaces they actually reach.
+   Those are the two things a member list is scanned for, and hiding the form hides both. */
+.access-user-summary {
+  display: block;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-top: 4px;
 }
 
 .access-user-row.muted {

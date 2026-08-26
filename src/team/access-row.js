@@ -25,17 +25,45 @@ export function createAccessRow(ctx) {
     const canEditUser = canManageUsers && !!user.profile_id && !isMainOwner && !isLastOwner;
     const canAssignWorkspaces = canManageUsers && !!user.profile_id;
     const implicitWorkspaceAccess = ['owner', 'admin', 'developer'].includes(String(user.role || '').toLowerCase());
-    return `
-      <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''}">
-        ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
-        <div class="access-user-main">
+
+    // A dozen members meant a dozen open role/status/workspace forms stacked down the page,
+    // every one of them the same five selects, so reaching anybody meant scrolling past
+    // everybody. Identity stays on screen; the controls open on click.
+    //
+    // Which rows are open lives on state, not in the DOM: saving re-renders the page, and an
+    // open/closed flag held on the element would be thrown away every time somebody saved.
+    // Keyed by profile id, falling back to email for a membership that has no profile yet.
+    const toggleKey = user.profile_id || user.email || '';
+    const expandedIds = state.memberDirectory?.expanded;
+    const isOpen = !toggleKey || (expandedIds instanceof Set && expandedIds.has(toggleKey));
+    const domId = `access-user-${String(toggleKey).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+    // What the row says about itself while it is shut. Without this, closing it would hide the
+    // two things somebody scans a member list FOR -- what they are, and how much they reach.
+    const assignedCount = workspaces.filter((workspace) => implicitWorkspaceAccess
+      || workspaceMembershipForProfile(workspace.id, user.profile_id)?.status === 'active').length;
+    const roleLabel = roles.find((role) => role.id === selectedRoleId)?.name
+      || user.role_label || titleCase(user.role || 'Member');
+    const summary = `${roleLabel} — ${assignedCount} of ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'}`;
+
+    const identity = `
           <strong>${h(userDisplayName(user))}</strong>
           <span>${h(userDisplayMeta(user))} / ${h(membershipStatusLabel(user.status))}</span>
           ${isMainOwner ? '<small class="access-note">Main owner of this company - their role and status cannot be changed.</small>'
     : isLastOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}
           ${user.status === 'disabled' ? '<small class="access-note">Suspended. They keep their account and everything they did, and can reach nothing here until they are set back to Active.</small>' : ''}
-        </div>
-        <form class="access-role-form" data-user-role-form>
+          ${isOpen || !workspaces.length ? '' : `<small class="access-user-summary">${h(summary)}</small>`}`;
+
+    return `
+      <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''} ${isOpen ? 'is-open' : ''}">
+        ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
+        ${toggleKey ? `
+        <button class="access-user-main" type="button" data-member-expand="${h(toggleKey)}"
+          aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${h(domId)}-form ${h(domId)}-actions">
+          ${identity}
+          <i class="ti ti-chevron-down access-user-caret" aria-hidden="true"></i>
+        </button>` : `<div class="access-user-main">${identity}</div>`}
+        <form class="access-role-form" id="${h(domId)}-form" data-user-role-form>
           <input type="hidden" name="company_id" value="${h(companyId)}" />
           <input type="hidden" name="profile_id" value="${h(user.profile_id)}" />
           <select name="role_id" ${canEditUser ? '' : 'disabled'}>
@@ -81,7 +109,7 @@ export function createAccessRow(ctx) {
           </div>
           <button class="btn" type="submit" ${canAssignWorkspaces ? '' : 'disabled'}>Save role &amp; workspaces</button>
         </form>
-        <div class="access-user-danger">
+        <div class="access-user-danger" id="${h(domId)}-actions">
           ${user.status === 'disabled' ? `
             <button class="btn" type="button" data-action="reactivate-company-member" data-company-id="${h(companyId)}" data-profile-id="${h(user.profile_id)}" ${canEditUser ? '' : 'disabled'}>
               <i class="ti ti-player-play"></i>Reactivate

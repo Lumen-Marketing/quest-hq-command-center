@@ -27386,6 +27386,19 @@ function onDocumentClick(event) {
     render();
     return;
   }
+
+  // Open or shut one member's role and workspace controls. The whole identity block is the
+  // button, so this fires from the name, the email or the caret alike.
+  const memberExpand = event.target.closest('[data-member-expand]');
+  if (memberExpand) {
+    event.preventDefault();
+    const expanded = memberDirectoryUi().expanded;
+    const key = memberExpand.dataset.memberExpand;
+    if (expanded.has(key)) expanded.delete(key);
+    else expanded.add(key);
+    render();
+    return;
+  }
   if (event.target.closest('[data-member-clear]')) {
     event.preventDefault();
     memberDirectoryUi().selected.clear();
@@ -32636,8 +32649,11 @@ function loadMemberDirectory() {
 }
 
 function memberDirectoryUi() {
-  state.memberDirectory = state.memberDirectory || { view: 'list', query: '', role: '', sort: 'name', selected: new Set() };
+  state.memberDirectory = state.memberDirectory || { view: 'list', query: '', role: '', sort: 'name', selected: new Set(), expanded: new Set() };
   if (!(state.memberDirectory.selected instanceof Set)) state.memberDirectory.selected = new Set();
+  // Which member rows are open. On state rather than the DOM: every save re-renders the page,
+  // and a flag held on the element would be discarded with it.
+  if (!(state.memberDirectory.expanded instanceof Set)) state.memberDirectory.expanded = new Set();
   return state.memberDirectory;
 }
 
@@ -44058,7 +44074,15 @@ function financeStatusPill(status) {
   return `<span class="finance-status ${h(slugify(status))}">${h(status)}</span>`;
 }
 
+// className is a list of CSS CLASSES, not a pixel size. Two callers passed a number, which
+// produced class="34": it matched no rule, so the span had no width and the <img> inside it
+// rendered at its natural size -- a full-bleed photograph where a 34px circle belonged, and
+// for anyone without a photo, bare initials with no circle at all. The base class is
+// guaranteed here so a caller getting this wrong degrades to a default-sized avatar instead
+// of blowing up the layout it sits in.
 function renderAvatar(profile, className, attrs = {}) {
+  const requested = String(className ?? '').trim();
+  className = /(^|\s)avatar(\s|$)/.test(requested) ? requested : `avatar ${requested}`.trim();
   const attrText = Object.entries(attrs)
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => `${h(key)}="${h(String(value))}"`)

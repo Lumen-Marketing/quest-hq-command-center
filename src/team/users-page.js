@@ -16,8 +16,10 @@ export function createUsersPage(ctx) {
   // The state these controls read. Kept on state rather than in the DOM so a re-render --
   // which every save causes -- does not throw the filter away mid-task.
   function ui() {
-    state.memberDirectory = state.memberDirectory || { view: 'list', query: '', role: '', sort: 'name', selected: new Set() };
+    state.memberDirectory = state.memberDirectory || { view: 'list', query: '', role: '', sort: 'name', selected: new Set(), expanded: new Set() };
     if (!(state.memberDirectory.selected instanceof Set)) state.memberDirectory.selected = new Set();
+    // Which member rows are open. Same reason as the filter above: a save re-renders the page.
+    if (!(state.memberDirectory.expanded instanceof Set)) state.memberDirectory.expanded = new Set();
     return state.memberDirectory;
   }
 
@@ -94,14 +96,14 @@ export function createUsersPage(ctx) {
     if (d.view === 'tags') {
       return `<div class="member-tags">${shown.map((user) => `
         <span class="member-tag ${d.selected.has(user.profile_id) ? 'on' : ''}">
-          ${box(user)}${renderAvatar(user, 24)}
+          ${box(user)}${renderAvatar(user, 'avatar member-tag-avatar')}
           <b>${h(userDisplayName(user))}</b><em>${h(user.role_label || titleCase(user.role || 'Member'))}</em>
         </span>`).join('')}</div>`;
     }
     if (d.view === 'cards') {
       return `<div class="member-cards">${shown.map((user) => `
         <article class="member-card ${d.selected.has(user.profile_id) ? 'on' : ''}">
-          <div class="member-card-head">${box(user)}${renderAvatar(user, 34)}
+          <div class="member-card-head">${box(user)}${renderAvatar(user, 'avatar member-card-avatar')}
             <div><b>${h(userDisplayName(user))}</b><span>${h(user.email || '')}</span></div>
           </div>
           <div class="member-card-meta">
