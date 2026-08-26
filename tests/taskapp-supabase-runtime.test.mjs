@@ -6,6 +6,7 @@ import test from 'node:test';
 const appHtml = readFileSync(new URL('../taskmanagement/app.html', import.meta.url), 'utf8');
 const assetSync = readFileSync(new URL('../scripts/sync-spa-assets.mjs', import.meta.url), 'utf8');
 const sdkLoader = readFileSync(new URL('../taskmanagement/js/sdk-loader.js', import.meta.url), 'utf8');
+const viteConfig = readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');
 const vercelConfig = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('the embedded Tasks app loads Supabase from the Questbase origin', () => {
@@ -24,6 +25,34 @@ test('the embedded Tasks app loads Supabase from the Questbase origin', () => {
 test('the production asset sync ships the local Supabase browser bundle', () => {
   assert.match(assetSync, /@supabase['"`]\s*,\s*['"`]supabase-js['"`]\s*,\s*['"`]dist['"`]\s*,\s*['"`]umd['"`]\s*,\s*['"`]supabase\.js['"`]/);
   assert.match(assetSync, /taskRuntimeTarget\s*,\s*['"`]vendor['"`]\s*,\s*['"`]supabase['"`]\s*,\s*['"`]supabase\.js['"`]/);
+});
+
+test('the dev server serves the two Tasks files only the build generates', () => {
+  // fd6e704 pointed app.html at vendor/supabase/supabase.js. Nothing commits that file --
+  // sync-spa-assets writes it into dist -- and `vite dev` serves the SOURCE tree, so Tasks
+  // died on localhost with "Configuration unavailable: Supabase SDK retry failed" while the
+  // same commit was healthy in production. env.json has the same shape of problem: it is
+  // generated, so dev fell back to the baked-in defaults and would silently ignore a
+  // VITE_SUPABASE_* override the host app was honouring.
+  assert.match(viteConfig, /apply:\s*['"`]serve['"`]/, 'the shim must be dev-only');
+  assert.match(viteConfig, /['"`]\/taskmanagement\/vendor\/supabase\/supabase\.js['"`]/);
+  assert.match(viteConfig, /['"`]\/taskmanagement\/env\.json['"`]/);
+
+  // Served from the SAME definitions the build uses. Restating the project URL or key here
+  // would let dev and production resolve different Supabase projects, and because they share
+  // an origin that means two different sessions and an endless bounce to the host login.
+  assert.match(viteConfig, /from '\.\/scripts\/sync-spa-assets\.mjs'/);
+  assert.match(viteConfig, /TASK_SUPABASE_SDK_SOURCE/);
+  assert.match(viteConfig, /buildTaskRuntimeEnv/);
+  assert.match(assetSync, /export const TASK_SUPABASE_SDK_SOURCE/);
+  assert.match(assetSync, /export function buildTaskRuntimeEnv/);
+  assert.ok(
+    !/supabaseAnonKey\s*:/.test(viteConfig),
+    'vite.config must not keep its own copy of the task runtime config',
+  );
+
+  // sync-spa-assets runs its sync on import unless guarded, and vite.config now imports it.
+  assert.match(assetSync, /process\.argv\[1\] && import\.meta\.url === pathToFileURL/);
 });
 
 test('the embedded Tasks app retries a transient Supabase SDK asset failure', async () => {
