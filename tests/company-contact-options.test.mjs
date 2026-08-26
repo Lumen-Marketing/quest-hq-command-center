@@ -155,7 +155,7 @@ test('the field row is stored and read back with its type', () => {
   // The table and its rows stay for now, so the revert is a code change.
   assert.match(fn('normalizeCompanyContactField'), /COMPANY_CONTACT_FIELD_TYPES\.includes\(input\.type\) \? input\.type : 'text',/);
   assert.match(main, /const COMPANY_CONTACT_FIELD_COLS = \['id', 'company_id', 'label', 'type', 'config', 'required', 'hidden', 'position'\];/);
-  assert.match(fn('companyContactFieldsFor'), /field\.company_id === target/);
+  assert.match(fn('companyContactFieldsFor'), /activeCompanyContactFields\(state\.companyContactFields, target\)/);
   assert.ok(!/state\.companyContactOptions/.test(main), 'the dead store must not linger in the entry bundle');
 });
 

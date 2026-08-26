@@ -75,6 +75,7 @@ import {
 import { applyReadOnlyControlState } from './ui/read-only-controls.js';
 import { renderContentSkeleton, renderWorkspaceSkeleton } from './ui/workspace-loading.js';
 import { workspaceBuilderStyles } from './workspace/builder-style-loader.js';
+import { activeCompanyContactFields } from './data/company-contact-field-lifecycle.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -91,6 +92,12 @@ async function loadLeaflet() {
     });
   }
   return leafletPromise;
+}
+
+let pdfExportRuntimePromise = null;
+function loadPdfExportRuntime() {
+  if (!pdfExportRuntimePromise) pdfExportRuntimePromise = import('./pdf/export-runtime.js');
+  return pdfExportRuntimePromise;
 }
 
 const CONFIG = {
@@ -315,6 +322,7 @@ const APPEARANCE_BG_PRESETS = [
 ];
 const RECYCLE_BIN_TYPES = {
   contact: { type: 'contact', label: 'Contact', table: 'contacts', stateKey: 'contacts', permission: 'crm.manage', normalize: normalizeContact, title: (record) => record.name || 'Contact', redirect: (companyId) => companyPath('contacts', {}, companyId) },
+  company_contact_field: { type: 'company_contact_field', label: 'Company contact field', table: 'company_contact_fields', stateKey: 'companyContactFields', permission: 'company_contacts.fields.manage', normalize: normalizeCompanyContactField, title: (record) => record.label || 'Company contact field', redirect: (companyId) => companyPath('company-contacts', {}, companyId) },
   account: { type: 'account', label: 'Account', table: 'accounts', stateKey: 'accounts', permission: 'crm.manage', normalize: normalizeAccount, title: (record) => record.name || 'Account', redirect: (companyId) => companyPath('crm', {}, companyId) },
   deal: { type: 'deal', label: 'Quote', table: 'deals', stateKey: 'deals', permission: 'crm.manage', normalize: normalizeDeal, title: (record) => record.name || 'Quote', redirect: (companyId) => companyPath('deals', {}, companyId) },
   job: { type: 'job', label: 'Job', table: 'jobs', stateKey: 'jobs', permission: 'jobs.manage', normalize: normalizeJob, title: (record) => record.name || record.client_name || 'Job', redirect: (companyId) => companyPath('jobs', { tab: 'list' }, companyId) },
@@ -4927,7 +4935,7 @@ async function loadSupabaseData() {
     liveTables += 1;
   }
   if (!companyContactFieldsResult.error) {
-    state.companyContactFields = (companyContactFieldsResult.data || []).map(normalizeCompanyContactField);
+    state.companyContactFields = activeRows(companyContactFieldsResult.data || []).map(normalizeCompanyContactField);
     liveTables += 1;
   }
   if (!pipelineStagesResult.error) {
@@ -26192,70 +26200,15 @@ async function exportProposalPdf(proposalId) {
   const proposal = proposalById(proposalId) || state.proposalPublic?.proposal;
   if (!proposal) throw new Error('Proposal not found.');
   const draft = proposalDraftFromRecord(proposal);
-  await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf');
-  const pdf = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
-  const pageWidth = 612;
-  const margin = 42;
-  let y = 54;
-  pdf.setFillColor(26, 43, 74);
-  pdf.rect(0, 0, pageWidth, 102, 'F');
-  pdf.setTextColor(255, 255, 255);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(24);
-  pdf.text('Quest Roofing', margin, y);
-  pdf.setFontSize(10);
-  pdf.text(`Proposal - ${draft.proposalNo || proposal.proposal_no || proposal.id}`, margin, y + 20);
-  pdf.setFontSize(26);
-  pdf.text(money(draft.total || 0), pageWidth - margin, y, { align: 'right' });
-  y = 138;
-  pdf.setTextColor(232, 97, 26);
-  pdf.setFontSize(11);
-  pdf.text(String(draft.tagline || 'On a quest to serve you better').toUpperCase(), margin, y);
-  pdf.setTextColor(20, 28, 45);
-  pdf.setFontSize(18);
-  pdf.text(draft.jobTitle || proposal.title || 'Proposal', margin, y + 22);
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(11);
-  const prepared = `Prepared for ${draft.client?.name || 'Client'}${draft.client?.address ? ` at ${draft.client.address}` : ''}`;
-  pdf.text(pdf.splitTextToSize(prepared, pageWidth - margin * 2), margin, y + 42);
-  y += 84;
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(14);
-  pdf.text('Scope of work', margin, y);
-  y += 22;
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(10);
-  (draft.items || []).forEach((item) => {
-    const line = `${item.star ? '* ' : ''}${item.service}${item.description ? ` - ${item.description}` : ''}`;
-    const lines = pdf.splitTextToSize(line, pageWidth - margin * 2 - 18);
-    if (y + lines.length * 13 > 742) {
-      pdf.addPage();
-      y = 54;
-    }
-    pdf.text('- ', margin, y);
-    pdf.text(lines, margin + 16, y);
-    y += lines.length * 13 + 4;
+  const { saveProposalPdf } = await loadPdfExportRuntime();
+  saveProposalPdf({
+    draft,
+    proposal,
+    defaults: DEFAULT_PROPOSAL_PREMIUM,
+    formatMoney: money,
+    formatDate,
+    slugify,
   });
-  y += 12;
-  if (y > 660) {
-    pdf.addPage();
-    y = 54;
-  }
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(13);
-  pdf.text('Warranty and terms', margin, y);
-  y += 18;
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(10);
-  const terms = [
-    draft.warranty || DEFAULT_PROPOSAL_PREMIUM.warranty,
-    draft.manufacturerWarranty || DEFAULT_PROPOSAL_PREMIUM.manufacturerWarranty,
-    draft.terms || DEFAULT_PROPOSAL_PREMIUM.terms,
-    draft.deposit ? `Deposit due at approval: ${draft.deposit}% (${money((draft.total || 0) * draft.deposit / 100)}).` : '',
-    `Valid through ${formatDate(draft.valid)}.`,
-  ].filter(Boolean).join('\n');
-  pdf.text(pdf.splitTextToSize(terms, pageWidth - margin * 2), margin, y);
-  pdf.save(`Quest-Proposal-${slugify(proposal.proposal_no || proposal.id)}.pdf`);
 }
 
 /**
@@ -36720,24 +36673,17 @@ async function cpRedoLast() {
 async function exportClientPortalMarkedPdf() {
   const doc = cpActiveDoc();
   if (!doc) throw new Error('Open a document first.');
-  await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf');
-  await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/canvas2svg/1.0.16/canvas2svg.min.js', '__canvas2svg__').catch(() => null);
-  const pages = doc.page_count || 1;
-  let pdf = null;
-  for (let page = 0; page < pages; page += 1) {
-    const base = await cpResolveBase(doc, page);
-    const canvas = document.createElement('canvas');
-    canvas.width = base.w; canvas.height = base.h;
-    const ctx = canvas.getContext('2d');
-    const img = await loadClientPortalImage(base.dataUrl);
-    ctx.drawImage(img, 0, 0, base.w, base.h);
-    cpPaintAnnotationsToCanvas(ctx, cpAnnotationsFor(doc, page), base);
-    const orientation = base.w > base.h ? 'l' : 'p';
-    if (!pdf) pdf = new window.jspdf.jsPDF({ orientation, unit: 'px', format: [base.w, base.h], compress: true });
-    else pdf.addPage([base.w, base.h], orientation);
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, base.w, base.h);
-  }
-  pdf.save(`Quest-Portal-Markups-${new Date().toISOString().slice(0, 10)}.pdf`);
+  const { saveClientPortalMarkedPdf } = await loadPdfExportRuntime();
+  await saveClientPortalMarkedPdf({
+    documentRecord: doc,
+    resolveBase: (page) => cpResolveBase(doc, page),
+    annotationsFor: (page) => cpAnnotationsFor(doc, page),
+    measureLabel: cpMeasureLabel,
+    statusMeta: CP_STATUS_META,
+    createCanvas: () => document.createElement('canvas'),
+    loadImage: loadClientPortalImage,
+    fileName: `Quest-Portal-Markups-${new Date().toISOString().slice(0, 10)}.pdf`,
+  });
   if (cpIsGuest()) {
     await fetch('/api/client-portal-export-event', {
       method: 'POST',
@@ -36747,61 +36693,6 @@ async function exportClientPortalMarkedPdf() {
   } else {
     await logClientPortalEvent(cpA().portalId, 'portal.exported', { document_id: doc.id });
   }
-}
-
-// Flatten annotations onto a 2D canvas for export (mirrors the SVG renderer).
-function cpPaintAnnotationsToCanvas(ctx, annotations, base) {
-  annotations.forEach((annotation) => {
-    const p = annotation.payload || {};
-    const type = annotation.annotation_type;
-    const color = p.color || '#e66a1f';
-    ctx.save();
-    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = Number(p.sw) || 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const W = base.w; const H = base.h;
-    if (type === 'freehand' && Array.isArray(p.points)) {
-      ctx.beginPath();
-      p.points.forEach((pt, i) => { const x = pt.x * W; const y = pt.y * H; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-      ctx.stroke();
-    } else if (type === 'line' || type === 'arrow' || type === 'measure') {
-      const x1 = p.x1 * W; const y1 = p.y1 * H; const x2 = p.x2 * W; const y2 = p.y2 * H;
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-      if (type === 'arrow') { const ang = Math.atan2(y2 - y1, x2 - x1); const head = 16; ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6)); ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6)); ctx.closePath(); ctx.fill(); }
-      if (type === 'measure') { ctx.font = `700 ${Math.round(W / 90)}px sans-serif`; ctx.fillText(cpMeasureLabel(p, base), (x1 + x2) / 2, (y1 + y2) / 2 - 6); }
-    } else if (type === 'rect' || type === 'highlight') {
-      const x = p.x * W; const y = p.y * H; const w = p.w * W; const hh = p.h * H;
-      if (type === 'highlight') { ctx.globalAlpha = 0.28; ctx.fillRect(x, y, w, hh); ctx.globalAlpha = 1; } else ctx.strokeRect(x, y, w, hh);
-    } else if (type === 'circle') {
-      const x = p.x * W; const y = p.y * H; const w = p.w * W; const hh = p.h * H;
-      ctx.beginPath(); ctx.ellipse(x + w / 2, y + hh / 2, Math.abs(w / 2), Math.abs(hh / 2), 0, 0, Math.PI * 2); ctx.stroke();
-    } else if (type === 'label' || type === 'comment' || type === 'marker') {
-      const x = p.x * W; const y = p.y * H;
-      const text = type === 'marker' ? (CP_STATUS_META[p.markerStatus] ? CP_STATUS_META[p.markerStatus].label : (p.text || 'Mark')) : (p.text || 'Comment');
-      ctx.font = '700 16px sans-serif';
-      const tw = ctx.measureText(text).width + 16;
-      ctx.fillStyle = type === 'comment' ? '#fff' : color; ctx.strokeStyle = color;
-      ctx.beginPath(); (ctx.roundRect ? ctx.roundRect(x, y - 24, tw, 28, 6) : ctx.rect(x, y - 24, tw, 28));
-      ctx.fill(); if (type !== 'marker') ctx.stroke();
-      ctx.fillStyle = type === 'comment' ? color : '#fff'; ctx.fillText(text, x + 8, y - 5);
-    }
-    ctx.restore();
-  });
-}
-
-function loadExternalScript(src, globalName) {
-  if (window[globalName]) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = [...document.scripts].find((script) => script.src === src);
-    if (existing) {
-      existing.addEventListener('load', resolve, { once: true });
-      existing.addEventListener('error', reject, { once: true });
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
 }
 
 function loadClientPortalImage(src) {
@@ -38535,7 +38426,7 @@ function loadCompanyContactsPage() {
         activeCompanyId, appHref, can, canonicalCompanyId, companyContactById, companyContactChipField,
         companyContactFieldsFor, companyContactValue, companyContactsFor, companyPath, emptyState,
         createSupabaseClient, h, isLiveSupabaseSession, money, navigate, normalizeCompanyContact,
-        normalizeCompanyContactField, render, requirePermission, requireMutableWorkspace, showToast, state,
+        normalizeCompanyContactField, recycleDeleteRecord, render, requirePermission, requireMutableWorkspace, showToast, state,
         supabaseRow, supabaseWrite, timeAgo, wbDoc, saveWorkspaceBuilderDoc, wbCompanyApps, wbPlainVal,
         wbFieldBuilderMarkup, wbFileIcon, wbFileValues,
         wbFmtDuration, wbNameValue, acceptAttr, fileTypeKind, formatDate, WB_FIELD_TYPES,
@@ -38621,8 +38512,7 @@ function companyContactsFor(companyId = activeCompanyId()) {
 // The company's own field list, in the order they arranged it.
 function companyContactFieldsFor(companyId = activeCompanyId()) {
   const target = canonicalCompanyId(companyId);
-  return state.companyContactFields
-    .filter((field) => field.company_id === target)
+  return activeCompanyContactFields(state.companyContactFields, target)
     .sort((a, b) => a.position - b.position || a.label.localeCompare(b.label));
 }
 
@@ -39818,7 +39708,7 @@ async function recycleDeleteRecord(config) {
   persistAll();
   // Silent mode (used by batch callers like contact merge): don't toast, don't
   // close the current modal, and don't redirect/render -- the caller drives the UI.
-  if (config.options?.silent) return true;
+  if (config.options?.silent) return deletedItem;
   state.modal = '';
   state.recycleDeleteCtx = null;
   showToast(
@@ -42670,6 +42560,9 @@ function normalizeCompanyContactField(input) {
     // column everybody reads.
     hidden: input.hidden === true,
     position: Number.isFinite(Number(input.position)) ? Number(input.position) : 0,
+    deleted_at: input.deleted_at || null,
+    deleted_by: input.deleted_by || null,
+    updated_at: input.updated_at || null,
   };
 }
 

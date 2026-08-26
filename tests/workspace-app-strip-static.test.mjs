@@ -4,7 +4,8 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const shellStyles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-const styles = (shellStyles + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
+const builderStyles = readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8');
+const styles = (shellStyles + '\n' + builderStyles);
 const drag = readFileSync(new URL('../src/workspace/topbar-drag.js', import.meta.url), 'utf8');
 const header = source.match(/function wbWorkspaceHeader\([\s\S]*?\n\}/)[0];
 
@@ -53,6 +54,17 @@ test('Activity app strip layout does not depend on the lazy builder stylesheet',
   assert.match(tab, /flex-direction:\s*column;/);
   assert.match(icon, /display:\s*grid;/);
   assert.match(label, /-webkit-line-clamp:\s*2;/);
+});
+
+test('the shared shell is the single owner of app-strip styling', () => {
+  // The lazy builder stylesheet used to arrive after first paint and overwrite the shared
+  // strip with older sizes and a one-line label. That made the same navigation change shape
+  // depending on which app a person had opened first.
+  assert.doesNotMatch(builderStyles, /(^|\})\s*\.wb-topbar[^\{]*\{/m);
+  assert.match(shellStyles, /\.wb-topbar-nav\s*\{/);
+  assert.match(shellStyles, /\.wb-topbar-arrow\s*\{/);
+  assert.match(shellStyles, /\.wb-topbar-tab\.active\s*\{/);
+  assert.match(shellStyles, /\.wb-topbar-tab:focus-visible/);
 });
 
 test('the app strip is the only flexible region in the topbar', () => {
@@ -175,7 +187,7 @@ test('horizontal intent still scrolls the strip', () => {
 });
 
 test('reduced-motion users do not get smooth scrolling', () => {
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.wb-topbar-apps \{ scroll-behavior: auto; \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.wb-topbar-apps \{\s*scroll-behavior: auto;\s*\}/);
 });
 
 test('drag is fetched on demand, not carried by every page', () => {

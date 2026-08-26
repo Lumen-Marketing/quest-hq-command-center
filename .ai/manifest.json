@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-20T20:21:42.574Z",
-  "generated_from_commit": "5c69f6e8dc0bbdeec6e25a26c9448cc0a88a8591",
+  "generated_at": "2026-08-26T20:00:00.933Z",
+  "generated_from_commit": "e25dcc185e30b02c801d7f13f9f7bf93dcbd9932",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "5c69f6e8dc0bbdeec6e25a26c9448cc0a88a8591",
-    "latest_migration": "20260826090000_company_contacts_permission_split.sql"
+    "main_commit_at_capture": "e25dcc185e30b02c801d7f13f9f7bf93dcbd9932",
+    "latest_migration": "20260827110000_company_contact_permission_reconcile.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-08-20T20:21:42.574Z",
+    "supabase_verified_at": "2026-08-26T20:00:00.933Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260820201554",
-      "name": "harden_setup_function_and_foreign_keys"
+      "version": "20260826195939",
+      "name": "company_contact_permission_reconcile"
     },
     "vercel_verified_at": "2026-07-31T19:35:36.974Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",

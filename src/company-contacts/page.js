@@ -10,6 +10,9 @@
 import { heldEvents } from '../workspace/record-events.js';
 import { optionRow } from '../workspace/option-row.js';
 import {
+  mergeCompanyContactFieldValues, recycleCompanyContactFieldDefinitions,
+} from '../data/company-contact-field-lifecycle.js';
+import {
   appsWithContactFields, companyContactFieldsOf, contactUsage, usageBalance, usageSummary,
 } from './model.js';
 import {
@@ -47,7 +50,7 @@ export function createCompanyContactsPage(ctx) {
     activeCompanyId, appHref, can, canonicalCompanyId, companyContactById, companyContactChipField,
     companyContactFieldsFor, companyContactValue, companyContactsFor,
     companyPath, emptyState, createSupabaseClient, h, isLiveSupabaseSession, money, navigate,
-    normalizeCompanyContact, normalizeCompanyContactField, render,
+    normalizeCompanyContact, normalizeCompanyContactField, recycleDeleteRecord, render,
     requirePermission, requireMutableWorkspace, showToast, state, supabaseRow, supabaseWrite, timeAgo, wbDoc,
     saveWorkspaceBuilderDoc, wbCompanyApps, wbPlainVal,
     wbFieldBuilderMarkup, wbFileIcon, wbFileValues, wbFmtDuration, wbNameValue, acceptAttr,
@@ -87,10 +90,10 @@ export function createCompanyContactsPage(ctx) {
     if (!requirePermission(existing ? 'company_contacts.edit' : 'company_contacts.create', companyId)) return;
 
     // Everything named field:<id> belongs to a customer-defined field. Read against the
-    // field list rather than the form, so a field deleted mid-edit does not linger in the
-    // stored values and a field somebody never filled in is simply absent.
+    // active field list rather than trusting arbitrary form keys. Values owned by recycled
+    // field definitions are merged back below so restoring a definition restores its answers.
     const fields = companyContactFieldsFor(companyId);
-    const fieldValues = {};
+    const submittedFieldValues = {};
     fields.forEach((field) => {
       // Worked out, not typed. Created and Last modified read the contact's own timestamps and
       // a calculation is derived on the way out, so storing anything under them would be a
@@ -98,7 +101,7 @@ export function createCompanyContactsPage(ctx) {
       if (CC_DERIVED_TYPES.has(field.type)) return;
       const raw = data[`field:${field.id}`];
       const value = raw === undefined ? '' : String(raw).trim();
-      if (value) fieldValues[field.id] = value;
+      if (value) submittedFieldValues[field.id] = value;
     });
 
     // An auto-number is stamped once, on the save that creates the contact, and carried
@@ -106,10 +109,12 @@ export function createCompanyContactsPage(ctx) {
     // reassigned it would renumber somebody already quoted it.
     fields.filter((field) => field.type === 'autonumber').forEach((field) => {
       const held = existing?.field_values?.[field.id];
-      fieldValues[field.id] = held !== undefined && held !== '' && held !== null
+      submittedFieldValues[field.id] = held !== undefined && held !== '' && held !== null
         ? held
         : String(wbNextContactAutoNumber(companyId, field));
     });
+
+    const fieldValues = mergeCompanyContactFieldValues(existing?.field_values, fields, submittedFieldValues);
 
     // A category or status value typed rather than picked joins its list, so the next person
     // picks it instead of inventing a second spelling.
@@ -1931,9 +1936,8 @@ export function createCompanyContactsPage(ctx) {
     render();
   }
 
-  // Removing a field here only stops it being collected. The values already stored on
-  // contacts stay in field_values -- adding the field back brings them into view again, which
-  // makes a mistaken delete recoverable without a restore.
+  // Removing a field here only stages the change. Save moves an existing definition into the
+  // shared Recycle Bin; values already stored on contacts remain untouched for restoration.
   function removeCompanyContactField(fieldId) {
     if (!fieldDraft) return;
     syncFieldDraft();
@@ -2027,12 +2031,20 @@ export function createCompanyContactsPage(ctx) {
       if (!ok) { showToast(`Could not save "${field.label}".`, 'local', 'Company Contacts'); return; }
     }
 
-    if (fieldDraft.removed.length) {
-      const client = createSupabaseClient();
-      if (client) {
-        const { error } = await client.from('company_contact_fields').delete().in('id', fieldDraft.removed);
-        if (error) { showToast(error.message || 'Could not remove that field.', 'local', 'Company Contacts'); return; }
-      }
+    const recycled = await recycleCompanyContactFieldDefinitions(fieldDraft.removed, recycleDeleteRecord);
+    if (!recycled.ok) {
+      // Successful rows have already been removed atomically by the shared RPC. Keep only the
+      // failed row and those after it queued so Save can be retried without duplicating a ledger
+      // item for a field that already moved.
+      fieldDraft.removed = recycled.remainingIds;
+      showToast(
+        recycled.items.length
+          ? `${recycled.items.length} ${recycled.items.length === 1 ? 'field was' : 'fields were'} moved to Recycle Bin, but the rest could not be removed. Try Save again.`
+          : 'Could not move the removed field to Recycle Bin. Try Save again.',
+        'error',
+        'Company Contacts',
+      );
+      return;
     }
 
     // The tile half, which lives on the builder document. Written after the fields so a failure
@@ -2047,7 +2059,17 @@ export function createCompanyContactsPage(ctx) {
     ];
     fieldDraft = null;
     state.modal = '';
-    showToast('Card settings saved.', isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
+    const removedCount = recycled.items.length;
+    showToast(
+      removedCount
+        ? `Card settings saved. ${removedCount} ${removedCount === 1 ? 'field was' : 'fields were'} moved to Recycle Bin.`
+        : 'Card settings saved.',
+      isLiveSupabaseSession() ? 'live' : 'local',
+      'Company Contacts',
+      removedCount === 1
+        ? { duration: 10000, action: { action: 'undo-recycle-delete', label: 'Undo', recycleId: recycled.items[0].id } }
+        : {},
+    );
     render();
   }
 

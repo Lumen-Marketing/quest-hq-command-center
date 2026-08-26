@@ -47,12 +47,19 @@ test('the legacy key still satisfies every power it used to bundle', () => {
 
 test('the browser and the database agree on that fallback', () => {
   // If the alias existed only in the browser, the UI would offer actions RLS then refused --
-  // the exact over-promise the comment in can() warns about.
+  // the exact over-promise the comment in can() warns about. Put the aliases in the shared
+  // permission resolver so policies and server actions (including Recycle Bin) agree too.
+  assert.match(migration, /create or replace function app_private\.has_company_permission/);
+  for (const key of NEW_KEYS) {
+    assert.match(
+      migration,
+      new RegExp(`when permission = '${key.replace(/\./g, '\\.')}' then 'company_contacts\\.manage'`),
+      `${key} needs a database alias`,
+    );
+  }
   const policies = migration.match(/create policy[\s\S]*?;/g) || [];
   assert.ok(policies.length >= 5, 'every write policy is rewritten');
-  for (const policy of policies) {
-    assert.match(policy, /company_contacts\.manage/, 'each policy must still accept the legacy key');
-  }
+  assert.doesNotMatch(policies.join('\n'), /or app_private\.has_company_permission\([^\n]+company_contacts\.manage/);
 });
 
 test('the schema half is separated from the data half server-side', () => {
@@ -60,23 +67,21 @@ test('the schema half is separated from the data half server-side', () => {
   assert.match(contactRows, /for insert with check \(\s*app_private\.has_company_permission\(company_id, 'company_contacts\.create'\)/);
   assert.match(contactRows, /for update using \(\s*app_private\.has_company_permission\(company_id, 'company_contacts\.edit'\)/);
   assert.match(contactRows, /for delete using \(\s*app_private\.has_company_permission\(company_id, 'company_contacts\.delete'\)/);
-  // Fields and types are both schema and both unrecoverable, so they share the schema key.
+  // Fields and the retained option catalogue are both schema, so they share the schema key.
   const fields = migration.slice(migration.indexOf('on public.company_contact_fields'));
   assert.match(fields, /company_contacts\.fields\.manage/);
-  const types = migration.slice(migration.indexOf('on public.company_contact_types'));
-  assert.match(types, /company_contacts\.fields\.manage/);
+  const options = migration.slice(migration.indexOf('on public.company_contact_options'));
+  assert.match(options, /company_contacts\.fields\.manage/);
+  assert.doesNotMatch(migration, /on public\.company_contact_types/);
 });
 
-test('no new SECURITY DEFINER surface was introduced', () => {
-  // Two calls to the existing helper instead of a new one: plugin gating, deny handling and
-  // owner/admin/developer elevation all keep their reviewed behaviour, and the security
-  // advisor gains nothing new to flag.
-  //
-  // Comments stripped first, or this matches the paragraph in the migration that explains
-  // the decision rather than any SQL that carries it out.
+test('the existing permission resolver is updated without adding a new privileged surface', () => {
+  // Replacing the one reviewed resolver keeps plugin gating, deny handling and elevated roles
+  // in one place. No second SECURITY DEFINER function or one-off permission bypass is added.
   const sql = migration.split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
-  assert.doesNotMatch(sql, /security definer/i);
-  assert.doesNotMatch(sql, /create (or replace )?function/i);
+  assert.equal((sql.match(/create or replace function/gi) || []).length, 1);
+  assert.match(sql, /create or replace function app_private\.has_company_permission/);
+  assert.match(sql, /security definer/i);
 });
 
 test('reading the directory is still open to any member', () => {

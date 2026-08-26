@@ -1638,10 +1638,9 @@ was a safe thing to do in the same change as a feature.
 2026-08-26. Migration `20260826090000_company_contacts_permission_split`.
 
 One key granted four unrelated powers: file a contact, edit one, delete one, and restructure
-the directory's field definitions and card layout. Those carry very different risk. A field
-delete has no recycle bin and has already cost a company its entire field set (see
-known-issues), while filing a contact is what an ordinary worker does whenever a Workspace
-button sends a lead across.
+the directory's field definitions and card layout. Those carry very different risk. Filing a
+contact is what an ordinary worker does whenever a Workspace button sends a lead across, while
+field removal belongs behind its own schema-management permission and recovery path.
 
 Because they shared a key, the only way to let a worker file a lead was to also hand them the
 power to destroy the directory's structure. In practice nobody granted it, so the Workspace
@@ -1651,16 +1650,16 @@ non-elevated role.
 Now `company_contacts.create`, `.edit`, `.delete` and `.fields.manage`, each grantable on its
 own. Decisions taken deliberately:
 
-- **`company_contacts.manage` survives as the everything-grant.** Every rewritten policy
-  accepts it alongside the specific key, and `PERMISSION_ALIASES` mirrors that in the browser.
-  No existing role loses access and no assignment had to be rewritten. An administrator who
-  wants fine control simply stops granting it.
-- **A specific deny does not beat an allowed `manage`**, because the two are OR-ed. That is
-  what manage means. Fine-grained control requires not granting it.
-- **No new SECURITY DEFINER function.** Each policy calls the existing
-  `app_private.has_company_permission` twice rather than introducing a helper, so plugin
-  gating, deny handling and owner/admin/developer elevation keep their reviewed behaviour and
-  the advisor gains no new surface.
+- **`company_contacts.manage` survives as the everything-grant.** The existing
+  `app_private.has_company_permission` expands the requested granular key and its legacy alias,
+  and the browser's `PERMISSION_ALIASES` mirrors the same map. No existing role loses access and
+  no assignment has to be rewritten.
+- **One resolver decides deny precedence.** The database policy calls the exact granular key
+  once. The resolver evaluates explicit denies across the equivalent-key set before grants, so
+  browser and database cannot disagree because an SQL `OR` happened to bypass one denied key.
+- **No new SECURITY DEFINER function.** The existing resolver is replaced in place, preserving
+  its reviewed plugin gate, elevation, fixed search path, revokes and grants without adding a
+  second security-definer surface.
 - **Reads were not narrowed.** Any active member still reads the directory.
 - **Filing a lead against somebody already on file, with nothing left to fill in, now writes
   nothing** and needs no write permission at all. It also stops a button press bumping an
@@ -1675,3 +1674,19 @@ Workspaces cannot be enforced today: every workspace, app, field and record for 
 lives in one `workspace_builder_state` row behind a single `workspaces.manage` write policy,
 so editing one record and deleting every app are the same UPDATE. Splitting it needs records
 moved into their own table first.
+
+## Company Contact field definitions join the 30-day Recycle Bin
+
+2026-08-27. Migration `20260827100000_company_contact_field_recycle`.
+
+A field definition is schema, but deleting it also makes every value stored under that field id
+disappear from the product. Hard deletion therefore made a harmless-looking settings action
+operationally unrecoverable. Definitions now carry `deleted_at` and `deleted_by`, normal reads
+return active rows only, browser DELETE is revoked, and the existing recycle functions recognize
+`company_contact_field` with the `company_contacts.fields.manage` permission.
+
+The UI moves removed definitions through the same audited recycle operation as other business
+records. Batch removal is sequential and returns the unprocessed ids at the first failure, so a
+retry does not create duplicate ledger entries for definitions already recycled. Restore keeps
+the original field id, which reconnects the values already present in
+`company_contacts.field_values`.

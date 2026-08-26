@@ -50,53 +50,9 @@
 .wb-appswitch-add { flex: none; width: 40px; height: 40px; border-radius: 11px; border: 1.5px dashed var(--border-strong, #cdb595); background: transparent; color: var(--text-muted, #72695d); cursor: pointer; display: grid; place-items: center; font-size: 18px; }
 .wb-appswitch-add:hover { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }
 
-/* ── Workspace dashboard (Podio-style): persistent app-switcher header,
-   activity feed (main column), and widget tiles (side column). ── */
-.wb-topbar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border, #e2d5bf); overflow: visible; }
-/* Swipeable app strip: scrolls horizontally on touch, wheel and drag, with the arrows
-   as an optional desktop affordance. overflow-x must be auto (not hidden) or a touch
-   swipe does nothing. */
-.wb-topbar-apps {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: 64px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-behavior: smooth;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.wb-topbar-apps::-webkit-scrollbar { display: none; }
-
-.wb-topbar-apps .wb-topbar-tab { scroll-snap-align: start; }
-
-.wb-topbar-apps:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .wb-topbar-apps { scroll-behavior: auto; }
-}
-.wb-topbar-nav { display: flex; align-items: center; gap: 4px; flex: none; }
-.wb-topbar-arrow { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0); color: var(--text-muted, #72695d); cursor: pointer; display: grid; place-items: center; font-size: 16px; }
-.wb-topbar-arrow:hover:not(:disabled) { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }
-.wb-topbar-arrow:disabled { opacity: .35; cursor: default; }
-.wb-topbar-apps .wb-topbar-tab { width: 84px; }
-.wb-topbar-tab { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px; border-radius: 10px; border: 1px solid transparent; color: var(--text-muted, #72695d); font-weight: 700; font-size: .78rem; text-align: center; transition: background .12s ease, border-color .12s ease, color .12s ease; }
-.wb-topbar-tab:hover { background: var(--surface-2, #f6efe4); color: var(--text, #17130f); }
-.wb-topbar-tab.active { background: var(--surface, #fffaf0); border-color: var(--orange, #e0552d); color: var(--text, #17130f); }
-.wb-topbar-ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: #fff; font-size: 19px; flex: none; }
-.wb-topbar-ic-home { background: linear-gradient(135deg, #e0552d, #f0883e); }
-.wb-topbar-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.wb-topbar-home { flex: none; width: 84px; }
-.wb-topbar-add { flex: none; display: inline-flex; flex-direction: column; align-items: center; gap: 4px; width: 84px; padding: 8px 6px; border-radius: 11px; border: 1.5px dashed var(--border-strong, #cdb595); background: transparent; color: var(--text-muted, #72695d); cursor: pointer; font-weight: 700; font-size: .74rem; white-space: nowrap; }
-.wb-topbar-add i { font-size: 19px; }
-.wb-topbar-add:hover { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }
-
+/* ── Workspace dashboard (Podio-style): activity feed and widget tiles. The persistent
+   app-switcher header is shell navigation and is owned by styles.css so lazy loading this
+   file cannot restyle it after first paint. ── */
 .wb-dash { display: grid; grid-template-columns: minmax(0, 1fr) clamp(420px, 36vw, 580px); gap: 20px; align-items: start; }
 .wb-dash-main { min-width: 0; }
 .wb-dash-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -200,7 +156,7 @@
   .wb-dash-split > .wb-dash-main,
   .wb-dash-split > .wb-dash-side { overflow: visible; padding-right: 0; padding-bottom: 0; }
 }
-.wb-topbar-tab:focus-visible, .wb-topbar-add:focus-visible, .wb-tile-row:focus-visible, .wb-tile-add:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
+.wb-tile-row:focus-visible, .wb-tile-add:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
 
 /* ── Publisher hub (composer) ── */
 .wb-feed-wrap { display: flex; flex-direction: column; gap: 16px; }
