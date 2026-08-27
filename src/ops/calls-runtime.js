@@ -120,7 +120,12 @@ export function createCallsRuntime(ctx) {
         state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
       } else {
         const payload = await response.json();
-        state.callsPresence = { ...idle, agents: payload.agents || [] };
+        if (payload.connected === false) {
+          state.callsPresence = { ...idle, notConnected: true };
+          stopCallsPresencePolling();
+        } else {
+          state.callsPresence = { ...idle, agents: payload.agents || [] };
+        }
       }
     } catch {
       state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };

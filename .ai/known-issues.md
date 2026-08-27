@@ -90,14 +90,6 @@ already use it, fail on apply. This bit the RingCentral migration on its first a
 
 Read the live constraint out of `pg_constraint` before rewriting it, not the repository.
 
-## The RingCentral cron interval may exceed the Vercel plan
-
-vercel.json schedules `/api/ringcentral-sync` at `*/15 * * * *`. Sub-daily cron requires a
-Vercel Pro plan; the only other cron in the project is daily. If a deployment rejects the
-schedule, either coarsen it or trigger the same URL from Supabase `pg_cron` with the
-`CRON_SECRET` bearer header. The endpoint, its authorization, and its tests are identical
-under either trigger.
-
 ## Explicit full host renders can still restart the embedded Tasks iframe
 
 The Tasks route renders the vendored module as `<iframe src="/taskmanagement/app.html">`.

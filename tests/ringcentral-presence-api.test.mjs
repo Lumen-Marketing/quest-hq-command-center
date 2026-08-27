@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { resolveCompanyAdmin } from '../api/_lib/user-auth.js';
-import { reconcilePresence } from '../api/ringcentral-presence.js';
+import presenceHandler, { reconcilePresence } from '../api/ringcentral-presence.js';
 
 const SUPABASE = { supabaseUrl: 'https://project.supabase.co', serviceKey: 'service-key' };
 
@@ -12,6 +12,16 @@ function jsonResponse(body, status = 200) {
 
 function requestWithToken(token) {
   return { headers: token ? { authorization: `Bearer ${token}` } : {} };
+}
+
+function vercelResponse() {
+  const result = { statusCode: 200, body: null, headers: new Map() };
+  return {
+    result,
+    setHeader(name, value) { result.headers.set(name, value); },
+    status(statusCode) { result.statusCode = statusCode; return this; },
+    json(body) { result.body = body; return body; },
+  };
 }
 
 test('a request with no bearer token is rejected with 401', async () => {
@@ -137,6 +147,35 @@ test('the presence endpoint caches upstream calls', () => {
 test('the presence endpoint never exposes RingCentral credentials to the browser', () => {
   assert.doesNotMatch(presenceSource, /VITE_RINGCENTRAL/);
   assert.doesNotMatch(presenceSource, /access_token/);
+});
+
+test('a company without a RingCentral account is a normal disconnected state, not a server failure', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = SUPABASE.supabaseUrl;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE.serviceKey;
+
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ id: 'profile-1', email: 'boss@quest.com' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/company_memberships')) return new Response(JSON.stringify([{ role: 'owner', status: 'active' }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_accounts')) return new Response(JSON.stringify([]), { status: 200, headers: { 'content-type': 'application/json' } });
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  try {
+    const response = vercelResponse();
+    await presenceHandler({ method: 'GET', query: { company_id: 'quest' }, headers: { authorization: 'Bearer good' } }, response);
+    assert.equal(response.result.statusCode, 200);
+    assert.deepEqual(response.result.body, { connected: false, agents: [], stale: false });
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
 });
 
 test('a RingCentral failure serves stored status instead of an error', () => {

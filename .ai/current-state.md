@@ -1,6 +1,19 @@
 # Current state
 
-Captured through 2026-08-26T19:53:37.642Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-08-27T18:52:31.507Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+
+## 2026-08-28 RingCentral status correction
+
+- Live `ringcentral_sync_state` verification found one active account with a recent successful
+  scheduled sync and zero consecutive failures. The 15-minute Vercel cron is operating on the
+  current Pro project; its old plan-risk note is no longer actionable.
+- A company with no active RingCentral account is now a normal disconnected state, not an HTTP
+  503 outage. The presence endpoint returns `connected: false` with no agents, while database,
+  credential, and upstream failures continue to use error responses.
+- The Calls runtime recognizes that explicit disconnected response, shows the existing setup
+  guidance, and stops its presence poller instead of recording repeated false production errors.
+- Endpoint and runtime regression tests cover the disconnected contract. No migration, stored
+  record mutation, credential change, or connected-company behavior is part of this correction.
 
 ## 2026-08-27 priority-finding release candidate
 
@@ -79,8 +92,8 @@ Captured through 2026-08-26T19:53:37.642Z. This is a point-in-time operational s
 - Canonical public domains: https://questbase.io and https://www.questbase.io.
 - Stable Vercel URL: https://quest-hq-command-center-gamma.vercel.app.
 - Vercel project: `prj_0MxrYyGIo61QgLNW2M74fvTxlMRV`.
-- Ready production deployment: `dpl_DYtyBPAMLDsDtkKGV4n8EXTNPrH1`.
-- Deployed application revision: `7d430904d7070fc5a9a2f19ea31d025ed1ce956b` from `main`.
+- Ready production deployment: `dpl_GzeyEei6T7jndVA2eakYGSCiFdMT`.
+- Deployed application revision: `204c220485fefd9b16e713dafe6fdb50031f1b92` from `main`.
 - Production smoke passed for the exact revision: 36 of 36 routes and 4 of 4 entry assets.
 - Signed-in browser verification passed for the production Job form's local draft lifecycle: an unfinished edit autosaved, reopening offered Restore or Discard, Restore recovered the exact field value, Discard removed the temporary QA draft, no job record was created, and the browser reported no console errors.
 - Signed-in browser verification passed for the production Job record-history entry point: History opened against the correct workspace and record, completed its live query, showed the expected empty pre-migration state for an older record, and produced no browser warnings or errors. The verification was read-only.

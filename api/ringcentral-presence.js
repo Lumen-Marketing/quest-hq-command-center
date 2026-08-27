@@ -73,7 +73,10 @@ export default async function handler(request, response) {
       .eq('company_id', companyId)
       .eq('status', 'active')
       .maybeSingle();
-    if (account.error || !account.data) throw new HttpError(503, 'RingCentral is not connected for this workspace.');
+    if (account.error) throw new HttpError(503, 'Could not check the RingCentral connection.');
+    if (!account.data) {
+      return response.status(200).json({ connected: false, agents: [], stale: false });
+    }
 
     const jwt = env(account.data.credential_key);
     if (!jwt) throw new HttpError(503, 'RingCentral is not configured.');
@@ -126,6 +129,7 @@ export default async function handler(request, response) {
     }
 
     const payload = {
+      connected: true,
       agents: rows.map((row) => ({
         extension_id: row.extension_id,
         extension_number: names.get(row.extension_id)?.extension_number || '',

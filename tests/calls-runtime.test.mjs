@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { createCallsRuntime } from '../src/ops/calls-runtime.js';
 
-function harness({ token = '' } = {}) {
+function harness({ token = '', fetchImpl } = {}) {
   const state = {
     route: { section: 'dashboard' },
     callsStats: { key: '', rows: [], sync: null, unavailable: false },
@@ -16,7 +16,11 @@ function harness({ token = '' } = {}) {
     createSupabaseClient: () => null,
     documentRef: { hidden: false, addEventListener() {} },
     emptyState: (message) => `<div>${message}</div>`,
-    fetchImpl: async () => { events.fetches += 1; throw new Error('unexpected fetch'); },
+    fetchImpl: async (...args) => {
+      events.fetches += 1;
+      if (fetchImpl) return fetchImpl(...args);
+      throw new Error('unexpected fetch');
+    },
     h: String,
     queueMicrotaskImpl: (callback) => callback(),
     render: () => { events.renders += 1; },
@@ -45,6 +49,27 @@ test('a terminal not-connected response releases the presence polling interval',
   assert.equal(state.callsPresence.notConnected, true);
   assert.equal(events.intervals, 1);
   assert.equal(events.clearedIntervals, 1);
+});
+
+test('a successful disconnected payload stops polling and renders the connected-state message', async () => {
+  const { events, runtime, state } = harness({
+    token: 'good',
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ connected: false, agents: [], stale: false }),
+    }),
+  });
+
+  runtime.ensureCallsPresencePolling('company-a');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(events.fetches, 1);
+  assert.equal(events.intervals, 1);
+  assert.equal(events.clearedIntervals, 1);
+  assert.equal(state.callsPresence.notConnected, true);
+  assert.match(runtime.callsBoardMarkup(), /Not connected to RingCentral yet/);
 });
 
 test('the custom date key covers both complete calendar days', () => {
