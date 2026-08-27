@@ -178,6 +178,147 @@ test('a company without a RingCentral account is a normal disconnected state, no
   }
 });
 
+test('missing RingCentral client credentials are a server configuration failure', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousEnv = {
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    clientId: process.env.RINGCENTRAL_CLIENT_ID,
+    clientSecret: process.env.RINGCENTRAL_CLIENT_SECRET,
+    jwt: process.env.RINGCENTRAL_TEST_JWT,
+  };
+  process.env.SUPABASE_URL = SUPABASE.supabaseUrl;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE.serviceKey;
+  delete process.env.RINGCENTRAL_CLIENT_ID;
+  delete process.env.RINGCENTRAL_CLIENT_SECRET;
+  process.env.RINGCENTRAL_TEST_JWT = 'jwt';
+
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ id: 'profile-1', email: 'boss@quest.com' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/company_memberships')) return new Response(JSON.stringify([{ role: 'owner', status: 'active' }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_accounts')) return new Response(JSON.stringify({ rc_account_id: 'account-1', credential_key: 'RINGCENTRAL_TEST_JWT' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_extensions') || url.includes('/rest/v1/ringcentral_presence')) return new Response(JSON.stringify([]), { status: 200, headers: { 'content-type': 'application/json' } });
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  try {
+    const response = vercelResponse();
+    await presenceHandler({ method: 'GET', query: { company_id: 'quest' }, headers: { authorization: 'Bearer good' } }, response);
+    assert.equal(response.result.statusCode, 503);
+    assert.deepEqual(response.result.body, { error: 'Could not load live status.' });
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [name, value] of Object.entries({
+      SUPABASE_URL: previousEnv.url,
+      SUPABASE_SERVICE_ROLE_KEY: previousEnv.key,
+      RINGCENTRAL_CLIENT_ID: previousEnv.clientId,
+      RINGCENTRAL_CLIENT_SECRET: previousEnv.clientSecret,
+      RINGCENTRAL_TEST_JWT: previousEnv.jwt,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test('a presence-directory database failure is not disguised as a stale success', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousEnv = {
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    clientId: process.env.RINGCENTRAL_CLIENT_ID,
+    clientSecret: process.env.RINGCENTRAL_CLIENT_SECRET,
+    jwt: process.env.RINGCENTRAL_TEST_JWT,
+  };
+  process.env.SUPABASE_URL = SUPABASE.supabaseUrl;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE.serviceKey;
+  process.env.RINGCENTRAL_CLIENT_ID = 'client';
+  process.env.RINGCENTRAL_CLIENT_SECRET = 'secret';
+  process.env.RINGCENTRAL_TEST_JWT = 'jwt';
+
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ id: 'profile-1', email: 'boss@quest.com' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/company_memberships')) return new Response(JSON.stringify([{ role: 'owner', status: 'active' }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_accounts')) return new Response(JSON.stringify({ rc_account_id: 'account-1', credential_key: 'RINGCENTRAL_TEST_JWT' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_extensions')) return new Response(JSON.stringify({ message: 'database unavailable' }), { status: 500, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_presence')) return new Response(JSON.stringify([]), { status: 200, headers: { 'content-type': 'application/json' } });
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  try {
+    const response = vercelResponse();
+    await presenceHandler({ method: 'GET', query: { company_id: 'quest' }, headers: { authorization: 'Bearer good' } }, response);
+    assert.equal(response.result.statusCode, 503);
+    assert.deepEqual(response.result.body, { error: 'Could not load live status.' });
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [name, value] of Object.entries({
+      SUPABASE_URL: previousEnv.url,
+      SUPABASE_SERVICE_ROLE_KEY: previousEnv.key,
+      RINGCENTRAL_CLIENT_ID: previousEnv.clientId,
+      RINGCENTRAL_CLIENT_SECRET: previousEnv.clientSecret,
+      RINGCENTRAL_TEST_JWT: previousEnv.jwt,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test('a presence write failure is returned as a server error instead of cached as success', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousEnv = {
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    clientId: process.env.RINGCENTRAL_CLIENT_ID,
+    clientSecret: process.env.RINGCENTRAL_CLIENT_SECRET,
+    serverUrl: process.env.RINGCENTRAL_SERVER_URL,
+    jwt: process.env.RINGCENTRAL_TEST_JWT,
+  };
+  process.env.SUPABASE_URL = SUPABASE.supabaseUrl;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE.serviceKey;
+  process.env.RINGCENTRAL_CLIENT_ID = 'client';
+  process.env.RINGCENTRAL_CLIENT_SECRET = 'secret';
+  process.env.RINGCENTRAL_SERVER_URL = 'https://ringcentral.example';
+  process.env.RINGCENTRAL_TEST_JWT = 'jwt';
+
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input);
+    const method = String(init.method || 'GET').toUpperCase();
+    if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ id: 'profile-1', email: 'boss@quest.com' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/company_memberships')) return new Response(JSON.stringify([{ role: 'owner', status: 'active' }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_accounts')) return new Response(JSON.stringify({ rc_account_id: 'account-1', credential_key: 'RINGCENTRAL_TEST_JWT' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_extensions')) return new Response(JSON.stringify([{ extension_id: '201', extension_number: '201', name: 'Agent' }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_presence') && method === 'GET') return new Response(JSON.stringify([]), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.includes('/rest/v1/ringcentral_presence') && method === 'POST') return new Response(JSON.stringify({ message: 'write failed' }), { status: 500, headers: { 'content-type': 'application/json' } });
+    if (url === 'https://ringcentral.example/restapi/oauth/token') return new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.startsWith('https://ringcentral.example/restapi/v1.0/account/account-1/presence?')) return new Response(JSON.stringify({ records: [{ extension: { id: '201' }, telephonyStatus: 'NoCall', userStatus: 'Available', dndStatus: 'TakeAllCalls' }], paging: { totalPages: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    throw new Error(`Unexpected request: ${method} ${url}`);
+  };
+
+  try {
+    const response = vercelResponse();
+    await presenceHandler({ method: 'GET', query: { company_id: 'quest' }, headers: { authorization: 'Bearer good' } }, response);
+    assert.equal(response.result.statusCode, 503);
+    assert.deepEqual(response.result.body, { error: 'Could not load live status.' });
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [name, value] of Object.entries({
+      SUPABASE_URL: previousEnv.url,
+      SUPABASE_SERVICE_ROLE_KEY: previousEnv.key,
+      RINGCENTRAL_CLIENT_ID: previousEnv.clientId,
+      RINGCENTRAL_CLIENT_SECRET: previousEnv.clientSecret,
+      RINGCENTRAL_SERVER_URL: previousEnv.serverUrl,
+      RINGCENTRAL_TEST_JWT: previousEnv.jwt,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test('a RingCentral failure serves stored status instead of an error', () => {
   // A 429 or outage must degrade to last-known data, never a visible error,
   // and cache it briefly so we back off the upstream that is refusing us.

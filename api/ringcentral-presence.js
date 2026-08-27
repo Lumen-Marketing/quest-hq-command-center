@@ -80,10 +80,13 @@ export default async function handler(request, response) {
 
     const jwt = env(account.data.credential_key);
     if (!jwt) throw new HttpError(503, 'RingCentral is not configured.');
+    const clientId = env('RINGCENTRAL_CLIENT_ID');
+    const clientSecret = env('RINGCENTRAL_CLIENT_SECRET');
+    if (!clientId || !clientSecret) throw new HttpError(503, 'RingCentral is not configured.');
 
     const ringcentral = createRingCentralClient({
-      clientId: env('RINGCENTRAL_CLIENT_ID'),
-      clientSecret: env('RINGCENTRAL_CLIENT_SECRET'),
+      clientId,
+      clientSecret,
       jwt,
       serverUrl: env('RINGCENTRAL_SERVER_URL') || 'https://platform.ringcentral.com',
     });
@@ -92,6 +95,7 @@ export default async function handler(request, response) {
       client.from('ringcentral_extensions').select('extension_id,extension_number,name').eq('company_id', companyId),
       client.from('ringcentral_presence').select('extension_id,display_status,status_since').eq('company_id', companyId),
     ]);
+    if (directory.error || stored.error) throw new HttpError(503, 'Could not load stored RingCentral status.');
     const names = new Map((directory.data || []).map((row) => [String(row.extension_id), row]));
 
     // Try live presence, but never let a RingCentral hiccup or rate-limit turn
@@ -99,13 +103,22 @@ export default async function handler(request, response) {
     // fails we serve the last-known statuses from the database instead, and
     // cache that briefly so a burst of requests backs off RingCentral rather
     // than hammering it while it is already refusing us.
+    let records;
     let rows;
     let stale = false;
     try {
-      const records = await ringcentral.fetchPaged(
+      records = await ringcentral.fetchPaged(
         `/restapi/v1.0/account/${account.data.rc_account_id}/presence`,
         { detailedTelephonyState: 'true' },
       );
+    } catch (upstreamError) {
+      stale = true;
+      rows = (stored.data || [])
+        .map((row) => ({ extension_id: String(row.extension_id), display_status: row.display_status, status_since: row.status_since }))
+        .filter((row) => names.has(row.extension_id));
+    }
+
+    if (!stale) {
       const live = records
         .map((record) => ({
           extension_id: String(record?.extension?.id || ''),
@@ -116,16 +129,12 @@ export default async function handler(request, response) {
       const reconciled = reconcilePresence(stored.data || [], live, new Date());
       rows = reconciled.rows;
       if (reconciled.changed.length) {
-        await client.from('ringcentral_presence').upsert(
+        const written = await client.from('ringcentral_presence').upsert(
           reconciled.changed.map((row) => ({ ...row, company_id: companyId, updated_at: new Date().toISOString() })),
           { onConflict: 'company_id,extension_id' },
         );
+        if (written.error) throw new HttpError(503, 'Could not store live RingCentral status.');
       }
-    } catch (upstreamError) {
-      stale = true;
-      rows = (stored.data || [])
-        .map((row) => ({ extension_id: String(row.extension_id), display_status: row.display_status, status_since: row.status_since }))
-        .filter((row) => names.has(row.extension_id));
     }
 
     const payload = {

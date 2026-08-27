@@ -1,6 +1,6 @@
 # Current state
 
-Captured through 2026-08-27T18:52:31.507Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-08-27T19:27:51.368Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## 2026-08-28 RingCentral status correction
 
@@ -8,12 +8,15 @@ Captured through 2026-08-27T18:52:31.507Z. This is a point-in-time operational s
   scheduled sync and zero consecutive failures. The 15-minute Vercel cron is operating on the
   current Pro project; its old plan-risk note is no longer actionable.
 - A company with no active RingCentral account is now a normal disconnected state, not an HTTP
-  503 outage. The presence endpoint returns `connected: false` with no agents, while database,
-  credential, and upstream failures continue to use error responses.
-- The Calls runtime recognizes that explicit disconnected response, shows the existing setup
-  guidance, and stops its presence poller instead of recording repeated false production errors.
-- Endpoint and runtime regression tests cover the disconnected contract. No migration, stored
-  record mutation, credential change, or connected-company behavior is part of this correction.
+  503 outage. The presence endpoint returns `connected: false` with no agents. Database and
+  credential failures remain errors; a RingCentral provider outage retains the existing
+  last-known-status fallback and marks that response stale.
+- The Calls runtime recognizes only that explicit disconnected response as terminal. Transport,
+  hosting, and server failures show an error and remain retryable. Presence state is keyed to the
+  company, so switching companies clears a previous disconnected state and ignores late results.
+- Endpoint and runtime regression tests cover the disconnected, transient-failure, database-error,
+  write-error, missing-credential, and company-switch contracts. No migration, stored record
+  mutation, credential change, or connected-company data change is part of this correction.
 
 ## 2026-08-27 priority-finding release candidate
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-27T18:52:31.507Z",
-  "generated_from_commit": "204c220485fefd9b16e713dafe6fdb50031f1b92",
+  "generated_at": "2026-08-27T19:27:51.368Z",
+  "generated_from_commit": "307e308c30b612e9404af8e377a9048389916c23",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",

@@ -1602,11 +1602,11 @@ disabled attribute is removed or a call is made directly.
 
 ## Terminal integration states do not keep background pollers alive
 
-RingCentral presence polling continues through transient transport errors, but it stops when the
-session has no token, the endpoint forbids access, or the integration endpoint reports that it is
-not configured. Those states require a login, permission, configuration, or deployment change;
-an interval cannot repair them and only creates repeated work. A future explicit reconnect can
-start a fresh poller through the same runtime.
+RingCentral presence polling continues through transient transport, hosting, and server errors,
+but it stops when the session has no token, the endpoint forbids access, or a successful endpoint
+response explicitly says the company has no active account. HTTP status alone is not evidence of
+a deliberate disconnect. Presence state and the interval are keyed to the company so a company
+switch resets a prior terminal state and a late response cannot repaint the wrong account.
 
 ## Advisor hardening is forward-only and behavior-preserving
 

@@ -3,21 +3,22 @@ import test from 'node:test';
 
 import { createCallsRuntime } from '../src/ops/calls-runtime.js';
 
-function harness({ token = '', fetchImpl } = {}) {
+function harness({ token = '', fetchImpl, activeCompanyId = () => 'company-a' } = {}) {
   const state = {
     route: { section: 'dashboard' },
     callsStats: { key: '', rows: [], sync: null, unavailable: false },
     callsPresence: { agents: [], error: '', forbidden: false, notConnected: false },
   };
-  const events = { fetches: 0, renders: 0, intervals: 0, clearedIntervals: 0 };
+  const events = { fetches: 0, fetchUrls: [], renders: 0, intervals: 0, clearedIntervals: 0 };
   const runtime = createCallsRuntime({
-    activeCompanyId: () => 'company-a',
+    activeCompanyId,
     activeSession: () => ({ access_token: token }),
     createSupabaseClient: () => null,
     documentRef: { hidden: false, addEventListener() {} },
     emptyState: (message) => `<div>${message}</div>`,
     fetchImpl: async (...args) => {
       events.fetches += 1;
+      events.fetchUrls.push(String(args[0]));
       if (fetchImpl) return fetchImpl(...args);
       throw new Error('unexpected fetch');
     },
@@ -70,6 +71,74 @@ test('a successful disconnected payload stops polling and renders the connected-
   assert.equal(events.clearedIntervals, 1);
   assert.equal(state.callsPresence.notConnected, true);
   assert.match(runtime.callsBoardMarkup(), /Not connected to RingCentral yet/);
+});
+
+test('a transient server failure remains an error and keeps the poller available to retry', async () => {
+  const { events, runtime, state } = harness({
+    token: 'good',
+    fetchImpl: async () => ({
+      ok: false,
+      status: 503,
+      headers: { get: () => 'application/json' },
+    }),
+  });
+
+  runtime.ensureCallsPresencePolling('company-a');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(events.clearedIntervals, 0);
+  assert.equal(state.callsPresence.notConnected, false);
+  assert.match(state.callsPresence.error, /Can't reach RingCentral/);
+});
+
+test('a non-JSON gateway response remains an error and keeps the poller available to retry', async () => {
+  const { events, runtime, state } = harness({
+    token: 'good',
+    fetchImpl: async () => ({
+      ok: false,
+      status: 502,
+      headers: { get: () => 'text/html' },
+    }),
+  });
+
+  runtime.ensureCallsPresencePolling('company-a');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(events.clearedIntervals, 0);
+  assert.equal(state.callsPresence.notConnected, false);
+  assert.match(state.callsPresence.error, /Can't reach RingCentral/);
+});
+
+test('switching companies clears a terminal disconnected state and loads the new company', async () => {
+  let companyId = 'company-a';
+  const { events, runtime, state } = harness({
+    token: 'good',
+    activeCompanyId: () => companyId,
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => String(url).includes('company-a')
+        ? { connected: false, agents: [], stale: false }
+        : { connected: true, agents: [{ extension_id: '202', name: 'New company agent', status: 'available' }], stale: false },
+    }),
+  });
+
+  runtime.ensureCallsPresencePolling(companyId);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.callsPresence.notConnected, true);
+
+  companyId = 'company-b';
+  runtime.ensureCallsData(companyId);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(events.fetchUrls, [
+    '/api/ringcentral-presence?company_id=company-a',
+    '/api/ringcentral-presence?company_id=company-b',
+  ]);
+  assert.equal(state.callsPresence.companyId, 'company-b');
+  assert.equal(state.callsPresence.notConnected, false);
+  assert.equal(state.callsPresence.agents[0].name, 'New company agent');
 });
 
 test('the custom date key covers both complete calendar days', () => {
