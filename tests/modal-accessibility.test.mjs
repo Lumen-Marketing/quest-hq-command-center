@@ -64,6 +64,18 @@ test('the focus trap and the focus mover agree on what is focusable', () => {
   assert.match(trap, /FOCUSABLE_SELECTOR/, 'the trap should use the shared selector, not its own copy');
 });
 
+test('the signed-out auth dialog uses the same focus trap, Escape close, and background isolation', () => {
+  const keys = fn('onDocumentKeydown');
+  assert.match(keys, /activeModalOverlay\(\)/);
+  assert.match(keys, /landing-auth-modal/);
+  assert.match(keys, /closeLandingAuthModal\(\)/);
+  assert.match(keys, /trapModalFocus\(event\)/);
+
+  const sync = fn('syncModalFocus');
+  assert.match(sync, /sibling\.inert = true/);
+  assert.match(sync, /sibling\.setAttribute\('aria-hidden', 'true'\)/);
+});
+
 test('every icon-only control has an accessible name', () => {
   const buttons = [...main.matchAll(/<button\b[^>]*>([\s\S]{0,400}?)<\/button>/g)];
   const unnamed = [];

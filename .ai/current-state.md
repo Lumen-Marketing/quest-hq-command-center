@@ -1,6 +1,25 @@
 # Current state
 
-Captured through 2026-08-27T19:40:15.671Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-08-28T19:16:59.435Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+
+## 2026-08-29 runtime reliability and startup optimization
+
+- Missing build files now return a real 404 instead of the SPA HTML document. Service-worker
+  cache v3 also validates response content types before admitting immutable assets, flushing any
+  JavaScript or CSS URL that an older deployment poisoned with HTML.
+- Copied Tasks scripts and styles remain release-versioned, and local font/image references
+  nested inside their CSS now receive the same release version.
+- A timed-out first-workspace Supabase request now aborts its underlying network call. Partial
+  startup failures remain visible in the shell with the missing areas named and a Retry action;
+  the app no longer describes a partly loaded workspace as fully live.
+- Workspace backup lists load metadata only. The saved JSON snapshot is fetched on demand for
+  download or restore, and a metadata-only row can no longer silently export today's workspace
+  as though it were the historical backup.
+- Landing workspace tabs support the standard arrow/Home/End keyboard model. The signed-out auth
+  dialog shares the app's focus trap, Escape handling, focus return, and background isolation.
+- Production migration `20260828191625_add_wb_records_created_by_index` adds the missing covering
+  index for `wb_records.created_by`. The live index and migration ledger were re-queried after
+  application, and the catalog snapshot was rebuilt from production metadata.
 
 ## 2026-08-28 RingCentral status correction
 

@@ -42,6 +42,16 @@ test('workspace product preview is interactive and read-only', () => {
   assert.match(source, /'landing-preview-workspace'/);
 });
 
+test('workspace preview tabs expose their panel and support arrow-key navigation', () => {
+  assert.match(source, /id="landing-workspace-tab-\$\{h\(key\)\}"/);
+  assert.match(source, /aria-controls="landing-workspace-panel"/);
+  assert.match(source, /tabindex="\$\{key === 'sales' \? '0' : '-1'\}"/);
+  assert.match(source, /id="landing-workspace-panel" role="tabpanel"/);
+  assert.match(source, /function handleLandingWorkspaceKeydown\(event\)/);
+  assert.match(source, /\['ArrowLeft', 'ArrowRight', 'Home', 'End'\]/);
+  assert.match(source, /next\.focus\(\)/);
+});
+
 test('landing assets and responsive visual system ship with the application', () => {
   assert.ok(existsSync(logoUrl), 'expected the selected Questbase logo asset');
   assert.ok(existsSync(productReferenceUrl), 'expected the selected Questbase interior reference asset');

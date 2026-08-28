@@ -20,7 +20,10 @@
 // "X-Frame-Options: deny" even though the live network response was SAMEORIGIN.
 // The activate handler deletes any cache whose name is not the current one, so a
 // version bump flushes the bad copy for everyone on their next visit.
-const VERSION = 'v2';
+// v3 also evicts asset entries poisoned when a removed hashed file was rewritten
+// to index.html with a 200 response. The cache admission check below prevents the
+// same MIME mismatch from being stored again.
+const VERSION = 'v3';
 const SHELL_CACHE = `quest-shell-${VERSION}`;
 const ASSET_CACHE = `quest-assets-${VERSION}`;
 const SHELL_URL = '/';
@@ -59,6 +62,23 @@ const isHashedAsset = (url) =>
   url.origin === self.location.origin &&
   url.pathname.startsWith('/assets/') &&
   /-[A-Za-z0-9_-]{8,}\.(js|css|woff2|webp|png|svg|mjs)$/.test(url.pathname);
+
+const hasExpectedAssetType = (url, response) => {
+  if (!response.ok) return false;
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (!contentType || contentType.includes('text/html')) return false;
+  const extension = url.pathname.split('.').pop()?.toLowerCase();
+  const expected = {
+    js: ['javascript'],
+    mjs: ['javascript'],
+    css: ['text/css'],
+    woff2: ['font/woff2', 'application/font-woff2', 'application/octet-stream'],
+    webp: ['image/webp'],
+    png: ['image/png'],
+    svg: ['image/svg+xml'],
+  }[extension] || [];
+  return expected.some((type) => contentType.includes(type));
+};
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -100,7 +120,7 @@ self.addEventListener('fetch', (event) => {
         (hit) =>
           hit ||
           fetch(request).then((response) => {
-            if (response.ok) {
+            if (hasExpectedAssetType(url, response)) {
               const copy = response.clone();
               caches.open(ASSET_CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
             }

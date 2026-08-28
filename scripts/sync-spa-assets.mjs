@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -117,6 +117,7 @@ export async function syncSpaAssets(outDirArg = 'dist') {
     const taskAppPath = path.join(taskRuntimeTarget, 'app.html');
     const taskAppHtml = await readFile(taskAppPath, 'utf8');
     await writeFile(taskAppPath, versionTaskStaticReferences(taskAppHtml, taskRelease), 'utf8');
+    await versionTaskCssTree(taskRuntimeTarget, taskRelease);
 
     const indexHtml = await readFile(path.join(outDir, 'index.html'), 'utf8');
     await writeFile(path.join(outDir, '404.html'), indexHtml);
@@ -228,4 +229,23 @@ export function versionTaskStaticReferences(html, version) {
         /(<(?:script|link)\b[^>]*\b(?:src|href)=["'])(?!https?:|\/\/|\/|data:|#)([^"'?#]+)(?:\?[^"']*)?(["'])/gi,
         (_match, prefix, asset, suffix) => `${prefix}${asset}?v=${release}${suffix}`,
     );
+}
+
+export function versionTaskCssReferences(css, version) {
+    const release = encodeURIComponent(String(version || 'local-build'));
+    return String(css || '').replace(
+        /(url\(\s*['"]?)(?!https?:|\/\/|\/|data:|#)([^)'"?#]+)(?:\?[^)'" ]*)?(['"]?\s*\))/gi,
+        (_match, prefix, asset, suffix) => `${prefix}${asset}?v=${release}${suffix}`,
+    );
+}
+
+async function versionTaskCssTree(directory, version) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    await Promise.all(entries.map(async (entry) => {
+        const target = path.join(directory, entry.name);
+        if (entry.isDirectory()) return versionTaskCssTree(target, version);
+        if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.css')) return undefined;
+        const css = await readFile(target, 'utf8');
+        return writeFile(target, versionTaskCssReferences(css, version), 'utf8');
+    }));
 }

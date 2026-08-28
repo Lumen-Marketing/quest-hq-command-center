@@ -1,6 +1,6 @@
 # Public functions
 
-Captured through 2026-08-10T18:23:17.639Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured through 2026-08-28T19:16:59.435Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -15,6 +15,7 @@ Captured through 2026-08-10T18:23:17.639Z from the live catalog. Execute grants 
 | `can_manage_roles()` | boolean | yes | no | yes | yes |
 | `can_view_team()` | boolean | yes | no | yes | yes |
 | `clear_message_conversation(target_conversation_id uuid)` | timestamp with time zone | yes | no | yes | yes |
+| `consume_rate_limit(p_bucket text, p_limit integer, p_window_seconds integer)` | jsonb | yes | no | no | yes |
 | `convert_contact_to_quote(p_contact_id text, p_request_id uuid)` | jsonb | no | no | yes | yes |
 | `convert_deal_to_job(p_job jsonb, p_deal jsonb)` | jsonb | yes | no | yes | yes |
 | `create_company_workspace(company_name text, preset_code text, icon_key text, owner_email text)` | text | yes | no | yes | yes |
@@ -24,6 +25,7 @@ Captured through 2026-08-10T18:23:17.639Z from the live catalog. Execute grants 
 | `current_profile_role()` | text | yes | no | yes | yes |
 | `delete_company_role(p_role_id uuid)` | boolean | yes | no | yes | yes |
 | `delete_company_workspace(target_company_id text)` | void | yes | no | yes | yes |
+| `delete_workspace(target_workspace_id uuid)` | jsonb | yes | no | yes | yes |
 | `handle_new_user()` | trigger | yes | no | no | yes |
 | `is_platform_admin()` | boolean | yes | no | yes | yes |
 | `job_files_refresh_job_count()` | trigger | no | yes | yes | yes |
@@ -52,6 +54,7 @@ Captured through 2026-08-10T18:23:17.639Z from the live catalog. Execute grants 
 | `recycle_undo_item(p_item_id text)` | recycle_bin_items | yes | no | yes | yes |
 | `refresh_job_file_count(target_job_id uuid)` | void | no | yes | yes | yes |
 | `remove_company_member(target_company_id text, target_profile_id uuid)` | boolean | yes | no | yes | yes |
+| `reorder_operational_workspaces(target_company_id text, workspace_ids uuid[])` | SETOF workspaces | yes | no | yes | yes |
 | `replace_pipeline_stages(p_company_id text, p_kind text, p_stages jsonb, p_rename_map jsonb)` | SETOF pipeline_stages | yes | no | yes | yes |
 | `replace_workspace_pipeline_stages(p_workspace_id uuid, p_kind text, p_stages jsonb, p_rename_map jsonb)` | SETOF pipeline_stages | yes | no | yes | yes |
 | `request_company_access(target_company_id text, request_message text)` | uuid | yes | no | yes | yes |

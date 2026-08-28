@@ -2850,6 +2850,7 @@ const state = {
   driveFolder: 'home',
   driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'list',
   sync: { label: 'Loading workspace...', mode: 'loading' },
+  initialLoadFailures: [],
   dataLoaded: false,
   everLoaded: false,
   dataLoading: false,
@@ -4874,7 +4875,19 @@ async function loadSupabaseData() {
     return;
   }
 
-  const { loadInitialDataQueries, safeInitialDataQuery } = await import('./data/initial-data-queries.js');
+  const {
+    loadInitialDataQueries,
+    safeInitialDataQuery,
+    summarizeInitialDataFailures,
+  } = await import('./data/initial-data-queries.js');
+  const initialResults = await loadInitialDataQueries(client);
+  state.initialLoadFailures = summarizeInitialDataFailures(initialResults);
+  const recordInitialFailures = (results) => {
+    state.initialLoadFailures = [...new Set([
+      ...state.initialLoadFailures,
+      ...summarizeInitialDataFailures(results),
+    ])];
+  };
   const {
     companiesResult,
     jobsResult,
@@ -4917,7 +4930,7 @@ async function loadSupabaseData() {
     activeTimerResult,
     timeEntriesResult,
     automationsResult,
-  } = await loadInitialDataQueries(client);
+  } = initialResults;
 
   let liveTables = 0;
   if (!companiesResult.error) {
@@ -5033,7 +5046,7 @@ async function loadSupabaseData() {
       safeInitialDataQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
       safeInitialDataQuery(client.rpc('list_platform_backup_copies', { filter_company_id: null, filter_status: null, filter_kind: null })),
     ]);
-    if (platformCompaniesResult.error) throw platformCompaniesResult.error;
+    recordInitialFailures({ platformCompaniesResult, platformMembersResult, platformBackupCopiesResult });
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
       state.workspaceReviews = state.platformCompanies.map(normalizeWorkspaceReview);
@@ -5058,7 +5071,7 @@ async function loadSupabaseData() {
 
   if (isQuestDeveloper() && !state.platformCompanies.length) {
     const reviewsResult = await safeInitialDataQuery(client.rpc('list_workspace_reviews_v2'));
-    if (reviewsResult.error) throw reviewsResult.error;
+    recordInitialFailures({ workspaceReviewsResult: reviewsResult });
     if (!reviewsResult.error) {
       state.workspaceReviews = (reviewsResult.data || []).map(normalizeWorkspaceReview);
       const reviewCompanies = state.workspaceReviews.map((review) => normalizeCompany({
@@ -5081,19 +5094,31 @@ async function loadSupabaseData() {
     }
   }
 
-  state.sync = liveTables ? { label: 'Quest Supabase live', mode: 'live' } : { label: 'Local fallback', mode: 'local' };
+  state.sync = liveTables
+    ? { label: state.initialLoadFailures.length ? 'Quest Supabase partial' : 'Quest Supabase live', mode: 'live' }
+    : { label: 'Local fallback', mode: 'local' };
 }
 
 async function loadSupabaseBootstrapData() {
   if (state.session?.auth !== 'supabase') return;
   const client = createSupabaseClient();
   if (!client) return;
+  const { safeInitialDataQuery, summarizeInitialDataFailures } = await import('./data/initial-data-queries.js');
+  const safeBootstrapQuery = (query) => safeInitialDataQuery(query);
+  state.initialLoadFailures = [];
+  const recordBootstrapFailures = (results) => {
+    state.initialLoadFailures = [...new Set([
+      ...state.initialLoadFailures,
+      ...summarizeInitialDataFailures(results),
+    ])];
+  };
   const profile = activeSession().profile;
   const [membershipsResult, profileResult, platformAdminResult] = await Promise.all([
-    safeSupabaseQuery(client.from('company_memberships').select('*').eq('profile_id', profile.id)),
-    safeSupabaseQuery(client.from('profiles').select('*').eq('id', profile.id).maybeSingle()),
-    safeSupabaseQuery(client.rpc('is_platform_admin')),
+    safeBootstrapQuery(client.from('company_memberships').select('*').eq('profile_id', profile.id)),
+    safeBootstrapQuery(client.from('profiles').select('*').eq('id', profile.id).maybeSingle()),
+    safeBootstrapQuery(client.rpc('is_platform_admin')),
   ]);
+  recordBootstrapFailures({ membershipsResult, profileResult, platformAdminResult });
   if (!profileResult.error && profileResult.data) {
     const nextProfile = normalizeProfile(profileResult.data, profile);
     state.session = { ...activeSession(), profile: nextProfile };
@@ -5120,19 +5145,31 @@ async function loadSupabaseBootstrapData() {
       workspacePluginsResult,
       eodReportsResult,
     ] = await Promise.all([
-      safeSupabaseQuery(client.from('companies').select('*').in('id', companyIds)),
-      safeSupabaseQuery(client.from('company_subscriptions').select('*').in('company_id', companyIds)),
-      safeSupabaseQuery(client.from('roles').select('*').in('company_id', companyIds)),
-      safeSupabaseQuery(client.from('role_permissions').select('*')),
-      safeSupabaseQuery(client.from('user_role_assignments').select('*').in('company_id', companyIds)),
-      safeSupabaseQuery(client.from('company_plugins').select('*').in('company_id', companyIds)),
-      safeSupabaseQuery(client.from('workspaces').select('*').in('company_id', companyIds)),
-      safeSupabaseQuery(client.from('workspace_memberships').select('*')),
-      safeSupabaseQuery(client.from('workspace_plugins').select('*')),
+      safeBootstrapQuery(client.from('companies').select('*').in('id', companyIds)),
+      safeBootstrapQuery(client.from('company_subscriptions').select('*').in('company_id', companyIds)),
+      safeBootstrapQuery(client.from('roles').select('*').in('company_id', companyIds)),
+      safeBootstrapQuery(client.from('role_permissions').select('*')),
+      safeBootstrapQuery(client.from('user_role_assignments').select('*').in('company_id', companyIds)),
+      safeBootstrapQuery(client.from('company_plugins').select('*').in('company_id', companyIds)),
+      safeBootstrapQuery(client.from('workspaces').select('*').in('company_id', companyIds)),
+      safeBootstrapQuery(client.from('workspace_memberships').select('*')),
+      safeBootstrapQuery(client.from('workspace_plugins').select('*')),
       // Scoped by RLS to companies where the caller holds eod.view; the id filter just
       // keeps the payload to companies already in session.
-      safeSupabaseQuery(client.from('eod_reports').select('*').in('company_id', companyIds).order('report_date', { ascending: false })),
+      safeBootstrapQuery(client.from('eod_reports').select('*').in('company_id', companyIds).order('report_date', { ascending: false })),
     ]);
+    recordBootstrapFailures({
+      companiesResult,
+      subscriptionsResult,
+      rolesResult,
+      rolePermissionsResult,
+      roleAssignmentsResult,
+      companyPluginsResult,
+      workspacesResult,
+      workspaceMembershipsResult,
+      workspacePluginsResult,
+      eodReportsResult,
+    });
     if (!companiesResult.error) state.companies = mergeCompanies(state.companies.concat((companiesResult.data || []).map(normalizeCompany)));
     if (!subscriptionsResult.error) state.subscriptions = mergeSubscriptions(state.subscriptions.concat((subscriptionsResult.data || []).map(normalizeSubscription)));
     if (!rolesResult.error) state.roles = mergeRoles(state.roles.concat((rolesResult.data || []).map(normalizeRole)));
@@ -5157,10 +5194,10 @@ async function loadSupabaseBootstrapData() {
   }
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult] = await Promise.all([
-      safeSupabaseQuery(client.rpc('list_platform_companies_v2')),
-      safeSupabaseQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
+      safeBootstrapQuery(client.rpc('list_platform_companies_v2')),
+      safeBootstrapQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
     ]);
-    if (platformCompaniesResult.error) throw platformCompaniesResult.error;
+    recordBootstrapFailures({ platformCompaniesResult, platformMembersResult });
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
       state.companies = mergeCompanies(state.companies.concat(state.platformCompanies.map((company) => normalizeCompany({
@@ -5175,7 +5212,10 @@ async function loadSupabaseBootstrapData() {
     }
     if (!platformMembersResult.error) state.platformCompanyMembers = (platformMembersResult.data || []).map(normalizePlatformCompanyMember);
   }
-  state.sync = { label: 'Quest Supabase limited', mode: 'live' };
+  state.sync = {
+    label: state.initialLoadFailures.length ? 'Quest Supabase partial' : 'Quest Supabase limited',
+    mode: 'live',
+  };
 }
 
 function createSupabaseClient() {
@@ -5563,6 +5603,7 @@ function shellTemplate(route, workspace) {
       </header>
       <div class="shell-banners">
         ${renderMobileStatusRail(companyId)}
+        ${renderInitialLoadFailureBanner()}
         ${renderReadOnlyDemoBanner()}
         ${renderRolePreviewBanner(companyId)}
       </div>
@@ -5750,6 +5791,14 @@ function renderReadOnlyDemoBanner() {
       <button class="btn" type="button" data-action="open-auth-modal" data-auth-mode="register">Create workspace</button>
     </div>
   `;
+}
+
+function renderInitialLoadFailureBanner() {
+  const failures = state.initialLoadFailures || [];
+  if (!failures.length) return '';
+  const visible = failures.slice(0, 3).map((label) => h(label)).join(', ');
+  const more = failures.length > 3 ? ` and ${failures.length - 3} more` : '';
+  return `<div class="readonly-demo-banner" role="status" aria-live="polite"><i class="ti ti-alert-triangle" aria-hidden="true"></i><div><strong>Some data did not load</strong><small>Missing: ${visible}${more}</small></div><button class="btn" type="button" data-action="refresh-data">Retry</button></div>`;
 }
 
 function renderDeck(route) {
@@ -24459,87 +24508,6 @@ function renderPlannedPage(name) {
   `;
 }
 
-const QUESTBASE_LANDING_WORKSPACES = {
-  'cold-calling': {
-    title: 'Cold calling workspace',
-    description: 'Move lead lists into conversations and qualified opportunities.',
-    status: 'Active',
-    lanes: [
-      ['New lists', ['Phoenix homeowners', 'Monsoon follow-up']],
-      ['In progress', ['East Valley callbacks', 'Storm inquiry list']],
-      ['Qualified', ['Maria Alvarez', 'Daniel Brooks']],
-    ],
-  },
-  sales: {
-    title: 'Sales workspace',
-    description: 'Track every opportunity from lead to signed job.',
-    status: 'Active',
-    lanes: [
-      ['New leads', ['Maria Alvarez', 'Daniel Brooks']],
-      ['Estimate sent', ['Amanda Cole', 'James Patel']],
-      ['Contract out', ['Robert Hill', 'Laura Chen']],
-    ],
-  },
-  underwriting: {
-    title: 'Underwriting workspace',
-    description: 'Review documents, margins, and approvals in one queue.',
-    status: 'Review',
-    lanes: [
-      ['Intake', ['Job #2841', 'Job #2838']],
-      ['In review', ['Job #2829', 'Job #2824']],
-      ['Approved', ['Job #2817', 'Job #2812']],
-    ],
-  },
-  production: {
-    title: 'Production workspace',
-    description: 'Coordinate crews, materials, and completion dates.',
-    status: 'Scheduled',
-    lanes: [
-      ['Ready', ['Alvarez roof', 'Brooks repair']],
-      ['Scheduled', ['Cole install', 'Patel gutters']],
-      ['In progress', ['Hill project', 'Chen project']],
-    ],
-  },
-};
-
-function renderLandingWorkspaceBoard(workspaceKey = 'sales') {
-  const workspace = QUESTBASE_LANDING_WORKSPACES[workspaceKey] || QUESTBASE_LANDING_WORKSPACES.sales;
-  return workspace.lanes.map(([lane, cards]) => `
-    <section class="qb-landing-lane">
-      <div class="qb-landing-lane-head"><span>${h(lane)}</span><b>${cards.length}</b></div>
-      ${cards.map((card, index) => `
-        <article class="qb-landing-job-card">
-          <strong>${h(card)}</strong>
-          <p>${index ? 'Updated 2h ago' : 'Updated 18m ago'}</p>
-          <div class="qb-landing-card-foot">
-            <span>${h(workspace.status)}</span>
-            <b>${index ? 'JS' : 'AM'}</b>
-          </div>
-        </article>
-      `).join('')}
-    </section>
-  `).join('');
-}
-
-function renderLandingWorkspacePreview(workspaceKey = 'sales') {
-  const workspace = QUESTBASE_LANDING_WORKSPACES[workspaceKey];
-  const landing = document.querySelector('.qb-landing-shell');
-  if (!workspace || !landing) return;
-  landing.dataset.workspace = workspaceKey;
-  const title = landing.querySelector('[data-landing-workspace-title]');
-  const description = landing.querySelector('[data-landing-workspace-description]');
-  const board = landing.querySelector('[data-landing-workspace-board]');
-  if (title) title.textContent = workspace.title;
-  if (description) description.textContent = workspace.description;
-  if (board) board.innerHTML = renderLandingWorkspaceBoard(workspaceKey);
-  landing.querySelectorAll('[data-action="landing-preview-workspace"]').forEach((button) => {
-    const active = button.dataset.workspace === workspaceKey;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-selected', String(active));
-  });
-}
-
-
 function renderAuthModal(returnUrl, inviteToken, authEnabled) {
   const inviteLookup = inviteLookupForToken(inviteToken);
   return `
@@ -24575,6 +24543,14 @@ function renderAuthModal(returnUrl, inviteToken, authEnabled) {
       </div>
     </div>
   `;
+}
+
+function closeLandingAuthModal() {
+  state.loginError = '';
+  state.authMessage = '';
+  state.authBusy = false;
+  navigate('/');
+  return true;
 }
 
 function normalizeAuthMode(value, inviteToken = '') {
@@ -24710,7 +24686,7 @@ function loadLandingPage() {
   if (!landingPending) {
     landingPending = import('./ui/landing-page.js').then((mod) => {
       landingModule = mod.createLandingPage({
-        activeCompanyId, appHref, companyPath, defaultCompanyId, getRoute, h, normalizeAuthMode, renderAuthModal, renderLandingWorkspaceBoard, safeReturnUrl,
+        activeCompanyId, appHref, companyPath, defaultCompanyId, getRoute, h, normalizeAuthMode, renderAuthModal, safeReturnUrl,
     CONFIG, state, questLogoMarkUrl, questbaseInteriorJobsUrl, app,
       });
       return landingModule;
@@ -26566,6 +26542,11 @@ function modalTriggerSelector(target) {
 function syncModalFocus() {
   const overlay = activeModalOverlay();
   if (overlay) {
+    [...(overlay.parentElement?.children || [])].forEach((sibling) => {
+      if (sibling === overlay) return;
+      sibling.inert = true;
+      sibling.setAttribute('aria-hidden', 'true');
+    });
     if (overlay.contains(document.activeElement)) return;
     const panel = overlay.querySelector('[role="dialog"]');
     // preventScroll on every one of these. Focusing an element makes the browser scroll it
@@ -26638,8 +26619,15 @@ function onDocumentKeydown(event) {
   if (event.key === 'Enter' && wbRecordPanelModule?.commentKey(event)) return;
 
   // Modal keyboard support: Esc dismisses, Tab is trapped within the modal.
-  if ((state.builderModal || state.modal) && activeModalOverlay()) {
-    if (event.key === 'Escape') { if (dismissTopModal()) event.preventDefault(); return; }
+  const openOverlay = activeModalOverlay();
+  if (openOverlay) {
+    if (event.key === 'Escape') {
+      const dismissed = openOverlay.querySelector('.landing-auth-modal')
+        ? closeLandingAuthModal()
+        : dismissTopModal();
+      if (dismissed) event.preventDefault();
+      return;
+    }
     if (event.key === 'Tab') { trapModalFocus(event); return; }
   }
   if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
@@ -28530,7 +28518,7 @@ function handleAction(event, node) {
   }
   if (action === 'landing-preview-workspace') {
     event.preventDefault();
-    renderLandingWorkspacePreview(node.dataset.workspace);
+    landingModule?.renderLandingWorkspacePreview(node.dataset.workspace);
     return;
   }
   if (action === 'start-demo-mode') {
@@ -28545,15 +28533,13 @@ function handleAction(event, node) {
     state.authBusy = false;
     state.loginError = '';
     state.authMessage = '';
+    state.focusReturn = modalTriggerSelector(node);
     navigate(`/?auth=${encodeURIComponent(mode)}`);
     return;
   }
   if (action === 'close-auth-modal') {
     event.preventDefault();
-    state.loginError = '';
-    state.authMessage = '';
-    state.authBusy = false;
-    navigate('/');
+    closeLandingAuthModal();
     return;
   }
   if (action === 'toggle-password') {
@@ -39248,6 +39234,33 @@ function workspaceBackupById(id) {
   return (state.workspaceBackups || []).find((backup) => backup.id === id) || null;
 }
 
+function persistWorkspaceBackupCache() {
+  const rows = isLiveSupabaseSession()
+    ? (state.workspaceBackups || []).map((backup) => ({ ...backup, payload: null }))
+    : state.workspaceBackups;
+  writeJson(WORKSPACE_BACKUP_CACHE_KEY, rows);
+}
+
+async function ensureWorkspaceBackupPayload(backup) {
+  if (backup?.payload?.version === WORKSPACE_BACKUP_VERSION && backup.payload.data) return backup;
+  if (!isLiveSupabaseSession()) throw new Error('This backup snapshot is not available on this device.');
+  const client = createSupabaseClient();
+  const [backupData, { safeInitialDataQuery }] = await Promise.all([
+    import('./data/workspace-backups.js'),
+    import('./data/initial-data-queries.js'),
+  ]);
+  const hydrated = normalizeWorkspaceBackup(await backupData.hydrateWorkspaceBackupPayload(backup, {
+    client,
+    safeQuery: safeInitialDataQuery,
+    version: WORKSPACE_BACKUP_VERSION,
+  }));
+  state.workspaceBackups = (state.workspaceBackups || []).map((item) => (
+    item.id === hydrated.id ? hydrated : item
+  ));
+  persistWorkspaceBackupCache();
+  return hydrated;
+}
+
 function backupSettingsForCompany(companyId = activeCompanyId()) {
   return { interval_key: 'manual', ...(state.backupSettings?.[companyId] || {}) };
 }
@@ -39383,7 +39396,7 @@ async function createWorkspaceBackup(companyId = activeCompanyId(), kind = 'manu
     ...(state.backupSettings || {}),
     [companyId]: { ...backupSettingsForCompany(companyId), last_backup_at: now },
   };
-  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  persistWorkspaceBackupCache();
   writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
   if (isLiveSupabaseSession()) await refreshPlatformBackupCopies();
   showToast('Backup snapshot created.', 'saved', 'Backups');
@@ -39392,15 +39405,16 @@ async function createWorkspaceBackup(companyId = activeCompanyId(), kind = 'manu
 }
 
 async function downloadBackupZip(backup) {
-  const target = backup || workspaceBackupById(state.selectedWorkspaceBackupId);
-  if (!target) {
+  const selected = backup || workspaceBackupById(state.selectedWorkspaceBackupId);
+  if (!selected) {
     showToast('Backup not found.', 'local', 'Backups');
     return;
   }
-  if (!requirePermission('settings.manage', target.company_id, 'Your role cannot download workspace backups.', 'Backups')) return false;
+  if (!requirePermission('settings.manage', selected.company_id, 'Your role cannot download workspace backups.', 'Backups')) return false;
+  const target = await ensureWorkspaceBackupPayload(selected);
   const JSZip = await loadJsZip();
   const zip = new JSZip();
-  zip.file('quest-backup.json', JSON.stringify(target.payload || buildWorkspaceBackupPayload(target.company_id), null, 2));
+  zip.file('quest-backup.json', JSON.stringify(target.payload, null, 2));
   const blob = await zip.generateAsync({ type: 'blob' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -39458,7 +39472,7 @@ async function importWorkspaceBackupFile(file) {
     if (data) savedBackup = normalizeWorkspaceBackup(data);
   }
   state.workspaceBackups = [savedBackup].concat((state.workspaceBackups || []).filter((item) => item.id !== savedBackup.id));
-  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  persistWorkspaceBackupCache();
   showToast('Backup imported. Restore it when you are ready.', 'saved', 'Backups');
   render();
 }
@@ -39522,9 +39536,10 @@ function applyWorkspaceBackupPayload(payload) {
 }
 
 async function restoreWorkspaceBackup(backupId) {
-  const backup = workspaceBackupById(backupId);
+  let backup = workspaceBackupById(backupId);
   if (!backup) throw new Error('Backup not found.');
   if (!requirePermission('settings.manage', backup.company_id, 'Your role cannot restore workspace backups.', 'Backups')) return false;
+  backup = await ensureWorkspaceBackupPayload(backup);
   applyWorkspaceBackupPayload(backup.payload);
   const failures = isLiveSupabaseSession() ? await persistWorkspaceBackupPayloadToSupabase(backup.payload) : [];
   state.modal = '';
@@ -39621,12 +39636,28 @@ async function markWorkspaceBackupDeleted(backupId) {
   if (!requirePermission('settings.manage', existing.company_id, 'Your role cannot delete workspace backups.', 'Backups')) return false;
   let updated = normalizeWorkspaceBackup({ ...existing, status: 'deleted', deleted_at: now, deleted_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null, updated_at: now });
   if (isLiveSupabaseSession()) {
-    const { ok, data } = await supabaseWrite('workspace_backups', updated);
-    if (!ok) return false;
-    if (data) updated = normalizeWorkspaceBackup(data);
+    const client = createSupabaseClient();
+    const { safeInitialDataQuery } = await import('./data/initial-data-queries.js');
+    const result = await safeInitialDataQuery(client
+      .from('workspace_backups')
+      .update({
+        status: 'deleted',
+        deleted_at: now,
+        deleted_by: updated.deleted_by,
+        updated_at: now,
+      })
+      .eq('id', backupId)
+      .eq('company_id', existing.company_id)
+      .select('id,status,deleted_at,deleted_by,updated_at')
+      .single());
+    if (result.error) {
+      notifySyncFailure(result.error, 'Delete backup');
+      return false;
+    }
+    updated = normalizeWorkspaceBackup({ ...existing, ...result.data, payload: existing.payload });
   }
   state.workspaceBackups = (state.workspaceBackups || []).map((backup) => (backup.id === backupId ? updated : backup));
-  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  persistWorkspaceBackupCache();
   if (isLiveSupabaseSession()) await refreshPlatformBackupCopies();
   render();
   return true;
@@ -43321,7 +43352,7 @@ function normalizeWorkspaceBackup(input = {}) {
     kind: ['manual', 'automatic', 'import', 'restore'].includes(String(input.kind)) ? String(input.kind) : 'manual',
     status: ['active', 'deleted'].includes(String(input.status)) ? String(input.status) : 'active',
     interval_key: BACKUP_INTERVAL_OPTIONS.some(([value]) => value === input.interval_key) ? String(input.interval_key) : 'manual',
-    payload: input.payload && typeof input.payload === 'object' ? input.payload : {},
+    payload: input.payload && typeof input.payload === 'object' ? input.payload : null,
     size_bytes: number(input.size_bytes),
     record_counts: input.record_counts && typeof input.record_counts === 'object' ? input.record_counts : {},
     created_by: input.created_by || null,
@@ -44363,7 +44394,7 @@ function persistAll() {
   writeJson(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, state.clientPortalDocuments);
   writeJson(CLIENT_PORTAL_ANNOTATION_CACHE_KEY, state.clientPortalAnnotations);
   writeJson(CLIENT_PORTAL_EVENT_CACHE_KEY, state.clientPortalEvents);
-  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  persistWorkspaceBackupCache();
   writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
   writeJson(RECYCLE_BIN_CACHE_KEY, state.recycleBinItems);
 }
@@ -44835,8 +44866,9 @@ async function loadSecondaryRealtimeDomain(client, domain) {
     return;
   }
   if (domain === 'workspace') {
+    const { WORKSPACE_BACKUP_METADATA_COLUMNS } = await import('./data/workspace-backups.js');
     const [backups, builder, records] = await Promise.all([
-      safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
+      safeSupabaseQuery(client.from('workspace_backups').select(WORKSPACE_BACKUP_METADATA_COLUMNS).order('created_at', { ascending: false })),
       safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
       safeSupabaseQuery(client.from('wb_records').select('*')),
     ]);

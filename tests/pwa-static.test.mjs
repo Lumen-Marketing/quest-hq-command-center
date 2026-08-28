@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import test from 'node:test';
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -94,4 +95,76 @@ test('vercel caches only content-hashed build assets for one year', () => {
     /immutable/,
     'HTML, API, auth, and compatibility routes must keep revalidating',
   );
+});
+
+test('the SPA fallback never turns a missing static file into index HTML', () => {
+  const fallback = vercel.rewrites.find((rule) => rule.destination === '/index.html');
+  assert.ok(fallback, 'the company routes still need an SPA fallback');
+  const matcher = new RegExp(`^${fallback.source}$`);
+
+  assert.equal(matcher.test('/company/lumen/jobs'), true, 'real application routes should still reach the SPA');
+  assert.equal(matcher.test('/assets/retired-build-deadbeef.js'), false, 'a removed chunk must return 404, not HTML');
+  assert.equal(matcher.test('/taskmanagement/js/retired-runtime.js'), false, 'a removed Tasks asset must return 404');
+  assert.equal(matcher.test('/missing.css'), false, 'a missing root static file must not become the app shell');
+});
+
+async function runHashedAssetFetch(response) {
+  const handlers = {};
+  const writes = [];
+  const cache = {
+    addAll: async () => {},
+    put: async (...args) => { writes.push(args); },
+  };
+  const cacheStorage = {
+    open: async () => cache,
+    match: async () => null,
+    keys: async () => [],
+    delete: async () => true,
+  };
+  const scope = {
+    location: new URL('https://questbase.test/'),
+    addEventListener: (name, listener) => { handlers[name] = listener; },
+    skipWaiting: async () => {},
+    clients: { claim: async () => {} },
+  };
+  vm.runInNewContext(sw, {
+    self: scope,
+    caches: cacheStorage,
+    fetch: async () => response,
+    URL,
+    Request,
+    Response,
+    Promise,
+  });
+  let responsePromise = null;
+  handlers.fetch({
+    request: new Request('https://questbase.test/assets/main-deadbeef.js'),
+    respondWith: (pending) => { responsePromise = pending; },
+  });
+  const delivered = await responsePromise;
+  await new Promise((resolve) => setImmediate(resolve));
+  return { delivered, writes };
+}
+
+test('the worker never caches index HTML under a hashed JavaScript URL', async () => {
+  const html = new Response('<!doctype html><title>Questbase</title>', {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  });
+
+  const { delivered, writes } = await runHashedAssetFetch(html);
+
+  assert.equal(await delivered.text(), '<!doctype html><title>Questbase</title>');
+  assert.equal(writes.length, 0, 'an HTML fallback must never poison the immutable asset cache');
+});
+
+test('the worker still caches a valid hashed JavaScript response', async () => {
+  const javascript = new Response('export const ready = true;', {
+    status: 200,
+    headers: { 'content-type': 'application/javascript; charset=utf-8' },
+  });
+
+  const { writes } = await runHashedAssetFetch(javascript);
+
+  assert.equal(writes.length, 1);
 });

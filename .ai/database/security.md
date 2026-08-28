@@ -1,6 +1,6 @@
 # Database security catalog
 
-Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
+Captured through 2026-08-28T19:16:59.435Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
 
 ## RLS coverage
 
@@ -9,11 +9,12 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | accounts | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | active_timers | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | activities | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| api_rate_limits | enabled | 0 |  |
 | audit_events | enabled | 2 | INSERT, SELECT |
 | automations | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | bug_reports | enabled | 3 | DELETE, SELECT, UPDATE |
 | calendar_events | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
-| checkin_log | enabled | 0 | ? |
+| checkin_log | enabled | 0 |  |
 | checkin_settings | enabled | 3 | INSERT, SELECT, UPDATE |
 | client_portal_annotations | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | client_portal_documents | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
@@ -23,6 +24,9 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | comment_reactions | enabled | 3 | DELETE, INSERT, SELECT |
 | companies | enabled | 2 | SELECT, UPDATE |
 | company_active_timers | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| company_contact_fields | enabled | 3 | INSERT, SELECT, UPDATE |
+| company_contact_options | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| company_contacts | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | company_invites | enabled | 1 | ALL |
 | company_join_requests | enabled | 2 | SELECT, UPDATE |
 | company_memberships | enabled | 2 | ALL, SELECT |
@@ -68,7 +72,7 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | proposal_documents | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | record_history | enabled | 1 | SELECT |
 | recycle_bin_items | enabled | 1 | ALL |
-| reminder_log | enabled | 0 | ? |
+| reminder_log | enabled | 0 |  |
 | resource_acl | enabled | 2 | ALL, SELECT |
 | ringcentral_accounts | enabled | 1 | SELECT |
 | ringcentral_calls | enabled | 1 | SELECT |
@@ -84,12 +88,17 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | tasks | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | team_members | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | time_entries | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| underwriting_calculators | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | underwriting_cases | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | user_role_assignments | enabled | 2 | ALL, SELECT |
-| v_pricebook_material_best | disabled | 0 | ? |
+| v_pricebook_material_best | disabled | 0 |  |
+| wb_intake_links | enabled | 2 | ALL, SELECT |
+| wb_intake_submissions | enabled | 3 | DELETE, SELECT, UPDATE |
+| wb_record_events | enabled | 2 | ALL, SELECT |
+| wb_records | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | wo_counters | enabled | 1 | SELECT |
 | workspace_backup_copies | enabled | 2 | ALL, SELECT |
-| workspace_backups | enabled | 2 | ALL, SELECT |
+| workspace_backups | enabled | 1 | ALL |
 | workspace_builder_state | enabled | 3 | INSERT, SELECT, UPDATE |
 | workspace_memberships | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | workspace_plugins | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
@@ -155,6 +164,17 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | company_active_timers | own running clock | {authenticated} | SELECT | PERMISSIVE |
 | company_active_timers | start own clock | {authenticated} | INSERT | PERMISSIVE |
 | company_active_timers | stop own clock | {authenticated} | DELETE | PERMISSIVE |
+| company_contact_fields | company contact fields insert | {authenticated} | INSERT | PERMISSIVE |
+| company_contact_fields | company contact fields read | {authenticated} | SELECT | PERMISSIVE |
+| company_contact_fields | company contact fields update | {authenticated} | UPDATE | PERMISSIVE |
+| company_contact_options | company contact options delete | {authenticated} | DELETE | PERMISSIVE |
+| company_contact_options | company contact options insert | {authenticated} | INSERT | PERMISSIVE |
+| company_contact_options | company contact options read | {authenticated} | SELECT | PERMISSIVE |
+| company_contact_options | company contact options update | {authenticated} | UPDATE | PERMISSIVE |
+| company_contacts | company contacts delete | {authenticated} | DELETE | PERMISSIVE |
+| company_contacts | company contacts insert | {authenticated} | INSERT | PERMISSIVE |
+| company_contacts | company contacts read | {authenticated} | SELECT | PERMISSIVE |
+| company_contacts | company contacts update | {authenticated} | UPDATE | PERMISSIVE |
 | company_invites | admins manage invites | {authenticated} | ALL | PERMISSIVE |
 | company_join_requests | admins manage join requests | {authenticated} | UPDATE | PERMISSIVE |
 | company_join_requests | requesters read own join requests | {authenticated} | SELECT | PERMISSIVE |
@@ -296,7 +316,7 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | profiles | managers delete profiles | {authenticated} | DELETE | PERMISSIVE |
 | profiles | managers update profiles | {authenticated} | UPDATE | PERMISSIVE |
 | profiles | profiles readable to self, company peers and platform | {authenticated} | SELECT | PERMISSIVE |
-| profiles | users update own profile name | {public} | UPDATE | PERMISSIVE |
+| profiles | users update own profile name | {authenticated} | UPDATE | PERMISSIVE |
 | projects | company members delete projects | {authenticated} | DELETE | PERMISSIVE |
 | projects | company members insert projects | {authenticated} | INSERT | PERMISSIVE |
 | projects | company members read projects | {authenticated} | SELECT | PERMISSIVE |
@@ -314,10 +334,10 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | ringcentral_extensions | company admins read extensions | {authenticated} | SELECT | PERMISSIVE |
 | ringcentral_presence | company admins read presence | {authenticated} | SELECT | PERMISSIVE |
 | ringcentral_sync_state | members read sync state | {authenticated} | SELECT | PERMISSIVE |
-| role_permissions | role managers manage role permissions | {authenticated} | ALL | PERMISSIVE |
 | role_permissions | members read role permissions | {authenticated} | SELECT | PERMISSIVE |
-| roles | role managers manage roles | {authenticated} | ALL | PERMISSIVE |
+| role_permissions | role managers manage role permissions | {authenticated} | ALL | PERMISSIVE |
 | roles | members read roles | {authenticated} | SELECT | PERMISSIVE |
+| roles | role managers manage roles | {authenticated} | ALL | PERMISSIVE |
 | task_comments | authors and admins delete task_comments | {authenticated} | DELETE | PERMISSIVE |
 | task_comments | company members insert own task_comments | {authenticated} | INSERT | PERMISSIVE |
 | task_comments | company members read task_comments | {authenticated} | SELECT | PERMISSIVE |
@@ -345,17 +365,31 @@ Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally 
 | time_entries | own or company-admin delete time_entries | {authenticated} | DELETE | PERMISSIVE |
 | time_entries | own or company-admin read time_entries | {authenticated} | SELECT | PERMISSIVE |
 | time_entries | own or company-admin update time_entries | {authenticated} | UPDATE | PERMISSIVE |
+| underwriting_calculators | subscription members delete underwriting calculators | {authenticated} | DELETE | PERMISSIVE |
+| underwriting_calculators | subscription members insert underwriting calculators | {authenticated} | INSERT | PERMISSIVE |
+| underwriting_calculators | subscription members read underwriting calculators | {authenticated} | SELECT | PERMISSIVE |
+| underwriting_calculators | subscription members update underwriting calculators | {authenticated} | UPDATE | PERMISSIVE |
 | underwriting_cases | underwriting_cases workspace delete | {authenticated} | DELETE | PERMISSIVE |
 | underwriting_cases | underwriting_cases workspace insert | {authenticated} | INSERT | PERMISSIVE |
 | underwriting_cases | underwriting_cases workspace read | {authenticated} | SELECT | PERMISSIVE |
 | underwriting_cases | underwriting_cases workspace update | {authenticated} | UPDATE | PERMISSIVE |
 | user_role_assignments | admins manage role assignments | {authenticated} | ALL | PERMISSIVE |
 | user_role_assignments | members read role assignments | {authenticated} | SELECT | PERMISSIVE |
+| wb_intake_links | managers read intake links | {authenticated} | SELECT | PERMISSIVE |
+| wb_intake_links | managers write intake links | {authenticated} | ALL | PERMISSIVE |
+| wb_intake_submissions | managers delete intake submissions | {authenticated} | DELETE | PERMISSIVE |
+| wb_intake_submissions | managers review intake submissions | {authenticated} | UPDATE | PERMISSIVE |
+| wb_intake_submissions | members read intake submissions | {authenticated} | SELECT | PERMISSIVE |
+| wb_record_events | managers write record events | {authenticated} | ALL | PERMISSIVE |
+| wb_record_events | members read record events | {authenticated} | SELECT | PERMISSIVE |
+| wb_records | wb records delete | {authenticated} | DELETE | PERMISSIVE |
+| wb_records | wb records insert | {authenticated} | INSERT | PERMISSIVE |
+| wb_records | wb records read | {authenticated} | SELECT | PERMISSIVE |
+| wb_records | wb records update | {authenticated} | UPDATE | PERMISSIVE |
 | wo_counters | company members read wo counters | {authenticated} | SELECT | PERMISSIVE |
 | workspace_backup_copies | platform admins manage backup copies | {authenticated} | ALL | PERMISSIVE |
 | workspace_backup_copies | platform admins read backup copies | {authenticated} | SELECT | PERMISSIVE |
-| workspace_backups | admins manage company backups | {authenticated} | ALL | PERMISSIVE |
-| workspace_backups | members read company backups | {authenticated} | SELECT | PERMISSIVE |
+| workspace_backups | settings managers manage company backups | {authenticated} | ALL | PERMISSIVE |
 | workspace_builder_state | managers insert workspace builder | {authenticated} | INSERT | PERMISSIVE |
 | workspace_builder_state | managers update workspace builder | {authenticated} | UPDATE | PERMISSIVE |
 | workspace_builder_state | members read workspace builder | {authenticated} | SELECT | PERMISSIVE |

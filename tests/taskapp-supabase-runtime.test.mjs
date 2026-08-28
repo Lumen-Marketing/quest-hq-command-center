@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { versionTaskCssReferences } from '../scripts/sync-spa-assets.mjs';
 
 const appHtml = readFileSync(new URL('../taskmanagement/app.html', import.meta.url), 'utf8');
 const assetSync = readFileSync(new URL('../scripts/sync-spa-assets.mjs', import.meta.url), 'utf8');
@@ -101,4 +102,13 @@ test('versioned Tasks runtime assets are cacheable without caching app or enviro
   assert.ok(immutableSources.includes('/taskmanagement/vendor/(.*)'));
   assert.ok(!immutableSources.includes('/taskmanagement/app.html'));
   assert.ok(!immutableSources.includes('/taskmanagement/env.json'));
+});
+
+test('fonts and images referenced from copied Tasks CSS carry the same deploy version', () => {
+  const css = `@font-face{src:url('fonts/app.woff2')} .logo{background:url(../img/logo.svg?old=1)} .remote{background:url(https://example.com/x.png)}`;
+  const versioned = versionTaskCssReferences(css, 'release-42');
+
+  assert.match(versioned, /url\('fonts\/app\.woff2\?v=release-42'\)/);
+  assert.match(versioned, /url\(\.\.\/img\/logo\.svg\?v=release-42\)/);
+  assert.match(versioned, /url\(https:\/\/example\.com\/x\.png\)/);
 });

@@ -1,9 +1,16 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-08-10T18:23:17.639Z;
-targeted live verification of the 2026-08-27 priority migrations completed at
-2026-08-26T20:00:00.933Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata
+The full machine-readable Supabase catalog was refreshed through 2026-08-28T19:16:59.435Z.
+The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## 2026-08-29 record actor index
+
+Migration `20260828191625_add_wb_records_created_by_index.sql` adds
+`wb_records_created_by_idx` on `public.wb_records(created_by)`. This is the covering index for
+the table's profile foreign key, preventing profile deletion or reference checks from scanning
+every App Builder record. The migration is live, the index definition was re-queried from
+`pg_indexes`, and the catalog snapshot below was refreshed after that verification.
 
 ## 2026-08-27 priority migrations
 
