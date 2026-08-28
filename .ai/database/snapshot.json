@@ -14615,9 +14615,13 @@
   {
    "name": "tenant_grant_and_policy_hardening",
    "version": "20260828002845"
+  },
+  {
+   "name": "revoke_anon_execute_app_private",
+   "version": "20260828004405"
   }
  ],
- "captured_at": "2026-08-28T00:31:00.363934+00:00",
+ "captured_at": "2026-08-28T00:46:12.59339+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",
