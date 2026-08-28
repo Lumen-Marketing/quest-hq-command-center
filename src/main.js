@@ -15136,7 +15136,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   let headBtn = '';
   // Print/Export are read-only and available to all roles; Import writes data.
   if (tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-export><i class="ti ti-file-export"></i>Export</button>`;
-  if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-import><i class="ti ti-file-import"></i>Import</button>`;
+  if (can('workspaces.records.create', companyId) && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-import><i class="ti ti-file-import"></i>Import</button>`;
   if (tab === 'items' && app.items.length) headBtn += `<button class="btn" data-wb-print-data><i class="ti ti-printer"></i>Print</button>`;
   if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
   // The field setup travels on its own, beside the whole-app Download on Settings. Rebuilding
@@ -15144,7 +15144,9 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   // and "install the whole app, records and all, then delete the records" was not that.
   if (tab === 'fields' && app.fields.length) headBtn += `<button class="btn" data-wb-export-fields title="Save this app's fields to a file you can import into another app"><i class="ti ti-file-export"></i>Export fields</button>`;
   if (canManage && tab === 'fields') headBtn += `<button class="btn" data-wb-import-fields title="Add fields from another app's export"><i class="ti ti-file-import"></i>Import fields</button>`;
-  if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
+  // Adding a record is workspaces.records.create, not the app-building permission -- otherwise
+  // a role granted only "Add app records" would never see the button that adds one.
+  if (can('workspaces.records.create', companyId) && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
   // Settings: the four things you DO to the app, up here beside the tabs rather than buried at
   // three different depths of the form below.
@@ -17028,8 +17030,12 @@ function wbItemSearchAttr(companyId, workspace, app, cols, item) {
 function wbItemCheckbox(item, ui, selectable) {
   return selectable ? `<input type="checkbox" class="wb-item-check" data-wb-select="${h(item.id)}" ${ui.sel.has(item.id) ? 'checked' : ''} title="Select record">` : '';
 }
-function wbItemActions(item, canManage) {
-  return canManage ? `<button class="wb-icon-btn" data-edit-item="${h(item.id)}" title="Open"><i class="ti ti-pencil"></i></button><button class="wb-icon-btn danger" data-del-item="${h(item.id)}" title="Delete"><i class="ti ti-trash"></i></button>` : '';
+// The pencil and the bin are separate permissions, so they are separate conditions. They used
+// to share one flag, which meant granting somebody edit also handed them delete.
+function wbItemActions(item, canEdit, canDelete = canEdit) {
+  const edit = canEdit ? `<button class="wb-icon-btn" data-edit-item="${h(item.id)}" title="Open"><i class="ti ti-pencil"></i></button>` : '';
+  const remove = canDelete ? `<button class="wb-icon-btn danger" data-del-item="${h(item.id)}" title="Delete"><i class="ti ti-trash"></i></button>` : '';
+  return `${edit}${remove}`;
 }
 // Comment thread shown inside the item detail modal.
 /**
@@ -17259,7 +17265,7 @@ function wbItemBadgePill(app, item) {
   if (!o) return null;
   return { label: o.label, color: o.color || '#6b7280' };
 }
-function wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
+function wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage, canDelete = canManage) {
   const allSel = selectable && rows.length > 0 && rows.every((r) => ui.sel.has(r.id));
   const head = `<tr>${selectable ? `<th class="wb-check-col"><input type="checkbox" data-wb-select-all ${allSel ? 'checked' : ''} title="Select all"></th>` : ''}${cols.map((field) => {
     const active = ui.sort && ui.sort.fieldId === field.id;
@@ -17269,7 +17275,7 @@ function wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectabl
   const body = rows.map((item) => {
     const ctx = { companyId, workspace, app, values: item.values, item, canManage };
     const checkCell = selectable ? `<td class="wb-check-col">${wbItemCheckbox(item, ui, selectable)}</td>` : '';
-    return `<tr data-item="${h(item.id)}" data-search="${h(wbItemSearchAttr(companyId, workspace, app, cols, item))}" class="${ui.sel.has(item.id) ? 'wb-row-sel' : ''}">${checkCell}${cols.map((field) => `<td>${wbFmtVal(ctx, field, item.values[field.id])}</td>`).join('')}<td class="wb-row-acts">${wbItemActions(item, canManage)}</td></tr>`;
+    return `<tr data-item="${h(item.id)}" data-search="${h(wbItemSearchAttr(companyId, workspace, app, cols, item))}" class="${ui.sel.has(item.id) ? 'wb-row-sel' : ''}">${checkCell}${cols.map((field) => `<td>${wbFmtVal(ctx, field, item.values[field.id])}</td>`).join('')}<td class="wb-row-acts">${wbItemActions(item, canManage, canDelete)}</td></tr>`;
   }).join('');
   return `<div class="wb-tbl-wrap"><table class="wb-table" id="wbItemsTable"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
@@ -17346,7 +17352,7 @@ function wbCardConfigPanel(app) {
     <div class="wb-card-config-grid">${app.fields.map((f) => `<label class="wb-card-config-opt"><input type="checkbox" data-wb-card-field="${h(f.id)}" ${selected.has(f.id) ? 'checked' : ''}><i class="ti ${h(WB_FIELD_TYPES[f.type]?.icon || 'ti-square')}"></i><span>${h(f.label)}</span></label>`).join('')}</div>
   </div>`;
 }
-function wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
+function wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage, canDelete = canManage) {
   const cardFields = wbCardFields(app, cols);
   const cards = rows.map((item) => {
     const ctx = { companyId, workspace, app, values: item.values, item, canManage };
@@ -17356,7 +17362,7 @@ function wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectabl
     const fieldRows = cardFields.filter((f) => f.id !== (titleField && titleField.id)).slice(0, 8).map((field) => wbCardFieldHtml(ctx, field, ui)).join('');
     const cCount = (item.comments || []).length;
     return `<div class="wb-item-card ${ui.sel.has(item.id) ? 'sel' : ''}" data-item="${h(item.id)}" data-search="${h(wbItemSearchAttr(companyId, workspace, app, cols, item))}">
-      <div class="wb-ic-head">${selectable ? wbItemCheckbox(item, ui, selectable) : ''}<div class="wb-ic-titlewrap"><b class="wb-ic-title">${h(wbItemTitle(app, item))}</b>${pill ? `<span class="wb-status-pill" style="background:${pill.color}1f;color:${pill.color}"><span class="wb-dot" style="background:${pill.color}"></span>${h(pill.label)}</span>` : ''}</div><div class="wb-spacer"></div>${wbItemActions(item, canManage)}</div>
+      <div class="wb-ic-head">${selectable ? wbItemCheckbox(item, ui, selectable) : ''}<div class="wb-ic-titlewrap"><b class="wb-ic-title">${h(wbItemTitle(app, item))}</b>${pill ? `<span class="wb-status-pill" style="background:${pill.color}1f;color:${pill.color}"><span class="wb-dot" style="background:${pill.color}"></span>${h(pill.label)}</span>` : ''}</div><div class="wb-spacer"></div>${wbItemActions(item, canManage, canDelete)}</div>
       <div class="wb-ic-fields">${fieldRows || '<div class="wb-sub">No other fields</div>'}</div>
       <div class="wb-ic-foot"><button class="wb-card-comment ${cCount ? 'has' : ''}" type="button" data-wb-open-comments="${h(item.id)}" title="${cCount ? `${cCount} comment${cCount === 1 ? '' : 's'} — click to add` : 'Add a comment'}"><i class="ti ti-message-circle"></i><span>${cCount}</span></button></div>
     </div>`;
@@ -17393,7 +17399,7 @@ function wbBoardSetupPrompt(app, canManage) {
     ${canManage ? `<button class="btn btn-primary" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>Set up stages</button>` : '<p class="wb-sub">Ask a workspace manager to add one.</p>'}</div>`;
 }
 
-function wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
+function wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage, canDelete = canManage) {
   const field = pipelineField(app, ui.boardFieldId);
   if (!field) return wbBoardSetupPrompt(app, canManage);
   if (!wbBoardModule) {
@@ -17413,7 +17419,7 @@ function wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectabl
     const fieldRows = cardFields.filter((f) => !skip.has(f.id)).slice(0, 5).map((f) => wbCardFieldHtml(ctxFor(item), f, ui)).join('');
     const cCount = (item.comments || []).length;
     return `<div class="wb-item-card wb-bc ${ui.sel.has(item.id) ? 'sel' : ''}" data-item="${h(item.id)}" data-search="${h(wbItemSearchAttr(companyId, workspace, app, cols, item))}">
-      <div class="wb-ic-head">${wbItemCheckbox(item, ui, selectable)}<div class="wb-ic-titlewrap"><b class="wb-ic-title">${h(wbItemTitle(app, item))}</b></div><div class="wb-spacer"></div>${wbItemActions(item, canManage)}</div>
+      <div class="wb-ic-head">${wbItemCheckbox(item, ui, selectable)}<div class="wb-ic-titlewrap"><b class="wb-ic-title">${h(wbItemTitle(app, item))}</b></div><div class="wb-spacer"></div>${wbItemActions(item, canManage, canDelete)}</div>
       ${fieldRows ? `<div class="wb-ic-fields">${fieldRows}</div>` : ''}
       <div class="wb-ic-foot"><button class="wb-card-comment ${cCount ? 'has' : ''}" type="button" data-wb-open-comments="${h(item.id)}" title="${cCount ? `${cCount} comment${cCount === 1 ? '' : 's'} — click to add` : 'Add a comment'}"><i class="ti ti-message-circle"></i><span>${cCount}</span></button></div>
     </div>`;
@@ -17428,7 +17434,7 @@ function wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectabl
   return `<div class="wb-board-wrap" data-wb-board data-company="${h(companyId)}" data-workspace="${h(workspace.id)}" data-app="${h(app.id)}" data-field="${h(field.id)}">${board}</div>`;
 }
 
-function wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
+function wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage, canDelete = canManage) {
   const badges = rows.map((item) => {
     const pill = wbItemBadgePill(app, item);
     const dot = pill ? pill.color : app.color;
@@ -17439,7 +17445,7 @@ function wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectab
   }).join('');
   return `<div class="wb-badge-wrap">${badges}</div>`;
 }
-function wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
+function wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canManage, canDelete = canManage) {
   const feed = rows.map((item) => {
     const pill = wbItemBadgePill(app, item);
     const created = item.createdAt ? formatDate(item.createdAt) : '';
@@ -17448,7 +17454,7 @@ function wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, select
       ${selectable ? wbItemCheckbox(item, ui, selectable) : ''}
       <span class="wb-actrow-ic" style="background:${h(pill ? pill.color : app.color)}"><i class="ti ${h(app.icon)}"></i></span>
       <div class="wb-actrow-body"><b>${h(wbItemTitle(app, item))}</b><div class="wb-actrow-meta">${created ? `Created ${h(created)}` : ''}${edited}${pill ? ` · ${h(pill.label)}` : ''}</div></div>
-      <div class="wb-actrow-acts">${wbItemActions(item, canManage)}</div>
+      <div class="wb-actrow-acts">${wbItemActions(item, canManage, canDelete)}</div>
     </div>`;
   }).join('');
   return `<div class="wb-act-feed">${feed}</div>`;
@@ -20238,9 +20244,26 @@ function mountWorkspaceBuilder() {
       const noun = collectionId ? `${owner.name} record` : 'item';
       openWbConfirm(companyId, 'del-field', `"${f.label}" and its data in all ${affected} ${noun}(s) will be removed.`, { workspaceId, appId, fieldId: id, collectionId });
     });
-    bind('[data-add-item]', () => openWbItemModal(companyId, workspaceId, appId, ''));
-    bind('[data-edit-item]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.editItem, 'edit'); });
-    bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record moves to the app’s recycle bin, where it can be restored.', { workspaceId, appId, itemId: el.dataset.delItem }); });
+    // The press is checked as well as the paint. A list left open in a tab whose role has since
+    // changed must not still write -- and the database would refuse it anyway, so checking here
+    // is the difference between a clear message and a failed save.
+    const refuseRecord = (what) => { showToast(`You cannot ${what} records in this app.`, 'local', 'Workspaces'); };
+    bind('[data-add-item]', () => {
+      if (!can('workspaces.records.create', companyId)) return refuseRecord('add');
+      openWbItemModal(companyId, workspaceId, appId, '');
+    });
+    bind('[data-edit-item]', (el, e) => {
+      e.stopPropagation();
+      // 'view' rather than 'edit': without the edit permission the record still opens, it just
+      // opens read-only. Refusing outright would hide a record somebody is allowed to see.
+      const mode = can('workspaces.records.edit', companyId) ? 'edit' : 'view';
+      openWbItemModal(companyId, workspaceId, appId, el.dataset.editItem, mode);
+    });
+    bind('[data-del-item]', (el, e) => {
+      e.stopPropagation();
+      if (!can('workspaces.records.delete', companyId)) return refuseRecord('delete');
+      openWbConfirm(companyId, 'del-item', 'This record moves to the app’s recycle bin, where it can be restored.', { workspaceId, appId, itemId: el.dataset.delItem });
+    });
     // Card comment button: open the record's detail view focused on the comment box.
     bind('[data-wb-open-comments]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.wbOpenComments, 'view', { focusComment: true }); });
     // Click an item anywhere to open its detail/edit view — except on interactive
@@ -20511,7 +20534,7 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-select-all-btn]', () => { const ui = wbItemsUI(appId); document.querySelectorAll('#wbItemsList [data-wb-select]').forEach((cb) => ui.sel.add(cb.dataset.wbSelect)); render(); });
     bind('[data-wb-clear-sel]', () => { wbItemsUI(appId).sel.clear(); render(); });
     bind('[data-wb-print-sel]', () => wbPrintData(companyId, workspaceId, appId, new Set(wbItemsUI(appId).sel)));
-    bind('[data-wb-del-sel]', () => { const ids = [...wbItemsUI(appId).sel]; if (!ids.length) return; openWbConfirm(companyId, 'del-items', `${ids.length} record${ids.length === 1 ? '' : 's'} will be permanently removed.`, { workspaceId, appId, itemIds: ids }); });
+    bind('[data-wb-del-sel]', () => { if (!can('workspaces.records.delete', companyId)) return refuseRecord('delete'); const ids = [...wbItemsUI(appId).sel]; if (!ids.length) return; openWbConfirm(companyId, 'del-items', `${ids.length} record${ids.length === 1 ? '' : 's'} will be permanently removed.`, { workspaceId, appId, itemIds: ids }); });
     // Reflect a partial selection as the indeterminate ("—") state on select-all.
     const selAll = document.querySelector('[data-wb-select-all]');
     if (selAll) { const boxes = document.querySelectorAll('#wbItemsList [data-wb-select]'); const checked = [...boxes].filter((b) => b.checked).length; selAll.indeterminate = checked > 0 && checked < boxes.length; }

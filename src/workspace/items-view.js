@@ -24,6 +24,7 @@ export function createItemsView(ctx) {
     // workspaces.records.create can actually reach the button that creates one.
     const canCreate = can('workspaces.records.create', companyId);
     const canWriteRecords = can('workspaces.records.edit', companyId);
+    const canDeleteRecords = can('workspaces.records.delete', companyId);
     if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
     // The toolbar is not rendered with no records, so this is the only way to reach stage
     // setup on a new app -- which is exactly when you want to lay the pipeline out first.
@@ -36,7 +37,7 @@ export function createItemsView(ctx) {
     const cols = visibleCols.length ? visibleCols : app.fields;
     // Drop any selected ids that no longer exist (e.g. deleted since selection).
     if (ui.sel.size) { const live = new Set(app.items.map((i) => i.id)); ui.sel.forEach((id) => { if (!live.has(id)) ui.sel.delete(id); }); }
-    const toolbar = wbItemsToolbar(companyId, app, ui, canCreate);
+    const toolbar = wbItemsToolbar(companyId, app, ui, canManage);
     // Filter, then sort. A column-header sort (ui.sort) wins; otherwise the toolbar
     // preset (ui.order) orders by created/edited/activity/title.
     let rows = ui.filters.length ? app.items.filter((it) => ui.filters.every((flt) => wbEvalFilter(companyId, workspace, app, it, flt))) : app.items.slice();
@@ -51,14 +52,14 @@ export function createItemsView(ctx) {
     if (chipField && ui.chipValue) rows = rows.filter((it) => wbItemInChip(chipField, it, ui.chipValue));
     if (ui.sort && ui.sort.fieldId) { const sf = app.fields.find((x) => x.id === ui.sort.fieldId); if (sf) rows = wbSortItems(companyId, workspace, app, rows, sf, ui.sort.dir); }
     else rows = wbApplyPresetSort(app, rows, ui.order || 'created_desc');
-    const selectable = canWriteRecords;
+    const selectable = canWriteRecords || canDeleteRecords;
     const bulkBar = (selectable && ui.sel.size) ? `<div class="wb-bulk-bar">
         <span class="wb-bulk-count"><i class="ti ti-checkbox"></i><b>${ui.sel.size}</b> selected</span>
         <div class="wb-spacer"></div>
         <button class="btn btn-sm" type="button" data-wb-select-all-btn><i class="ti ti-checks"></i>Select all</button>
         <button class="btn btn-sm" type="button" data-wb-clear-sel><i class="ti ti-square-x"></i>Clear</button>
         <button class="btn btn-sm" type="button" data-wb-print-sel><i class="ti ti-printer"></i>Print selected</button>
-        <button class="btn btn-sm danger" type="button" data-wb-del-sel><i class="ti ti-trash"></i>Delete selected</button>
+        ${canDeleteRecords ? '<button class="btn btn-sm danger" type="button" data-wb-del-sel><i class="ti ti-trash"></i>Delete selected</button>' : ''}
       </div>` : '';
     let listBody;
     // Name the stage when one is on: "nothing matches your filters" sends you hunting through
@@ -74,11 +75,11 @@ export function createItemsView(ctx) {
         : 'No records match your current search or filters. Try adjusting or clearing them.'}</p>${(navStage || chipLabel)
       ? `<div class="wb-empty-acts">${chipLabel ? '<button class="btn" type="button" data-wb-chip=""><i class="ti ti-filter-off"></i>Clear quick filter</button>' : ''}${navStage
         ? `<a class="btn" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router><i class="ti ti-list"></i>Show all items</a>` : ''}</div>` : ''}</div>`;
-    else if (ui.view === 'card') listBody = wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords);
-    else if (ui.view === 'board') listBody = wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords);
-    else if (ui.view === 'badge') listBody = wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords);
-    else if (ui.view === 'activity') listBody = wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords);
-    else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords);
+    else if (ui.view === 'card') listBody = wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords, canDeleteRecords);
+    else if (ui.view === 'board') listBody = wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords, canDeleteRecords);
+    else if (ui.view === 'badge') listBody = wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords, canDeleteRecords);
+    else if (ui.view === 'activity') listBody = wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords, canDeleteRecords);
+    else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canWriteRecords, canDeleteRecords);
     const viewLabel = (WB_VIEW_MODES.find(([v]) => v === ui.view) || [])[1] || 'Table';
     // Settings can turn the saved-views panel off, and then the list takes the whole width.
     // Asked before the rail is called, not after: calling it would fetch the saved-views chunk
