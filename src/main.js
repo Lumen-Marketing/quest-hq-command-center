@@ -590,6 +590,13 @@ const PERMISSION_KEYS = [
   ['forms.manage', 'Create/edit forms'],
   ['workspaces.view', 'View workspace apps'],
   ['workspaces.manage', 'Create/edit workspace apps'],
+  // Building apps inside a workspace and administering the workspace itself are different
+  // jobs. Before this key the only way to grant the second was `settings.manage`, which is the
+  // whole company settings area -- brand, modules, integrations, launch. Letting somebody
+  // rename a workspace meant handing them all of that. Covers identity and lifecycle only:
+  // name, icon, description, archive/restore, create, and which workspace is the default.
+  // Membership and module activation stay where they are; neither is workspace "settings".
+  ['workspaces.settings.manage', 'Manage workspace settings'],
   ['client_portals.view', 'View client portal'],
   ['client_portals.manage', 'Create/edit client portal'],
   ['crm.view', 'View CRM'],
@@ -655,6 +662,11 @@ const PERMISSION_ALIASES = {
   'company_contacts.edit': ['company_contacts.manage'],
   'company_contacts.delete': ['company_contacts.manage'],
   'company_contacts.fields.manage': ['company_contacts.manage'],
+  // Same shape, one level up: settings.manage used to be the only way to reach workspace
+  // settings, so it keeps satisfying the narrower key and no existing role loses access.
+  // Deliberately NOT satisfied by workspaces.manage -- that grants app building, which is a
+  // different power and is exactly what this key was split away from.
+  'workspaces.settings.manage': ['settings.manage'],
 };
 
 const ACTIVITY_FILTER_OPTIONS = [
@@ -6801,6 +6813,11 @@ function permissionPluginIds(permission) {
   // gated it. Any company that uninstalled Company Contacts saw the UI offer actions RLS
   // refused -- the same over-promise can() warns about.
   if (clean.startsWith('company_contacts.')) return ['company_contacts'];
+  // Administering a workspace is not an App Builder feature. Every company has workspaces
+  // whether or not the builder plugin is installed, and they still have to be renamed,
+  // archived and re-defaulted -- so this key is deliberately ungated, like the settings.manage
+  // it was split out of. Must stay in step with app_private.permission_plugin_ids.
+  if (clean === 'workspaces.settings.manage') return [];
   if (clean.startsWith('workspaces.')) return ['workspace_builder'];
   if (clean.startsWith('messages.')) return ['messages'];
   if (clean.startsWith('calendar.')) return ['calendar'];
@@ -42117,9 +42134,16 @@ function workspaceMemberCount(workspaceId) {
   )).length;
 }
 
+// Who may rename, re-icon, archive, create or re-default an operational workspace.
+//
+// `settings.manage` is still accepted, because it was the only way to hold this before
+// `workspaces.settings.manage` existed and removing it would take access away from roles that
+// have it today -- but it is now the legacy spelling rather than the intended one. `can()`
+// resolves the alias, so granting either key answers true here and in the database.
 function canManageOperationalWorkspaces(companyId = activeCompanyId()) {
   const role = companyRoleForWorkspaceAccess(companyId);
-  return ['owner', 'admin', 'developer'].includes(role) || can('settings.manage', companyId);
+  return ['owner', 'admin', 'developer'].includes(role)
+    || can('workspaces.settings.manage', companyId);
 }
 
 function defaultOperationalWorkspaceId(companyId = activeCompanyId()) {

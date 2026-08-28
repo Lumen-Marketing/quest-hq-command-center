@@ -14675,9 +14675,13 @@
   {
    "name": "durable_rate_limits",
    "version": "20260828005040"
+  },
+  {
+   "name": "workspace_settings_permission",
+   "version": "20260828021333"
   }
  ],
- "captured_at": "2026-08-28T00:55:36.764677+00:00",
+ "captured_at": "2026-08-28T02:19:20.136764+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",
@@ -16446,7 +16450,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "company_id",
+   "to_column": "id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",
@@ -16455,7 +16459,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "id",
+   "to_column": "company_id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",

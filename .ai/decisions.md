@@ -1782,3 +1782,44 @@ records. Batch removal is sequential and returns the unprocessed ids at the firs
 retry does not create duplicate ledger entries for definitions already recycled. Restore keeps
 the original field id, which reconnects the values already present in
 `company_contacts.field_values`.
+
+## Managing a workspace is its own permission (2026-08-28)
+
+The roles editor offered two workspace powers -- view apps and create/edit apps -- and neither
+covered administering the workspace itself. The only key that reached its name, icon,
+description, archive state and default flag was `settings.manage`, which is the entire company
+settings area: brand, modules, integrations, pipelines, handoffs, launch. Letting somebody
+rename a workspace meant handing them all of it. Same bundling problem as
+`company_contacts.manage`, and the same fix: `workspaces.settings.manage`.
+
+It also closed a live mismatch. `canManageOperationalWorkspaces()` already accepted
+`settings.manage`, but every RPC behind that surface checked `is_workspace_admin` or
+`is_company_admin`, which read the company ROLE and ignore permissions entirely. A non-elevated
+member holding `settings.manage` saw the controls enabled and got "Workspace admin access
+required" on save -- the UI promising what the database refuses, which is the exact failure
+`can()` warns about in its own comment.
+
+Scope is identity and lifecycle: rename, icon, description, archive/restore, create, reorder,
+set-default. It does NOT grant workspace membership or module activation.
+`app_private.is_workspace_admin` was deliberately left untouched for that reason -- it also
+guards `workspace_memberships` and `workspace_plugins` through RLS, so widening it would have
+handed over who can see a workspace's records along with the ability to rename it. Only the
+four settings RPCs were repointed, at `app_private.can_manage_workspace_settings` /
+`can_manage_company_workspace_settings`, neither of which is callable by a browser role.
+
+Two details worth keeping:
+
+- **Not gated on the App Builder plugin.** `workspaces.%` maps to `workspace_builder`, which is
+  right for the app keys and wrong for this one: every company has workspaces whether or not
+  the builder is installed, and they still have to be renamed and archived. The exception is
+  declared in both `permissionPluginIds()` and `app_private.permission_plugin_ids`, and a test
+  asserts the branch order in each, because whichever is tested second never runs.
+- **The RPC guards were patched by checked text substitution**, not by restating four bodies in
+  the migration. `create_operational_workspace` alone is 6.6 KB of preset seeding, and retyping
+  it to change one line is how a transcription error gets into an authorization path. The
+  substitution raises if a guard is not found exactly where expected, so a future rewrite fails
+  the migration rather than silently leaving the old role-only check in place.
+
+Verified on live with a rollback-only probe against a real non-elevated member: workspace
+settings went false -> true when the key was granted, while `is_workspace_admin` and
+`workspaces.manage` both stayed false.
