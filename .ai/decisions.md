@@ -1874,3 +1874,40 @@ the document's workspace id as a bare uuid, but the builder addresses workspaces
 filters those out, so they are unreachable in the product and importing them would have
 resurrected invisible data into a live workspace. They remain in the document, which this work
 does not modify.
+
+## Compatibility for a permission split belongs in data, not in a rule (2026-08-28)
+
+When `workspaces.records.view/create/edit/delete` were introduced, the broad keys were made to
+satisfy them: `workspaces.manage` implied create/edit/delete, `workspaces.view` implied view.
+That stopped any role losing access on deploy -- and made the four checkboxes non-authoritative.
+A role with "Create/edit workspace apps" ticked kept every record power regardless of the record
+boxes, so unticking "Delete app records" did nothing.
+
+It was reported from production in exactly that shape: a worker deleted a record they had been
+denied. The database was enforcing correctly the whole time; it was enforcing a rule that said
+the broad key was enough.
+
+`20260828040051` grants the specific keys once to every role that relied on a broad one, then
+removes the aliasing from `app_private.has_workspace_permission` and from PERMISSION_ALIASES.
+Same compatibility, expressed as data. After it, the four keys are the only thing consulted, so
+what the roles screen shows is what the database does.
+
+Verified on live for the reported worker: view/create allowed, edit and delete refused
+(`deleted=0`, `updated=0`, `inserted=true`), and the backfill left that role's own choices
+untouched while giving the manage-holding roles all four.
+
+## A refused write must not be reported as a success (2026-08-28)
+
+`saveWorkspaceBuilderDoc` returned nothing. A refused write showed a toast and was then
+forgotten, and the caller announced success on top of it -- so the record vanished from the
+list, "Deleted." appeared, and the row was still there on the next reload. The same was true of
+`wbTrashFields`.
+
+It now returns a boolean, and `wbSave` reports whether every target landed. The per-write
+`.catch` stays, so the ~68 fire-and-forget call sites still cannot raise an unhandled rejection;
+the callers that care can tell the difference. `wbTrashItems` and `wbTrashFields` throw when the
+save did not land, which is what makes `sendToTrashAndSave` put the records back.
+
+A refused record change also aborts the document write rather than continuing. Writing the
+document afterwards would store a half-applied edit: the record removed from the list and parked
+in the app's trash, while the row it was meant to delete is untouched.

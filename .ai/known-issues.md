@@ -269,3 +269,31 @@ policy gated on membership alone: `notifications` INSERT. That is intended. A me
 create a notification addressed to another ACTIVE member of the same company and nobody
 else, which is what makes peer notifications work. Do not "fix" it without replacing the
 feature.
+
+## A broad permission must not silently satisfy a narrow one
+
+Reported from production 2026-08-28: a worker with "Delete app records" unticked deleted a
+record anyway.
+
+The cause was a compatibility alias. When `workspaces.records.*` was introduced,
+`workspaces.manage` was made to satisfy create/edit/delete and `workspaces.view` to satisfy
+view, so that no role lost access the moment the keys existed. The intent was right; the
+mechanism made the four checkboxes non-authoritative. A role with "Create/edit workspace apps"
+still ticked kept every record power whatever the record boxes said, so the permissions screen
+showed a state the database did not honour.
+
+`20260828040051` replaced the rule with data: every role that relied on a broad key was granted
+the specific keys once, and the aliasing was removed from both
+`app_private.has_workspace_permission` and PERMISSION_ALIASES. The screen and the database now
+agree.
+
+**The general lesson, which applies to the aliases that remain.** `messages.manage` /
+`messages.manage_groups`, the four `company_contacts.*` keys under `company_contacts.manage`,
+and `workspaces.settings.manage` under `settings.manage` are all still aliased. Each is
+defensible -- `company_contacts.manage` is documented as the deliberate "everything" grant --
+but each has the same property: unticking the narrow box does nothing while the broad one is
+ticked. If any of those is ever reported the same way, the fix is the same shape, and it is a
+data migration rather than a rule change.
+
+A permissions screen is a promise about what the database will do. An alias that survives an
+explicit untick breaks that promise quietly.

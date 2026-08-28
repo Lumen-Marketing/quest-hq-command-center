@@ -679,14 +679,18 @@ const PERMISSION_ALIASES = {
   // Deliberately NOT satisfied by workspaces.manage -- that grants app building, which is a
   // different power and is exactly what this key was split away from.
   'workspaces.settings.manage': ['settings.manage'],
-  // The broad keys still cover records, so no existing role loses access on deploy: today
-  // workspaces.view reads every record in the company and workspaces.manage writes them all.
-  // A role wanting finer control stops granting the broad key and grants these instead.
-  // Mirrored by the permission_variants CTE in app_private.has_workspace_permission.
-  'workspaces.records.view': ['workspaces.view'],
-  'workspaces.records.create': ['workspaces.manage'],
-  'workspaces.records.edit': ['workspaces.manage'],
-  'workspaces.records.delete': ['workspaces.manage'],
+  // The four record keys are deliberately NOT aliased to workspaces.view/manage.
+  //
+  // They were, so that no role lost access the moment the keys existed. That left the four
+  // checkboxes non-authoritative: a role with "Create/edit workspace apps" ticked kept every
+  // record power whatever the record boxes said, so unticking "Delete app records" did nothing
+  // and the permissions screen said something untrue. It was reported from production exactly
+  // that way -- a worker with delete unticked deleted a record anyway.
+  //
+  // The compatibility is kept as DATA instead: 20260828040000 granted the specific keys once to
+  // every role that relied on a broad one. After that the four keys are the only thing
+  // consulted, here and in app_private.has_workspace_permission, so the screen and the database
+  // agree.
 };
 
 const ACTIVITY_FILTER_OPTIONS = [
@@ -13621,10 +13625,21 @@ async function wbMergeWithServerDoc(key, client) {
   return true;
 }
 
+/**
+ * Returns true only when the change is safely on the server.
+ *
+ * It used to return nothing, so a refused write was reported by a toast and then forgotten --
+ * and the caller went on to announce success. A worker without the delete permission saw
+ * "Deleted.", the row vanished from the list, and the record was still there on the next
+ * reload. The boolean is what lets a caller roll the change back instead.
+ *
+ * Most of the ~68 wbSave call sites are fire-and-forget and ignore it, which is fine: they are
+ * autosaves whose next write will carry the same state.
+ */
 async function saveWorkspaceBuilderDoc(companyId) {
   const key = canonicalCompanyId(companyId);
   const doc = state.workspaceBuilderDocs[key];
-  if (!doc) return;
+  if (!doc) return false;
   if (!isReadOnlyDemo()) writeJson(workspaceBuilderStorageKey(companyId), doc);
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
@@ -13644,7 +13659,13 @@ async function saveWorkspaceBuilderDoc(companyId) {
       if (recordDiff.inserts.length || recordDiff.updates.length || recordDiff.deletes.length) {
         const refused = await persistRecordDiff(client, { companyId: key, diff: recordDiff, actorId: actor });
         const message = describeRefusals(refused);
-        if (message) showToast(message, 'local', 'Workspaces');
+        if (message) {
+          // Abort rather than continue. Writing the document after a refused record change
+          // would store a half-applied edit -- a deleted record removed from the list and
+          // parked in the app's trash, while the row it was supposed to remove is still there.
+          showToast(message, 'local', 'Workspaces');
+          return false;
+        }
       }
       // Each attempt writes only if the row still holds the revision this edit was
       // based on. A collision merges in whatever landed and retries against the new
@@ -13666,25 +13687,27 @@ async function saveWorkspaceBuilderDoc(companyId) {
         if (!result.error && (result.data || []).length) {
           state.wbDocVersions[key] = result.data[0].updated_at || '';
           state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs[key]);
-          return;
+          return true;
         }
         // 23505 is the unique violation from racing two first-ever inserts; like a
         // zero-row update it means somebody else got there first, so it merges too.
         if (result.error && result.error.code !== '23505') {
           showToast(result.error.message || 'Workspace save failed.', 'local', 'Workspaces');
-          return;
+          return false;
         }
         if (!(await wbMergeWithServerDoc(key, client))) {
           showToast('Workspace changes could not be saved. They are safe on this device -- reload to try again.', 'local', 'Workspaces');
-          return;
+          return false;
         }
       }
       showToast('Workspace changes could not be saved while others are editing. They are safe on this device -- try again in a moment.', 'local', 'Workspaces');
+      return false;
     } finally {
       state.wbPendingSaves = Math.max(0, (state.wbPendingSaves || 1) - 1);
       state.wbLastLocalEditAt = Date.now();
     }
   }
+  return true;
 }
 // Link resolution lives in src/workspace/builder-core.js so it can be imported and
 // tested directly rather than reimplemented inside a test. These wrappers keep the
@@ -17930,7 +17953,12 @@ async function wbTrashItems(companyId, workspace, app, itemIds) {
     app,
     itemIds,
     activeSession()?.profile?.id || '',
-    () => wbSave(companyId),
+    // Throwing is what makes sendToTrashAndSave put the records back. Without it a refused
+    // delete left the list looking emptied and announced "Deleted." to somebody whose role
+    // does not allow it.
+    async () => {
+      if (!(await wbSave(companyId))) throw new Error('That change was not saved. Your role may not allow it.');
+    },
   );
 }
 
@@ -17945,7 +17973,8 @@ async function wbTrashItems(companyId, workspace, app, itemIds) {
 async function wbTrashFields(companyId, app, fieldIds) {
   const mod = await loadRecycleBin();
   const moved = mod.sendFieldsToTrash(app, fieldIds, activeSession()?.profile?.id || '');
-  if (moved) await wbSave(companyId);
+  // Same lie as the record path had: a refused save must not be reported as a move.
+  if (moved && !(await wbSave(companyId))) throw new Error('That change was not saved. Your role may not allow it.');
   return moved;
 }
 
@@ -18342,7 +18371,11 @@ function wbCtx() {
 function wbSave(companyId) {
   wbInvalidateAppIndex();
   return Promise.all(companiesToSave(canonicalCompanyId(companyId), wbDoc(companyId))
-    .map((target) => saveWorkspaceBuilderDoc(target).catch(() => null)));
+    .map((target) => saveWorkspaceBuilderDoc(target).catch(() => false)))
+    // True only when every target landed. The per-write catch stays, so an ignored return can
+    // still never surface as an unhandled rejection; callers that DO care -- deleting a record
+    // is one -- can now tell a refused write from a successful one.
+    .then((results) => results.every(Boolean));
 }
 function wbGuard() { return requirePermission('workspaces.manage', activeCompanyId(), 'Your role cannot manage workspaces.', 'Workspaces'); }
 

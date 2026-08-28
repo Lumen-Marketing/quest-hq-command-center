@@ -62,3 +62,48 @@ test('without edit, a record still opens read-only rather than refusing', () => 
   // Refusing outright would hide a record the viewer is allowed to see.
   assert.match(main, /const mode = can\('workspaces\.records\.edit', companyId\) \? 'edit' : 'view';/);
 });
+
+test('the record keys are not aliased to the broad workspace keys', () => {
+  // Reported from production: a worker with "Delete app records" unticked deleted a record
+  // anyway, because "Create/edit workspace apps" was still ticked and the alias made it imply
+  // all four. Compatibility is data now -- 20260828040000 granted the specific keys once --
+  // so the checkboxes are what the database consults.
+  const aliases = main.slice(main.indexOf('const PERMISSION_ALIASES'));
+  const block = aliases.slice(0, aliases.indexOf('\n};'));
+  for (const key of ['view', 'create', 'edit', 'delete']) {
+    assert.doesNotMatch(
+      block,
+      new RegExp(`'workspaces\\.records\\.${key}':`),
+      `workspaces.records.${key} must not be aliased`,
+    );
+  }
+  // The settings key keeps its alias: nothing about it was reported wrong.
+  assert.match(block, /'workspaces\.settings\.manage': \['settings\.manage'\]/);
+});
+
+test('a refused write is reported as a failure, not swallowed', () => {
+  // saveWorkspaceBuilderDoc used to return nothing, so a refused write was toasted and then
+  // forgotten while the caller announced success.
+  const save = main.slice(main.indexOf('async function saveWorkspaceBuilderDoc'));
+  const body = save.slice(0, save.indexOf('\n// Link resolution'));
+  assert.match(body, /if \(!doc\) return false;/);
+  assert.match(body, /showToast\(message, 'local', 'Workspaces'\);\s*\n\s*return false;/, 'a refused record change aborts the save');
+  assert.match(body, /return true;/);
+  assert.doesNotMatch(body, /\n\s*return;\n/, 'no exit may leave the outcome unstated');
+});
+
+test('wbSave answers for every target it wrote', () => {
+  const wbSave = main.slice(main.indexOf('function wbSave(companyId)'));
+  assert.match(wbSave.slice(0, 600), /\.then\(\(results\) => results\.every\(Boolean\)\)/);
+  // The per-write catch stays, so an ignored return still cannot become an unhandled rejection.
+  assert.match(wbSave.slice(0, 600), /\.catch\(\(\) => false\)/);
+});
+
+test('a delete that did not save puts the record back', () => {
+  // sendToTrashAndSave restores app.items and app.trash when its save throws. Nothing threw
+  // before, so the list stayed emptied and the user was told "Deleted."
+  const trash = main.slice(main.indexOf('async function wbTrashItems'));
+  assert.match(trash.slice(0, 900), /if \(!\(await wbSave\(companyId\)\)\) throw new Error/);
+  const fields = main.slice(main.indexOf('async function wbTrashFields'));
+  assert.match(fields.slice(0, 700), /if \(moved && !\(await wbSave\(companyId\)\)\) throw new Error/);
+});
