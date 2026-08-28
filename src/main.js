@@ -5,6 +5,10 @@ import {
   companiesToSave, resolveAppEntry, targetableCompanyApps, tileTargetApp, workspaceApps,
 } from './workspace/builder-core.js';
 import { readPullRows } from './workspace/pull-rows.js';
+import {
+  collectDocRecords, describeRefusals, diffDocRecords, groupRecordRows, hydrateDocRecords,
+  persistRecordDiff, stripDocRecords,
+} from './workspace/record-store.js';
 import { arrivalRef as wbArrivalRef } from './workspace/record-ref.js';
 
 // The pipeline MODEL is eager -- the stage pill, filters and the stage manager all need
@@ -597,6 +601,14 @@ const PERMISSION_KEYS = [
   // name, icon, description, archive/restore, create, and which workspace is the default.
   // Membership and module activation stay where they are; neither is workspace "settings".
   ['workspaces.settings.manage', 'Manage workspace settings'],
+  // Records, one key per operation. These only became possible to enforce when records moved
+  // out of the builder document into public.wb_records: while every record in a company lived
+  // in one jsonb cell, "create a record" and "delete a record" were the same UPDATE of the same
+  // column and RLS had nothing to attach to. Each of these now maps to its own policy.
+  ['workspaces.records.view', 'View app records'],
+  ['workspaces.records.create', 'Add app records'],
+  ['workspaces.records.edit', 'Edit app records'],
+  ['workspaces.records.delete', 'Delete app records'],
   ['client_portals.view', 'View client portal'],
   ['client_portals.manage', 'Create/edit client portal'],
   ['crm.view', 'View CRM'],
@@ -667,6 +679,14 @@ const PERMISSION_ALIASES = {
   // Deliberately NOT satisfied by workspaces.manage -- that grants app building, which is a
   // different power and is exactly what this key was split away from.
   'workspaces.settings.manage': ['settings.manage'],
+  // The broad keys still cover records, so no existing role loses access on deploy: today
+  // workspaces.view reads every record in the company and workspaces.manage writes them all.
+  // A role wanting finer control stops granting the broad key and grants these instead.
+  // Mirrored by the permission_variants CTE in app_private.has_workspace_permission.
+  'workspaces.records.view': ['workspaces.view'],
+  'workspaces.records.create': ['workspaces.manage'],
+  'workspaces.records.edit': ['workspaces.manage'],
+  'workspaces.records.delete': ['workspaces.manage'],
 };
 
 const ACTIVITY_FILTER_OPTIONS = [
@@ -4767,7 +4787,12 @@ function ensureDataLoad() {
 // bookkeeping -- leaving wbDocVersions/wbDocBase describing a revision that was no
 // longer current, so the next save failed its guard and then merged against a stale
 // ancestor. One copy now, because that is the only way the two stay in agreement.
-function applyWorkspaceBuilderRows(rows) {
+function applyWorkspaceBuilderRows(rows, recordRows = null) {
+  // Records live in wb_records now, not inside the document. Passing them in rather than
+  // fetching here keeps this function synchronous and keeps both callers -- bootstrap and
+  // the realtime workspace reload -- loading the two together, which is what stops a render
+  // landing between the document arriving and its records arriving.
+  const recordsByApp = recordRows ? groupRecordRows(recordRows) : null;
   // Don't let a background refresh clobber optimistic edits whose save is still in
   // flight (or landed in the last few seconds) -- keep the local doc for those.
   const holdLocalWb = (state.wbPendingSaves || 0) > 0 || (Date.now() - (state.wbLastLocalEditAt || 0) < 4000);
@@ -4777,6 +4802,7 @@ function applyWorkspaceBuilderRows(rows) {
   (rows || []).forEach((row) => {
     const companyId = canonicalCompanyId(row.company_id);
     const serverDoc = normalizeWorkspaceBuilderDoc(row.doc);
+    if (recordsByApp) hydrateDocRecords(serverDoc, recordsByApp);
     const heldLocal = holdLocalWb && prevDocs[companyId];
     state.workspaceBuilderDocs[companyId] = heldLocal ? prevDocs[companyId] : serverDoc;
     state.workspaceBuilderLive[companyId] = true;
@@ -4882,6 +4908,7 @@ async function loadSupabaseData() {
     workspacePluginsResult,
     workspaceBackupsResult,
     workspaceBuilderResult,
+    wbRecordsResult,
     platformAdminResult,
     activeTimerResult,
     timeEntriesResult,
@@ -4989,7 +5016,9 @@ async function loadSupabaseData() {
     state.workspacePlugins = (workspacePluginsResult.data || []).map(normalizeWorkspacePlugin);
   }
   if (!workspaceBackupsResult.error) state.workspaceBackups = (workspaceBackupsResult.data || []).map(normalizeWorkspaceBackup);
-  if (!workspaceBuilderResult.error) applyWorkspaceBuilderRows(workspaceBuilderResult.data);
+  if (!workspaceBuilderResult.error) {
+    applyWorkspaceBuilderRows(workspaceBuilderResult.data, wbRecordsResult?.error ? null : (wbRecordsResult?.data || []));
+  }
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
   if (!automationsResult.error) state.automations = (automationsResult.data || []).map(normalizeAutomation);
@@ -13571,10 +13600,19 @@ async function wbMergeWithServerDoc(key, client) {
   // chunk. Keep this import dynamic -- a static one would be bundled straight back in.
   const { mergeBuilderDocs, describeConflicts } = await import('./workspace/builder-merge.js');
   const theirs = normalizeWorkspaceBuilderDoc(fresh.data.doc);
-  const { doc: merged, conflicts } = mergeBuilderDocs(state.wbDocBase[key], state.workspaceBuilderDocs[key], theirs);
-  state.workspaceBuilderDocs[key] = normalizeWorkspaceBuilderDoc(merged);
+  // Records are rows now, so they take no part in merging the document -- both sides are
+  // compared without them and the local ones are put back afterwards. Merging them here would
+  // resurrect a record the other editor legitimately deleted, and basing on the server's
+  // itemless copy would make the next diff read everything in memory as a fresh insert.
+  const localRecords = collectDocRecords(state.workspaceBuilderDocs[key]);
+  const { doc: merged, conflicts } = mergeBuilderDocs(
+    stripDocRecords(state.wbDocBase[key]),
+    stripDocRecords(state.workspaceBuilderDocs[key]),
+    theirs,
+  );
+  state.workspaceBuilderDocs[key] = hydrateDocRecords(normalizeWorkspaceBuilderDoc(merged), localRecords);
   state.wbDocVersions[key] = fresh.data.updated_at || '';
-  state.wbDocBase[key] = wbCloneDoc(theirs);
+  state.wbDocBase[key] = hydrateDocRecords(wbCloneDoc(theirs), localRecords);
   if (conflicts.length) {
     showToast(`Someone else was editing ${describeConflicts(conflicts, state.workspaceBuilderDocs[key])} at the same time. Your version was kept -- check it before moving on.`, 'local', 'Workspaces');
   }
@@ -13595,6 +13633,18 @@ async function saveWorkspaceBuilderDoc(companyId) {
     state.wbLastLocalEditAt = Date.now();
     try {
       const actor = activeSession()?.profile?.id || null;
+      // Records go to their own rows first, and the document is stored WITHOUT them.
+      //
+      // Order matters. If the document were written first and the records refused, the app
+      // would show a save that half happened. Doing records first means a refusal is reported
+      // before anything else moves, and the four workspaces.records.* policies are the only
+      // thing deciding which of them land -- which is the whole reason they are rows.
+      const recordDiff = diffDocRecords(state.wbDocBase[key], state.workspaceBuilderDocs[key]);
+      if (recordDiff.inserts.length || recordDiff.updates.length || recordDiff.deletes.length) {
+        const refused = await persistRecordDiff(client, { companyId: key, diff: recordDiff, actorId: actor });
+        const message = describeRefusals(refused);
+        if (message) showToast(message, 'local', 'Workspaces');
+      }
       // Each attempt writes only if the row still holds the revision this edit was
       // based on. A collision merges in whatever landed and retries against the new
       // revision; two editors converge on the first retry, and the bound stops a
@@ -13603,7 +13653,7 @@ async function saveWorkspaceBuilderDoc(companyId) {
         const known = state.wbDocVersions[key];
         // updated_at is maintained by a BEFORE UPDATE trigger, so it is read back
         // rather than sent -- the stored value is the only one worth remembering.
-        const payload = { company_id: key, doc: state.workspaceBuilderDocs[key], updated_by: actor };
+        const payload = { company_id: key, doc: stripDocRecords(state.workspaceBuilderDocs[key]), updated_by: actor };
         const result = known
           ? await client.from('workspace_builder_state').update(payload).eq('company_id', key).eq('updated_at', known).select('updated_at')
           : await client.from('workspace_builder_state').insert(payload).select('updated_at');
@@ -44724,12 +44774,13 @@ async function loadSecondaryRealtimeDomain(client, domain) {
     return;
   }
   if (domain === 'workspace') {
-    const [backups, builder] = await Promise.all([
+    const [backups, builder, records] = await Promise.all([
       safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
       safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
+      safeSupabaseQuery(client.from('wb_records').select('*')),
     ]);
     if (!backups.error) state.workspaceBackups = (backups.data || []).map(normalizeWorkspaceBackup);
-    if (!builder.error) applyWorkspaceBuilderRows(builder.data);
+    if (!builder.error) applyWorkspaceBuilderRows(builder.data, records.error ? null : (records.data || []));
     return;
   }
   return loadIdentityRealtimeDomain(client, domain);

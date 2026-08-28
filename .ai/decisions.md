@@ -1823,3 +1823,54 @@ Two details worth keeping:
 Verified on live with a rollback-only probe against a real non-elevated member: workspace
 settings went false -> true when the key was granted, while `is_workspace_admin` and
 `workspaces.manage` both stayed false.
+
+## App Builder records are rows, so permissions can attach to them (2026-08-28)
+
+Records lived inside `workspace_builder_state.doc` -- one jsonb cell per COMPANY holding every
+app, every field and every record. Two consequences followed from that shape.
+
+It could not carry permissions. Creating a record, deleting a record and renaming an app were
+all the same UPDATE of the same column, so RLS could only say `workspaces.view` reads the whole
+document and `workspaces.manage` writes the whole document. A per-record permission had nothing
+to attach to, and any checkbox offering one would have been honoured by the browser and ignored
+by the API.
+
+It could not scale. The largest document was 525 kB, read in full on every page load and
+rewritten in full on every record save -- the O2 finding from the security audit.
+
+Records are now rows in `public.wb_records`, gated per operation by `workspaces.records.view`
+/ `.create` / `.edit` / `.delete`, one policy each.
+
+**The in-memory shape did not change.** 139 call sites across 22 files read `app.items`, and
+rewriting them is how this would have broken the App Builder. `src/workspace/record-store.js`
+swaps the STORAGE behind that shape: rows carry the item verbatim in `data`, hydration is a
+copy, and only the load and save seams moved. `app.items` is still the same array of the same
+objects.
+
+Four things worth keeping in mind:
+
+- **Gated by workspace, not company.** Records carry a `workspace_id` and the stated invariant
+  is that workspace_id is the operational boundary, so `has_workspace_permission` decides. That
+  is also a tightening: the company-wide document let a member of one workspace read another's
+  records.
+- **The broad keys still work.** `workspaces.view` satisfies records.view and
+  `workspaces.manage` satisfies the other three, so no role lost access on deploy. A role
+  wanting finer control stops granting the broad key.
+- **Refusal is an ordinary outcome.** `persistRecordDiff` writes records BEFORE the document
+  and reports which ids the database would not take, per operation, instead of failing the
+  whole save. A role with create but not delete is supposed to run into this.
+- **The document is written without records.** Keeping them in both places would have left the
+  old unenforced write path open, since the document's UPDATE policy is still
+  `workspaces.manage`. Anyone with a tab open across the deploy should reload.
+
+Verified on live with a rollback-only probe: a member with no role assignment answered false to
+all four; granting only view and create answered view=true, create=true, edit=false,
+delete=false.
+
+**Backfill note.** The first backfill matched nothing and still reported success -- it filtered
+the document's workspace id as a bare uuid, but the builder addresses workspaces as
+`ws-<uuid>`. 85 of the 96 records in the document were copied on the corrected pass. The other
+11 sit under a builder workspace whose real row was deleted; `allowedBuilderIds` already
+filters those out, so they are unreachable in the product and importing them would have
+resurrected invisible data into a live workspace. They remain in the document, which this work
+does not modify.

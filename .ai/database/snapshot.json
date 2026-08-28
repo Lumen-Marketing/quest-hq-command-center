@@ -9502,6 +9502,80 @@
    "rls_enabled": true
   },
   {
+   "name": "wb_records",
+   "schema": "public",
+   "columns": [
+    {
+     "name": "id",
+     "default": null,
+     "nullable": false,
+     "position": 1,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "company_id",
+     "default": null,
+     "nullable": false,
+     "position": 2,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "workspace_id",
+     "default": null,
+     "nullable": false,
+     "position": 3,
+     "udt_name": "uuid",
+     "data_type": "uuid"
+    },
+    {
+     "name": "app_id",
+     "default": null,
+     "nullable": false,
+     "position": 4,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "data",
+     "default": "'{}'::jsonb",
+     "nullable": false,
+     "position": 5,
+     "udt_name": "jsonb",
+     "data_type": "jsonb"
+    },
+    {
+     "name": "created_by",
+     "default": null,
+     "nullable": true,
+     "position": 6,
+     "udt_name": "uuid",
+     "data_type": "uuid"
+    },
+    {
+     "name": "created_at",
+     "default": "now()",
+     "nullable": false,
+     "position": 7,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    },
+    {
+     "name": "updated_at",
+     "default": "now()",
+     "nullable": false,
+     "position": 8,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    }
+   ],
+   "primary_key": [
+    "id"
+   ],
+   "rls_enabled": true
+  },
+  {
    "name": "wo_counters",
    "schema": "public",
    "columns": [
@@ -12304,6 +12378,34 @@
    "permissive": "PERMISSIVE"
   },
   {
+   "name": "wb records delete",
+   "roles": "{authenticated}",
+   "table": "wb_records",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "wb records insert",
+   "roles": "{authenticated}",
+   "table": "wb_records",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "wb records read",
+   "roles": "{authenticated}",
+   "table": "wb_records",
+   "command": "SELECT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "wb records update",
+   "roles": "{authenticated}",
+   "table": "wb_records",
+   "command": "UPDATE",
+   "permissive": "PERMISSIVE"
+  },
+  {
    "name": "company members read wo counters",
    "roles": "{authenticated}",
    "table": "wo_counters",
@@ -13094,6 +13196,13 @@
    "event": "UPDATE",
    "table": "underwriting_cases",
    "timing": "AFTER",
+   "orientation": "ROW"
+  },
+  {
+   "name": "wb_records_set_updated_at",
+   "event": "UPDATE",
+   "table": "wb_records",
+   "timing": "BEFORE",
    "orientation": "ROW"
   },
   {
@@ -14679,9 +14788,21 @@
   {
    "name": "workspace_settings_permission",
    "version": "20260828021333"
+  },
+  {
+   "name": "wb_records_table",
+   "version": "20260828025112"
+  },
+  {
+   "name": "wb_records_backfill_fix",
+   "version": "20260828025339"
+  },
+  {
+   "version": "20260828030441",
+   "name": "wb_records_reuse_set_updated_at"
   }
  ],
- "captured_at": "2026-08-28T02:19:20.136764+00:00",
+ "captured_at": "2026-08-28T03:05:00.000000+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",
@@ -16468,7 +16589,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "id",
+   "to_column": "company_id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "deal_id",
@@ -16477,7 +16598,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "company_id",
+   "to_column": "id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "deal_id",
@@ -16722,6 +16843,33 @@
    "to_table": "workspaces",
    "to_column": "id",
    "from_table": "wb_record_events",
+   "delete_rule": "CASCADE",
+   "from_column": "workspace_id",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "wb_records_company_id_fkey",
+   "to_table": "companies",
+   "to_column": "id",
+   "from_table": "wb_records",
+   "delete_rule": "CASCADE",
+   "from_column": "company_id",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "wb_records_created_by_fkey",
+   "to_table": "profiles",
+   "to_column": "id",
+   "from_table": "wb_records",
+   "delete_rule": "SET NULL",
+   "from_column": "created_by",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "wb_records_workspace_id_fkey",
+   "to_table": "workspaces",
+   "to_column": "id",
+   "from_table": "wb_records",
    "delete_rule": "CASCADE",
    "from_column": "workspace_id",
    "update_rule": "NO ACTION"

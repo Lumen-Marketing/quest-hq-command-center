@@ -486,7 +486,7 @@ test('one checkbox becomes the row tick; several stay labelled in the meta line'
 test('the ticks are wired to the model, and are dead for a viewer', () => {
   assert.match(page, /data-wb-child-check="\$\{h\(collection\.id\)\}:\$\{h\(child\.id\)\}:\$\{h\(box\.id\)\}"/);
   assert.match(page, /data-wb-child-step="\$\{h\(collection\.id\)\}:\$\{h\(child\.id\)\}:\$\{h\(f\.id\)\}:\$\{h\(s\.id\)\}"/);
-  assert.match(page, /\$\{canManage \? '' : ' disabled'\}/);
+  assert.match(page, /\$\{canEdit \? '' : ' disabled'\}/);
   assert.match(main, /bind\('\[data-wb-child-check\]'/);
   assert.match(main, /bind\('\[data-wb-child-step\]'/);
   assert.match(main, /mod\.toggleChildStep\(item, childId, fieldId, stepId\)/);

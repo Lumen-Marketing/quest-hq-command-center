@@ -133,8 +133,12 @@ test('stage setup is reachable on an app with no records', () => {
   // lay out the pipeline first.
   const view = fn('wbViewItems');
   const empty = view.slice(view.indexOf('No items yet'));
-  assert.match(empty.slice(0, 400), /data-wb-manage-stages/);
-  assert.match(empty.slice(0, 400), /'Manage stages' : 'Set up stages'/);
+  // 600 rather than 400: the empty state now splits its two buttons, because adding a record
+  // and setting up stages became different permissions.
+  assert.match(empty.slice(0, 600), /data-wb-manage-stages/);
+  assert.match(empty.slice(0, 600), /'Manage stages' : 'Set up stages'/);
+  // Stage setup changes the APP, so it stays with workspaces.manage rather than a record key.
+  assert.match(empty.slice(0, 600), /canManage \? `<button class="btn" type="button" data-wb-manage-stages/);
 });
 
 test('dragging a record is an ordinary edit, so automations still fire', () => {

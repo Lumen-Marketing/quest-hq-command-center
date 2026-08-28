@@ -451,7 +451,7 @@ export function createRecordPage(ctx) {
    * Stacked, there is nothing to guess: every field says what it is and shows its value, the
    * way the fields on the record above already read.
    */
-  function childRow(companyId, app, collection, cols, child, one, canManage) {
+  function childRow(companyId, app, collection, cols, child, one, canEdit, canDelete) {
     const val = (field) => childValueHtml(ctx, companyId, app, cols, child, field);
     // Exactly one checkbox reads as "this sub-item is done", so it also strikes the card
     // through. Two or more is a form, and each keeps its own line.
@@ -461,7 +461,7 @@ export function createRecordPage(ctx) {
 
     const tick = (attr, on, label) => `<button type="button" class="wb-child-tick${on ? ' on' : ''}" role="checkbox"
       aria-checked="${on ? 'true' : 'false'}" aria-label="${h(label)}" title="${h(label)}"
-      ${attr}${canManage ? '' : ' disabled'}><i class="ti ti-check"></i></button>`;
+      ${attr}${canEdit ? '' : ' disabled'}><i class="ti ti-check"></i></button>`;
 
     const checklistBlock = (f) => {
       const list = (Array.isArray(child.values?.[f.id]) ? child.values[f.id] : []).filter(Boolean);
@@ -490,9 +490,9 @@ export function createRecordPage(ctx) {
     }).filter(Boolean).join('');
 
     return `<li class="wb-child-card${done ? ' done' : ''}">
-      ${canManage ? `<span class="wb-child-acts">
-        <button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>
-        <button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>
+      ${canEdit || canDelete ? `<span class="wb-child-acts">
+        ${canEdit ? `<button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>` : ''}
+        ${canDelete ? `<button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>` : ''}
       </span>` : ''}
       ${lines || `<p class="wb-sub">Nothing filled in on this ${h(one.toLowerCase())} yet.</p>`}
     </li>`;
@@ -500,6 +500,13 @@ export function createRecordPage(ctx) {
 
   function wbViewItemPage(route, companyId, workspace, app, item) {
     const canManage = can('workspaces.manage', companyId);
+    // Records are rows with their own policies now, so reading and writing one is no longer the
+    // same permission as designing the app it belongs to. canManage below stays with the two
+    // things that change the APP: the record layout, which applies to every record, and the
+    // quick-create palette, whose entries add fields.
+    const canEdit = can('workspaces.records.edit', companyId);
+    const canCreate = can('workspaces.records.create', companyId);
+    const canDelete = can('workspaces.records.delete', companyId);
     // Carry the deck stage back with you, so returning lands on the filtered list you left
     // rather than dumping you at the top of everything.
     const stage = route.params.get('stage') || '';
@@ -551,6 +558,7 @@ export function createRecordPage(ctx) {
     const valueCtx = { companyId, workspace, app, values: item.values, item, canManage: false, detail: true };
     const count = (item.comments || []).length;
     const editing = canManage && state.wbRecordManage;
+    const canWriteValues = canEdit;
 
     // One arrangement per app, shown on every record of it. A record page is a form you read,
     // and a form that changed shape per row would be unreadable.
@@ -565,7 +573,7 @@ export function createRecordPage(ctx) {
     // undefined rather than a value, so a click would promise an edit that could never save.
     const valueCell = (f) => {
       const shown = f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(valueCtx, f, item.values[f.id]);
-      if (!canManage || !wbFieldIsEditable(f)) return `<span class="wb-view-val">${shown}</span>`;
+      if (!canWriteValues || !wbFieldIsEditable(f)) return `<span class="wb-view-val">${shown}</span>`;
       // A photo cell is made of buttons, and the click that opens the editor deliberately
       // skips buttons -- so a filled image field had nothing left to click. This chip is what
       // that click lands on.
@@ -623,15 +631,15 @@ export function createRecordPage(ctx) {
     return `<button type="button" class="wb-child-tab ${on ? 'on' : ''}" data-wb-child-tab="${h(c.id)}"
               aria-current="${on ? 'page' : 'false'}">${h(c.name)}${n ? `<span class="wb-child-tab-n">${n}</span>` : ''}</button>`;
   }).join('')}
-            ${canManage ? `<button class="btn btn-sm btn-primary wb-child-tabs-add" type="button" data-wb-child-add="${h(collection.id)}"><i class="ti ti-plus"></i>Add ${h(one)}</button>` : ''}
+            ${canCreate ? `<button class="btn btn-sm btn-primary wb-child-tabs-add" type="button" data-wb-child-add="${h(collection.id)}"><i class="ti ti-plus"></i>Add ${h(one)}</button>` : ''}
           </nav>`
     : `<h3 class="wb-w-title">${h(collection.name)}<span class="wb-w-count">${rows.length}</span>
-            ${canManage ? `<button class="btn btn-sm btn-primary" type="button" data-wb-child-add="${h(collection.id)}"><i class="ti ti-plus"></i>Add ${h(one)}</button>` : ''}
+            ${canCreate ? `<button class="btn btn-sm btn-primary" type="button" data-wb-child-add="${h(collection.id)}"><i class="ti ti-plus"></i>Add ${h(one)}</button>` : ''}
           </h3>`}
           ${!cols.length
     ? emptyState(`${collection.name} has no fields yet. Add them in the app's Settings.`)
     : rows.length
-      ? `<ul class="wb-child-list">${rows.map((child) => childRow(companyId, app, collection, cols, child, one, canManage)).join('')}</ul>`
+      ? `<ul class="wb-child-list">${rows.map((child) => childRow(companyId, app, collection, cols, child, one, canEdit, canDelete)).join('')}</ul>`
       : emptyState(`No ${h(collection.name.toLowerCase())} yet.`)}`;
       }
       if (block.type === 'events') {

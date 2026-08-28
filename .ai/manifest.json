@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-28T02:15:00.000Z",
+  "generated_at": "2026-08-28T03:05:00.000Z",
   "generated_from_commit": "0fea2ae72823c653557c72cdf86984b24e43c7d7",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "0fea2ae72823c653557c72cdf86984b24e43c7d7",
-    "latest_migration": "20260828021333_workspace_settings_permission.sql"
+    "latest_migration": "20260828030441_wb_records_reuse_set_updated_at.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-08-28T02:15:00.000Z",
+    "supabase_verified_at": "2026-08-28T03:05:00.000Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260828021333",
-      "name": "workspace_settings_permission"
+      "version": "20260828030441",
+      "name": "wb_records_reuse_set_updated_at"
     },
     "vercel_verified_at": "2026-08-27T18:52:31.507Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",

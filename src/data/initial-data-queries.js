@@ -50,6 +50,10 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     workspacePluginsResult: client.from('workspace_plugins').select('*'),
     workspaceBackupsResult: client.from('workspace_backups').select('*').order('created_at', { ascending: false }),
     workspaceBuilderResult: client.from('workspace_builder_state').select('*'),
+    // App Builder records moved out of the builder document into rows, so that the four
+    // workspaces.records.* permissions have something to attach to. Loaded alongside the
+    // document rather than after it: they are hydrated onto app.items before first render.
+    wbRecordsResult: client.from('wb_records').select('*'),
     platformAdminResult: client.rpc('is_platform_admin'),
     // The shell paints an active-clock badge on first render.
     activeTimerResult: client.from('company_active_timers').select('*'),

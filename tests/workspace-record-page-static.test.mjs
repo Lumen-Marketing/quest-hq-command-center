@@ -119,10 +119,12 @@ test('there is no Edit button, because the value is the control', () => {
   assert.match(page, /data-wb-inline="\$\{h\(f\.id\)\}"/);
 });
 
-test('only somebody who can manage gets an editable cell', () => {
+// Renamed with the split: writing a record's VALUES is workspaces.records.edit, while
+// designing the app it belongs to stays workspaces.manage.
+test('only somebody who can edit records gets an editable cell', () => {
   assert.match(
     slice('wbViewItemPage'),
-    /if \(!canManage \|\| !wbFieldIsEditable\(f\)\) return `<span class="wb-view-val">/,
+    /if \(!canWriteValues \|\| !wbFieldIsEditable\(f\)\) return `<span class="wb-view-val">/,
   );
 });
 
