@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import {
   appKey, collectDocRecords, describeRefusals, diffDocRecords, groupRecordRows,
-  hydrateDocRecords, persistRecordDiff, recordRow, stripDocRecords,
+  hydrateDocRecords, migratedWorkspaceIdSet, persistRecordDiff, recordRow, stripDocRecords,
 } from '../src/workspace/record-store.js';
 
 // Records used to live inside workspace_builder_state.doc, one jsonb cell per company holding
@@ -43,16 +43,42 @@ test('hydrating clears an app the table has no rows for', () => {
   assert.deepEqual(target.workspaces[0].apps[0].items, []);
 });
 
+const MIGRATED = migratedWorkspaceIdSet([{ id: '2c4a7f18-0f4c-4a5a-9d31-9b6b2f1a1c00', company_id: 'lumen' }], 'lumen');
+
 test('a linked app is left alone, because its records belong to the workspace that owns them', () => {
   const target = doc([], { extra: [{ id: 'app-2', linked: true, items: ['untouched'] }] });
   hydrateDocRecords(target, new Map());
   assert.deepEqual(target.workspaces[0].apps[1].items, ['untouched']);
-  assert.deepEqual(stripDocRecords(target).workspaces[0].apps[1].items, ['untouched']);
+  assert.deepEqual(stripDocRecords(target, MIGRATED).workspaces[0].apps[1].items, ['untouched']);
 });
 
-test('the stored document carries no records', () => {
-  const stripped = stripDocRecords(doc([{ id: 'r1', values: { a: 1 } }]));
+test('the stored document carries no records for a migrated workspace', () => {
+  const stripped = stripDocRecords(doc([{ id: 'r1', values: { a: 1 } }]), MIGRATED);
   assert.deepEqual(stripped.workspaces[0].apps[0].items, []);
+});
+
+test('records under a workspace that no longer exists are NOT stripped', () => {
+  // A document can hold records under a deleted workspace. They are invisible in the product
+  // (allowedBuilderIds filters them) and the backfill deliberately did not import them, so the
+  // document is the only copy. Clearing every items array unconditionally would have deleted
+  // them on the next ordinary save -- 11 real records, in one live company.
+  const orphaned = doc([{ id: 'ghost', values: { a: 1 } }], { workspaceId: OTHER_WS });
+  const stripped = stripDocRecords(orphaned, MIGRATED);
+  assert.deepEqual(stripped.workspaces[0].apps[0].items, [{ id: 'ghost', values: { a: 1 } }]);
+});
+
+test('with no migrated set, nothing is stripped at all', () => {
+  // The safe default for a caller that cannot say what it migrated.
+  const stripped = stripDocRecords(doc([{ id: 'r1', values: {} }]));
+  assert.deepEqual(stripped.workspaces[0].apps[0].items, [{ id: 'r1', values: {} }]);
+});
+
+test('the migrated set is built from workspaces the session can actually see', () => {
+  const ids = migratedWorkspaceIdSet(
+    [{ id: 'aaa', company_id: 'lumen' }, { id: 'bbb', company_id: 'other' }],
+    'lumen',
+  );
+  assert.deepEqual([...ids], ['ws-aaa'], 'a workspace in another company is not ours to strip');
 });
 
 test('the diff reports creates, edits and deletes by id, not by position', () => {
@@ -96,7 +122,7 @@ test('a row carries the resolved workspace uuid, not the builder id', () => {
 
 test('collectDocRecords round-trips through hydrate, so a merge keeps its records', () => {
   const source = doc([{ id: 'a', values: { n: 1 } }]);
-  const rebuilt = hydrateDocRecords(stripDocRecords(source), collectDocRecords(source));
+  const rebuilt = hydrateDocRecords(stripDocRecords(source, MIGRATED), collectDocRecords(source));
   assert.deepEqual(rebuilt.workspaces[0].apps[0].items, [{ id: 'a', values: { n: 1 } }]);
 });
 

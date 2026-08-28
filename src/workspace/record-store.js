@@ -93,11 +93,47 @@ export function collectDocRecords(doc) {
   return byApp;
 }
 
-/** The document as it is stored now: apps and fields, no records. */
-export function stripDocRecords(doc) {
+/**
+ * The document as it is stored now: apps and fields, no records.
+ *
+ * `migratedWorkspaceIds` is the set of builder workspace ids whose records really did move to
+ * wb_records. Anything outside it keeps its items, and that is not a nicety -- it is the only
+ * thing standing between an unmigrated record and deletion.
+ *
+ * A document can hold records under a workspace whose row no longer exists: the workspace was
+ * deleted and its records stayed behind in the jsonb. `allowedBuilderIds` in builder-core.js
+ * already filters those out, so they are invisible in the product, and the backfill
+ * deliberately did not import them -- importing would have resurrected invisible data into a
+ * live workspace, and the foreign key would refuse them anyway. But invisible is not the same
+ * as disposable. Clearing every items array unconditionally would delete on the next ordinary
+ * save the one copy of records nothing had rescued. On 2026-08-28 that was 11 records.
+ *
+ * Called with no set, nothing is stripped. That is the safe default for a caller that cannot
+ * say what it migrated.
+ */
+export function stripDocRecords(doc, migratedWorkspaceIds = null) {
   const copy = doc ? JSON.parse(JSON.stringify(doc)) : doc;
-  for (const { app } of ownedApps(copy)) app.items = [];
+  if (!migratedWorkspaceIds) return copy;
+  for (const { workspaceId, app } of ownedApps(copy)) {
+    if (migratedWorkspaceIds.has(workspaceId)) app.items = [];
+  }
   return copy;
+}
+
+/**
+ * The builder workspace ids whose records live in wb_records.
+ *
+ * Derived from the operational workspaces the session can actually see, which is the same list
+ * `allowedBuilderIds` is built from -- so a workspace the product cannot reach is never treated
+ * as migrated, and its records are left in the document rather than dropped.
+ */
+export function migratedWorkspaceIdSet(workspaces, companyId) {
+  const ids = new Set();
+  for (const workspace of (workspaces || [])) {
+    if (companyId && workspace?.company_id !== companyId) continue;
+    if (workspace?.id) ids.add(`ws-${workspace.id}`);
+  }
+  return ids;
 }
 
 function itemsByIdFor(doc) {

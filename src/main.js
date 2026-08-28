@@ -7,7 +7,7 @@ import {
 import { readPullRows } from './workspace/pull-rows.js';
 import {
   collectDocRecords, describeRefusals, diffDocRecords, groupRecordRows, hydrateDocRecords,
-  persistRecordDiff, stripDocRecords,
+  migratedWorkspaceIdSet, persistRecordDiff, stripDocRecords,
 } from './workspace/record-store.js';
 import { arrivalRef as wbArrivalRef } from './workspace/record-ref.js';
 
@@ -13605,9 +13605,10 @@ async function wbMergeWithServerDoc(key, client) {
   // resurrect a record the other editor legitimately deleted, and basing on the server's
   // itemless copy would make the next diff read everything in memory as a fresh insert.
   const localRecords = collectDocRecords(state.workspaceBuilderDocs[key]);
+  const mergeScope = migratedWorkspaceIdSet(state.operationalWorkspaces, key);
   const { doc: merged, conflicts } = mergeBuilderDocs(
-    stripDocRecords(state.wbDocBase[key]),
-    stripDocRecords(state.workspaceBuilderDocs[key]),
+    stripDocRecords(state.wbDocBase[key], mergeScope),
+    stripDocRecords(state.workspaceBuilderDocs[key], mergeScope),
     theirs,
   );
   state.workspaceBuilderDocs[key] = hydrateDocRecords(normalizeWorkspaceBuilderDoc(merged), localRecords);
@@ -13653,7 +13654,11 @@ async function saveWorkspaceBuilderDoc(companyId) {
         const known = state.wbDocVersions[key];
         // updated_at is maintained by a BEFORE UPDATE trigger, so it is read back
         // rather than sent -- the stored value is the only one worth remembering.
-        const payload = { company_id: key, doc: stripDocRecords(state.workspaceBuilderDocs[key]), updated_by: actor };
+        // Only workspaces whose records actually moved are cleared. A document can hold
+        // records under a workspace whose row was deleted; those were never imported, so
+        // clearing them here would delete the only copy on an ordinary save.
+        const migrated = migratedWorkspaceIdSet(state.operationalWorkspaces, key);
+        const payload = { company_id: key, doc: stripDocRecords(state.workspaceBuilderDocs[key], migrated), updated_by: actor };
         const result = known
           ? await client.from('workspace_builder_state').update(payload).eq('company_id', key).eq('updated_at', known).select('updated_at')
           : await client.from('workspace_builder_state').insert(payload).select('updated_at');
