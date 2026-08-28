@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import openHandler from '../api/wb-intake-open.js';
 import submitHandler from '../api/wb-intake-submit.js';
-import { hashPasscode, makePasscodeSalt } from '../api/_lib/intake.js';
+import { MAX_PASSCODE_ATTEMPTS, hashPasscode, makePasscodeSalt } from '../api/_lib/intake.js';
 import { resetRateLimits } from '../api/_lib/rate-limit.js';
 
 const originalEnv = { ...process.env };
@@ -45,23 +45,44 @@ const LINK = {
   failed_attempts: 0, locked_until: null,
 };
 
-function makeDb({ link = LINK, apps = [APP], workspaceId = 'ws-1' } = {}) {
+// The link row is mutable here, and PATCH honours its filters, because the counters are now
+// compare-and-swap: `?submission_count=eq.3` updates only while the value really is 3, and
+// returns an empty representation when it is not. A fake that always answered "updated" would
+// hide exactly the race these counters exist to close.
+function makeDb({ link = LINK, apps = [APP], workspaceId = 'ws-1', submitFails = false } = {}) {
   const calls = [];
+  const row = link ? { ...link } : null;
+
+  const casFilterHolds = (path) => {
+    for (const column of ['submission_count', 'failed_attempts']) {
+      const match = new RegExp(`[?&]${column}=eq\\.(\\d+)`).exec(path);
+      if (match && Number(row?.[column] ?? 0) !== Number(match[1])) return false;
+    }
+    return true;
+  };
+
   const db = async (path, options = {}) => {
-    calls.push({ path, method: options.method || 'GET', body: options.body });
+    const method = options.method || 'GET';
+    calls.push({ path, method, body: options.body });
+
     if (path.startsWith('/rest/v1/wb_intake_links?')) {
-      if ((options.method || 'GET') === 'PATCH') return { ok: true, async json() { return []; } };
-      return { ok: true, async json() { return link ? [link] : []; } };
+      if (method === 'PATCH') {
+        if (!row || !casFilterHolds(path)) return { ok: true, async json() { return []; } };
+        Object.assign(row, JSON.parse(options.body || '{}'));
+        return { ok: true, async json() { return [{ ...row }]; } };
+      }
+      return { ok: true, async json() { return row ? [{ ...row }] : []; } };
     }
     if (path.startsWith('/rest/v1/workspace_builder_state?')) {
       return { ok: true, async json() { return [{ doc: { workspaces: [{ id: workspaceId, apps }] } }]; } };
     }
     if (path === '/rest/v1/wb_intake_submissions') {
+      if (submitFails) return { ok: false, status: 500, async json() { return {}; } };
       return { ok: true, async json() { return [{ id: 'sub-1' }]; } };
     }
     return { ok: true, async json() { return []; } };
   };
-  return { db, calls };
+  return { db, calls, row: () => row };
 }
 
 // ---- opening -----------------------------------------------------------------------------------
@@ -175,14 +196,53 @@ test('a submission lands in the staging table and nowhere near the company docum
   assert.deepEqual(wrote, [], 'an anonymous submission wrote to workspace_builder_state');
 });
 
-test('the submission counter only moves after the row is safely in', async () => {
-  const { db, calls } = makeDb();
+test('the submission slot is claimed before the row is written', async () => {
+  // Reversed deliberately. Counting afterwards meant two posts sent together both passed the
+  // cap check and both got in, so a link meant to be filled in once accepted several.
+  const { db, calls, row } = makeDb();
   await submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'x' } } }), res(), { db });
   const order = calls.map((c) => `${c.method} ${c.path.split('?')[0]}`);
   const insertAt = order.indexOf('POST /rest/v1/wb_intake_submissions');
   const patchAt = order.indexOf('PATCH /rest/v1/wb_intake_links');
-  assert.ok(insertAt > -1 && patchAt > insertAt, 'a failed insert must not use up somebody\'s one submission');
-  assert.equal(JSON.parse(calls[patchAt].body).submission_count, 1);
+  assert.ok(patchAt > -1 && insertAt > patchAt, 'the cap must be claimed before the row is stored');
+  assert.equal(row().submission_count, 1);
+});
+
+test('a failed insert hands the submission slot back', async () => {
+  // The property the old ordering protected is kept: a submission that could not be stored
+  // must not use up somebody's one submission.
+  const { db, row } = makeDb({ submitFails: true });
+  const r = res();
+  await submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'x' } } }), r, { db });
+  assert.equal(r.statusCode, 500);
+  assert.equal(row().submission_count, 0, 'a failed insert must not consume the cap');
+});
+
+test('concurrent submissions cannot overshoot max_submissions', async () => {
+  const { db, calls } = makeDb({ link: { ...LINK, max_submissions: 1 } });
+  const posts = [1, 2, 3, 4].map(() => {
+    const r = res();
+    return submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'x' } } }), r, { db })
+      .then(() => r.statusCode);
+  });
+  const codes = await Promise.all(posts);
+  assert.equal(codes.filter((code) => code === 200).length, 1, 'exactly one post may win a one-submission link');
+  const stored = calls.filter((c) => c.path === '/rest/v1/wb_intake_submissions');
+  assert.equal(stored.length, 1, 'only the winning post may store a row');
+});
+
+test('concurrent wrong passcodes still trip the lockout', async () => {
+  // Read-modify-write let eight guesses posted together all read 0 and all write 1, so the
+  // limit never arrived. The compare-and-swap is what makes the count survive concurrency.
+  const link = { ...LINK, visibility: 'private', passcode_salt: SALT, passcode_hash: hashPasscode('AB2CD3', SALT) };
+  const { db, row } = makeDb({ link });
+  const guesses = Array.from({ length: MAX_PASSCODE_ATTEMPTS }, () => {
+    const r = res();
+    return openHandler(req('POST', { body: { token: 'tok-public', passcode: 'WRONG1' } }), r, { db })
+      .then(() => r.statusCode);
+  });
+  await Promise.all(guesses);
+  assert.ok(row().locked_until, 'the link must lock once the attempts are spent');
 });
 
 test('the passcode is enforced on submit too, not only on open', async () => {

@@ -61,6 +61,12 @@ export default defineEndpoint(
       portal_id: portal.id,
       company_id: portal.company_id,
       guest_name: guestName,
+      // Who this guest IS, as opposed to what they typed in the name box. Annotation
+      // ownership hangs off this and never off `guest_name`: the name is caller-supplied
+      // free text, so scoping a delete by it let anyone reopen the portal as "Sarah" and
+      // wipe Sarah's markups. Minted server-side, carried in the signed session, never
+      // accepted from the request body.
+      guest_id: crypto.randomUUID(),
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 6,
     });
 

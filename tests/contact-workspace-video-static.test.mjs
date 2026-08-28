@@ -77,7 +77,10 @@ test('contact locations support google maps autocomplete and pin links', () => {
   assert.match(source, /function renderAddressLookupField\(label, name, value = '', options = \[\]/);
   assert.match(source, /function beginAddressInlineEdit\(span, value, companyId, commitValue, picker = \{\}\)/);
   assert.match(source, /async function refreshAddressSuggestions\(input\)/);
-  assert.match(source, /fetch\(`\/api\/address-suggestions\?q=\$\{encodeURIComponent\(query\)\}`\)/);
+  // The endpoint is billed per lookup and now requires a session, so the call carries the
+  // bearer token. Matched without the trailing `)` so the argument list can keep growing.
+  assert.match(source, /fetch\(`\/api\/address-suggestions\?q=\$\{encodeURIComponent\(query\)\}`/);
+  assert.match(source, /address-suggestions[\s\S]{0,240}Authorization: `Bearer \$\{suggestSession\.access_token\}`/);
   assert.match(source, /function renderAddressSuggestionMenu\(input, suggestions, status = ''\)/);
   assert.match(source, /data-address-options="\$\{h\(JSON\.stringify\(options\)\)\}"/);
   assert.match(source, /const CRM_ADDRESS_SUGGESTIONS = \[/);

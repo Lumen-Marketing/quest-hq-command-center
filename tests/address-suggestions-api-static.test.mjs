@@ -15,8 +15,17 @@ test('address suggestions API supports Google Places with an open search fallbac
   assert.match(apiSource, /suggestionCache\.set\(cacheKey/);
 });
 
+test('the suggestion proxy refuses anonymous callers', () => {
+  // It spends money per lookup: a billed Places call, or Nominatim traffic under a usage
+  // policy that does not cover the open internet. Unauthenticated, the only brake was an
+  // in-memory limiter that resets on every cold start.
+  assert.match(apiSource, /getUserFromBearer/);
+  assert.match(apiSource, /Authentication required\./);
+  assert.match(apiSource, /requireAllowedOrigin\(request\)/);
+});
+
 test('crm address inputs use the custom autocomplete endpoint instead of native datalist only', () => {
-  assert.match(appSource, /fetch\(`\/api\/address-suggestions\?q=\$\{encodeURIComponent\(query\)\}`\)/);
+  assert.match(appSource, /fetch\(`\/api\/address-suggestions\?q=\$\{encodeURIComponent\(query\)\}`/);
   assert.match(appSource, /menu\.className = 'address-suggestions-menu'/);
   assert.match(appSource, /data-address-suggestion/);
   assert.match(appSource, /data-address-options="\$\{h\(JSON\.stringify\(options\)\)\}"/);

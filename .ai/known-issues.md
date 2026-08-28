@@ -2,6 +2,51 @@
 
 Only confirmed, actionable items belong here.
 
+## Two applied migrations have no file in this repository
+
+Confirmed 2026-08-28 against the live migration ledger.
+
+`supabase_migrations.schema_migrations` contains two versions with no counterpart under
+`supabase/migrations`:
+
+- `20260826195655_company_contact_field_recycle`
+- `20260826195939_company_contact_permission_reconcile`
+
+Their effects are live and visible: `company_contact_fields` now carries `deleted_at` and
+`deleted_by`, and its three policies gained a `deleted_at is null` predicate. Rebuilding the
+database from this repository would therefore produce a DIFFERENT schema from production —
+the field recycle bin would simply not exist, and any migration written against those columns
+would fail on a fresh environment.
+
+This is the mirror image of the plugin-allowlist entry below, where the repository was ahead
+of live. Both come from the same root cause: DDL applied through a path that does not also
+commit the file. Reconcile by exporting both migrations from the live ledger and committing
+them with their recorded versions; do not re-apply them.
+
+## The Company Contacts field delete now has a recycle path (entry below is stale)
+
+The "Deleting a Company Contacts field is a hard delete with no undo" section further down
+described the state before `20260826195655_company_contact_field_recycle`. Live now has
+`deleted_at`/`deleted_by` on `company_contact_fields` and policies that filter on them.
+The recovery procedure in that section is still the right one for values orphaned BEFORE the
+change; the "no undo" claim is no longer true for deletions made after it. Rewrite that
+section once the missing migration file is committed and the UI path has been re-tested.
+
+## The SMS tables do not exist in production
+
+Confirmed 2026-08-28. `sms_messages` and `sms_numbers` are absent from
+`information_schema.tables`, while `api/sms-send.js` and `api/sms-inbound.js` both read and
+write them. Those endpoints cannot work as written; every call would fail at PostgREST.
+
+This makes the workspace-SMS entry below more dormant than it reads: the feature is not merely
+gated by a provider key and a readiness contract, it has no schema. Treat "finish the
+workspace-safe SMS migration" as including the base tables, and note that the committed
+endpoints are dead code against the current database until it lands.
+
+Separately, and independent of the missing tables: `sms-send` authorizes on company membership
+alone (`isActiveMember`), so once those tables exist it would let a member of one workspace
+text a contact belonging to another. Fix the authorization at the same time as the schema.
+
 ## Main browser bundle remains large
 
 Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js plus the RingCentral calls runtime are lazy-loaded, but src/main.js remains a performance and maintainability risk. Measure production behavior before splitting and retain the budget guard.

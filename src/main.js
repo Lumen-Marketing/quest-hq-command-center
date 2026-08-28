@@ -4513,7 +4513,12 @@ async function refreshAddressSuggestions(input) {
   const requestId = String(++addressSuggestionRequestSeq);
   input.dataset.addressSuggestRequest = requestId;
   renderAddressSuggestionMenu(input, mergeAddressSuggestions(local), 'Searching addresses...');
-  const response = await fetch(`/api/address-suggestions?q=${encodeURIComponent(query)}`).catch(() => null);
+  // The proxy spends money per lookup, so it now requires a session. Anonymous callers fall
+  // back to the local matches already rendered above rather than showing an error.
+  const suggestSession = activeSession();
+  const response = await fetch(`/api/address-suggestions?q=${encodeURIComponent(query)}`, {
+    headers: suggestSession?.access_token ? { Authorization: `Bearer ${suggestSession.access_token}` } : {},
+  }).catch(() => null);
   if (input.dataset.addressSuggestRequest !== requestId) return;
   const payload = response?.ok ? await response.json().catch(() => ({})) : {};
   const remote = Array.isArray(payload.suggestions) ? payload.suggestions : [];

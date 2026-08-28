@@ -9,18 +9,10 @@
 
 import { defineEndpoint } from './_lib/endpoint.js';
 import { HttpError } from './_lib/http-security.js';
-import { loadIntake, linkSummary, loadLinkApp } from './_lib/intake-db.js';
 import {
-  LOCKOUT_MINUTES, MAX_PASSCODE_ATTEMPTS, lockedReason, publicFields, verifyPasscode,
-} from './_lib/intake.js';
-
-async function patchLink(db, token, patch) {
-  await db(`/rest/v1/wb_intake_links?token=eq.${encodeURIComponent(token)}`, {
-    method: 'PATCH',
-    headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
-  }).catch(() => null);
-}
+  clearFailedPasscodes, loadIntake, linkSummary, loadLinkApp, recordFailedPasscode,
+} from './_lib/intake-db.js';
+import { LOCKOUT_MINUTES, lockedReason, publicFields, verifyPasscode } from './_lib/intake.js';
 
 export default defineEndpoint(
   {
@@ -61,19 +53,16 @@ export default defineEndpoint(
 
     const ok = verifyPasscode(body.passcode, probe.link.passcode_salt, probe.link.passcode_hash);
     if (!ok) {
-      const attempts = Number(probe.link.failed_attempts || 0) + 1;
-      const lock = attempts >= MAX_PASSCODE_ATTEMPTS;
-      await patchLink(db, token, {
-        failed_attempts: lock ? 0 : attempts,
-        locked_until: lock ? new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString() : null,
-      });
-      throw new HttpError(401, lock
+      // Counted compare-and-swap style, so eight guesses posted together cannot all read the
+      // same value and write the same 1 — which is how the lockout used to be walked past.
+      const { locked } = await recordFailedPasscode(db, token);
+      throw new HttpError(401, locked
         ? `Too many incorrect passcodes. Try again in ${LOCKOUT_MINUTES} minutes.`
         : 'That passcode is not right.');
     }
 
     if (Number(probe.link.failed_attempts || 0)) {
-      await patchLink(db, token, { failed_attempts: 0, locked_until: null });
+      await clearFailedPasscodes(db, token);
     }
 
     const app = await loadLinkApp(db, probe.link);

@@ -17,7 +17,7 @@ import {
   HttpError,
 } from './http-security.js';
 import { consumeRateLimit } from './rate-limit.js';
-import { verifyPortalSession } from './portal-session.js';
+import { verifyPortalSession, portalSessionStillValid } from './portal-session.js';
 import { createAdminFetch, isSupabaseConfigured } from './supabase-admin.js';
 
 const DEFAULT_BODY_LIMIT = 256 * 1024;
@@ -151,6 +151,12 @@ export function defineEndpoint(config, handler) {
       if (auth === 'portal-session') {
         const session = verifyPortalSession(body.session || query.session);
         if (!session) return sendJson(res, 401, { error: 'Portal session expired.' });
+        // Signature and expiry are not the whole question — the portal has to still be open.
+        // Doing this here rather than in each handler is the point: it is one place, and a new
+        // portal endpoint cannot forget it.
+        if (!(await portalSessionStillValid(ctx.db, session))) {
+          return sendJson(res, 401, { error: 'This portal link is no longer active.' });
+        }
         ctx.session = session;
       }
 

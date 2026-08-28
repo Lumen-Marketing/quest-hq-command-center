@@ -1675,3 +1675,64 @@ Workspaces cannot be enforced today: every workspace, app, field and record for 
 lives in one `workspace_builder_state` row behind a single `workspaces.manage` write policy,
 so editing one record and deleting every app are the same UPDATE. Splitting it needs records
 moved into their own table first.
+
+## The tenancy guard refuses a stale snapshot (2026-08-28)
+
+`scripts/check-tenancy-matrix.mjs` iterates `.ai/database/snapshot.json`. A tenant table the
+snapshot has never heard of was therefore not failed — it was skipped, and the run still
+reported a clean matrix.
+
+On 2026-08-28 an audit found the committed snapshot was 18 days and 28 migrations behind live.
+Seven tenant-carrying tables existed in production that the guard had never examined:
+`company_contacts`, `company_contact_fields`, `sms_messages`, `sms_numbers`, `wb_intake_links`,
+`wb_intake_submissions`, `wb_record_events`. All seven were in fact correct, so nothing leaked.
+The control was the thing that was broken, and a green check that is not checking anything is
+worse than no check, because it stops anyone looking.
+
+The guard now compares the newest migration filename's own timestamp against the snapshot's
+`captured_at` and refuses to certify when a migration landed after the capture. The snapshot
+was refreshed from live metadata in the same change; coverage went from 50-odd tables to 83.
+
+Consequence to expect: adding a migration file makes `npm run check` fail until that migration
+is applied AND the snapshot refreshed. That is the intended ordering from operations.md, now
+enforced rather than remembered. Do not relax the gate to unblock a branch — refresh the
+snapshot, which is the work the gate is asking for.
+
+## Portal guest identity is a session-minted id, not the typed name (2026-08-28)
+
+Client Portal annotation ownership was scoped by `guest_name`, which the guest supplies when
+they open the portal. Anyone holding the link could reopen it under somebody else's name and
+inherit their annotations; a bulk save with an empty list then deleted every one of them.
+
+`client-portal-open` now mints a `guest_id` into the signed session, and
+`client-portal-annotations` scopes ownership on `payload->>guest_id`. The id lives inside the
+existing `payload` jsonb rather than a new column, deliberately: `payload` is already rewritten
+server-side (it is where `payload.author` is forced), PostgREST can filter it, and putting it
+there meant the fix shipped without a migration and without a window where the code expected a
+column the database did not have.
+
+Annotations written before this carry no id, so no guest matches them and none can be deleted
+through the public endpoint. That is the safe direction — portal managers still reach them
+through the authenticated path. Sessions issued before the change likewise own nothing, which
+self-resolves within their six-hour lifetime.
+
+Related, same change: every session-authenticated portal endpoint now re-reads the portal and
+requires `status = active`, so revoking a link ends the sessions already riding on it instead
+of leaving them working for the rest of the token's life.
+
+## Intake counters are compare-and-swap (2026-08-28)
+
+The passcode lockout and the submission cap on `wb_intake_links` were read-modify-write: read
+the row, add one in JavaScript, write it back. Eight passcode guesses posted together all read
+`0` and all wrote `1`, so `MAX_PASSCODE_ATTEMPTS` never tripped; the same race let a link capped
+at one submission accept several.
+
+Both now filter the PATCH on the value that was read (`?failed_attempts=eq.3`), so Postgres
+applies the update only if nobody moved it, and an empty representation means re-read and retry.
+No new database function and no migration — the atomicity is in the WHERE clause.
+
+Two deliberate behaviours fall out of it. Losing the swap past the retry budget locks the link
+outright rather than letting an uncounted guess through, because that much simultaneous failure
+IS the attack. And the submission slot is now claimed BEFORE the row is written, with an
+explicit release if the insert fails — the reverse of the old ordering, which protected against
+a wasted slot at the cost of letting concurrent posts overshoot the cap.

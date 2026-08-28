@@ -1,5 +1,16 @@
-import { setApiHeaders } from './_lib/http-security.js';
+// Address autocomplete, proxied so the Places key never reaches a browser.
+//
+// It also requires a signed-in caller, which it did not always. This endpoint spends money:
+// every miss is a billed Google Places Autocomplete call, and the fallback leans on
+// Nominatim, whose usage policy is not written for anonymous internet traffic. Unauthenticated,
+// the only brake was the in-memory limiter — 60/min PER SERVERLESS INSTANCE, reset by every
+// cold start — so anyone who read the network tab once could drive the bill or get the
+// project blocked upstream. It is only ever called from signed-in forms, so the token was
+// always there to check; nothing asked for it.
+
+import { setApiHeaders, requireAllowedOrigin, HttpError } from './_lib/http-security.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { getUserFromBearer } from './_lib/user-auth.js';
 
 const suggestionCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -118,10 +129,24 @@ async function openStreetMapSuggestions(query, location) {
     .filter(Boolean);
 }
 
-export default async function handler(request, response) {
+export default async function handler(request, response, overrides = {}) {
   setApiHeaders(response, { cacheControl: 'private, max-age=60' });
   if (request.method !== 'GET') return json(response, 405, { error: 'Method not allowed' });
   if (!enforceRateLimit(request, response, { namespace: 'address-suggestions', limit: 60, windowMs: 60 * 1000 })) return;
+
+  try {
+    requireAllowedOrigin(request);
+  } catch (error) {
+    return json(response, error instanceof HttpError ? error.statusCode : 403, { error: 'Origin is not allowed.' });
+  }
+
+  // Membership is not checked: an address is not tenant data, and every signed-in member of
+  // every company may type one. Proving there is a real session is what stops the meter being
+  // run by strangers, and that is the whole job here.
+  const getUser = overrides.getUser || getUserFromBearer;
+  const user = await getUser(request).catch(() => null);
+  if (!user?.id) return json(response, 401, { error: 'Authentication required.' });
+
   const url = new URL(request.url, `https://${request.headers.host || 'quest-hq.local'}`);
   const query = cleanQuery(url.searchParams.get('q'));
   if (query.length < 3) return json(response, 200, { suggestions: [] });

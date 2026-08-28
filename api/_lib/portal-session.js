@@ -5,9 +5,48 @@
 import crypto from 'node:crypto';
 import { supabaseServiceKey } from './supabase-admin.js';
 
-// Falls back to the service key so a session secret is optional in dev, matching
-// the original per-file behavior.
-const sessionSecret = () => process.env.CLIENT_PORTAL_SESSION_SECRET || supabaseServiceKey();
+// The signing secret.
+//
+// Dev may fall back to the service key so a portal can be opened without extra setup.
+// PRODUCTION MAY NOT: that would make the most privileged credential in the system double as
+// the portal token signing key, and would tie service-key rotation to invalidating every live
+// guest session. Outside development a missing secret is a configuration fault, not a default.
+function sessionSecret() {
+  const configured = process.env.CLIENT_PORTAL_SESSION_SECRET;
+  if (configured) return configured;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('CLIENT_PORTAL_SESSION_SECRET is required in production.');
+  }
+  return supabaseServiceKey();
+}
+
+const eq = (value) => `eq.${encodeURIComponent(String(value ?? ''))}`;
+
+/**
+ * Is the portal behind this session still open?
+ *
+ * A signature only proves the session was issued; it says nothing about whether the portal is
+ * still meant to be readable. `client-portal-open` checks `status=eq.active` once, at open
+ * time, and then hands out a six-hour token — so before this existed, revoking a leaked link
+ * did not end the sessions already riding on it. The guest kept downloading job documents for
+ * the rest of the token's life and nothing in the product said so.
+ *
+ * Every session-authenticated request therefore re-reads the portal. One extra round trip
+ * against a primary-key filter, in exchange for revocation that actually revokes.
+ */
+export async function portalSessionStillValid(db, session) {
+  const portalId = String(session?.portal_id || '');
+  const companyId = String(session?.company_id || '');
+  if (!portalId || !companyId) return false;
+
+  const result = await db(
+    `/rest/v1/client_portals?id=${eq(portalId)}&company_id=${eq(companyId)}&status=eq.active&select=id`,
+  ).catch(() => null);
+  if (!result?.ok) return false;
+
+  const rows = await result.json().catch(() => []);
+  return Array.isArray(rows) && rows.length > 0;
+}
 
 export function signPortalSession(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');

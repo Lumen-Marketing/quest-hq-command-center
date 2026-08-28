@@ -8,7 +8,7 @@
 
 import { defineEndpoint } from './_lib/endpoint.js';
 import { HttpError } from './_lib/http-security.js';
-import { loadIntake } from './_lib/intake-db.js';
+import { claimSubmissionSlot, loadIntake, releaseSubmissionSlot } from './_lib/intake-db.js';
 import { IntakeValueError, cleanIntakeValues, lockedReason, verifyPasscode } from './_lib/intake.js';
 
 export default defineEndpoint(
@@ -53,6 +53,17 @@ export default defineEndpoint(
       throw error;
     }
 
+    // Claim the slot BEFORE writing the row.
+    //
+    // This used to count afterwards, so that a failed insert could not use up somebody's one
+    // submission. The cost was that two posts sent together both passed the cap check and both
+    // got in — a link meant to be filled in once accepted several. Claiming first makes the cap
+    // mean something; the release below restores the old guarantee when the insert really does
+    // fail, which is the rarer case of the two.
+    if (!(await claimSubmissionSlot(db, link))) {
+      throw new HttpError(410, 'This link has already been filled in.');
+    }
+
     const insert = await db('/rest/v1/wb_intake_submissions', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
@@ -65,19 +76,12 @@ export default defineEndpoint(
         submitted_name: String(body.name || '').slice(0, 240),
         submitted_email: String(body.email || '').slice(0, 240),
       }),
-    });
-    if (!insert.ok) throw new HttpError(500, 'Could not send this form.');
-
-    // The counter is what makes max_submissions mean anything, and it is incremented only
-    // after the row is safely in -- a failed insert must not use up somebody's one submission.
-    await db(`/rest/v1/wb_intake_links?token=eq.${encodeURIComponent(link.token)}`, {
-      method: 'PATCH',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        submission_count: Number(link.submission_count || 0) + 1,
-        updated_at: new Date().toISOString(),
-      }),
     }).catch(() => null);
+
+    if (!insert?.ok) {
+      await releaseSubmissionSlot(db, link.token);
+      throw new HttpError(500, 'Could not send this form.');
+    }
 
     return { submitted: true };
   },

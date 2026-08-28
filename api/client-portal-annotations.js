@@ -12,6 +12,23 @@ export default defineEndpoint(
     notConfiguredMessage: 'Client portal API is not configured.',
   },
   async ({ req, session, body, query, db }) => {
+    // Ownership is the session's guest id, held inside the annotation's own payload.
+    //
+    // It used to be `guest_name`, which the caller chooses when they open the portal. Anyone
+    // with the link could reopen it as somebody else's name and inherit their annotations —
+    // and the bulk save with an empty list would then delete every one of them. The name is
+    // still stored, because it is what the team sees on the markup; it just no longer decides
+    // who may change it.
+    //
+    // The id lives in `payload` rather than a column of its own so this needed no migration:
+    // payload is already jsonb, already rewritten server-side (see `payload.author` below),
+    // and PostgREST can filter it with `payload->>guest_id`. Annotations written before this
+    // change carry no id, so they match no guest and can no longer be deleted through the
+    // public endpoint at all — the safe direction. Portal managers still reach them through
+    // the authenticated path.
+    const guestId = String(session.guest_id || '');
+    const ownedByThisGuest = guestId ? `&payload->>guest_id=eq.${encodeURIComponent(guestId)}` : '';
+
     if (req.method === 'GET') {
       const documentId = String(query.document_id || '').trim();
       const filter = documentId ? `&document_id=eq.${encodeURIComponent(documentId)}` : '';
@@ -24,7 +41,9 @@ export default defineEndpoint(
     if (body.action === 'delete') {
       const annotationId = String(body.annotation_id || '').trim();
       if (!annotationId) throw new HttpError(400, 'annotation_id is required.');
-      const result = await db(`/rest/v1/client_portal_annotations?id=eq.${encodeURIComponent(annotationId)}&portal_id=eq.${encodeURIComponent(session.portal_id)}&guest_name=eq.${encodeURIComponent(guestName)}`, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
+      // A session with no guest id (issued before this change, or malformed) owns nothing.
+      if (!guestId) return jsonResponse(200, { deleted: false });
+      const result = await db(`/rest/v1/client_portal_annotations?id=eq.${encodeURIComponent(annotationId)}&portal_id=eq.${encodeURIComponent(session.portal_id)}${ownedByThisGuest}`, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
       if (!result.ok) return jsonResponse(result.status, { deleted: false });
       const removed = await result.json().catch(() => []);
       // 2xx with an empty body means the id was not this guest's annotation — report honestly.
@@ -34,6 +53,8 @@ export default defineEndpoint(
     const sanitize = (annotation, documentId) => {
       const payload = annotation.payload && typeof annotation.payload === 'object' ? { ...annotation.payload } : {};
       payload.author = 'guest';
+      // Stamped from the session, after the spread, so a caller cannot supply their own.
+      payload.guest_id = guestId;
       return {
         id: String(annotation.id || crypto.randomUUID()),
         company_id: session.company_id,
@@ -52,7 +73,13 @@ export default defineEndpoint(
       const row = sanitize(body.annotation, documentId);
       const existingRes = await db(`/rest/v1/client_portal_annotations?id=eq.${encodeURIComponent(row.id)}&portal_id=eq.${encodeURIComponent(session.portal_id)}&select=guest_name,annotation_type,page_number,payload`);
       const existing = existingRes.ok ? (await existingRes.json())[0] : null;
-      if (existing && String(existing.guest_name || '') !== guestName) {
+      // Writing over an id that belongs to a different guest: keep everything that is theirs
+      // (including their guest_id, or this would hand ownership to the caller) and accept only
+      // the comment thread, which is how a second guest replies to somebody else's markup.
+      const existingGuestId = existing && existing.payload && typeof existing.payload === 'object'
+        ? String(existing.payload.guest_id || '')
+        : '';
+      if (existing && (!guestId || existingGuestId !== guestId)) {
         const incomingThread = Array.isArray(row.payload?.thread) ? row.payload.thread : [];
         row.guest_name = existing.guest_name;
         row.annotation_type = existing.annotation_type;
@@ -71,7 +98,11 @@ export default defineEndpoint(
     const annotations = Array.isArray(body.annotations) ? body.annotations : [];
     if (!documentId) throw new HttpError(400, 'document_id is required.');
     const rows = annotations.slice(0, 500).map((annotation) => sanitize(annotation, documentId));
-    const scope = `portal_id=eq.${encodeURIComponent(session.portal_id)}&company_id=eq.${encodeURIComponent(session.company_id)}&document_id=eq.${encodeURIComponent(documentId)}&guest_name=eq.${encodeURIComponent(guestName)}`;
+    const scope = `portal_id=eq.${encodeURIComponent(session.portal_id)}&company_id=eq.${encodeURIComponent(session.company_id)}&document_id=eq.${encodeURIComponent(documentId)}${ownedByThisGuest}`;
+
+    // Without a guest id there is nothing this caller owns, so a bulk save must not be able
+    // to clear the document. Refuse rather than fall through to a scope that matches everyone.
+    if (!guestId) return jsonResponse(200, { annotations: [], saved: false });
 
     // Empty save clears this guest's annotations for the document.
     if (!rows.length) {
