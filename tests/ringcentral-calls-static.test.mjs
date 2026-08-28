@@ -112,9 +112,11 @@ test('an unapplied migration reads as not connected, never as zero calls', () =>
   assert.match(main, /RingCentral isn't connected yet/);
 });
 
-test('a non-JSON response from the presence route is treated as not connected', () => {
-  // A plain `vite dev` server answers /api/* with index.html.
-  assert.match(main, /response\.status === 503 \|\| !isJson/);
+test('a non-JSON response from the presence route is treated as a retryable error', () => {
+  // A gateway can return HTML during a transient hosting failure. That is not
+  // evidence that the company deliberately left RingCentral disconnected.
+  assert.match(main, /!response\.ok \|\| !isJson/);
+  assert.match(main, /Can\\'t reach RingCentral right now/);
 });
 
 test('the page states the accuracy limit of the status timer', () => {

@@ -31,7 +31,20 @@ export function createCallsRuntime(ctx) {
   const clearIntervalImpl = ctx.clearIntervalImpl || globalThis.clearInterval;
 
   let callsPresenceTimer = null;
+  let callsPresenceCompanyId = '';
   let callsVisibilityBound = false;
+
+  function callsPresenceIdle(companyId) {
+    return { companyId, agents: [], error: '', forbidden: false, notConnected: false };
+  }
+
+  function activateCallsPresenceCompany(companyId) {
+    const requestedCompanyId = String(companyId || '');
+    if (callsPresenceCompanyId === requestedCompanyId && state.callsPresence?.companyId === requestedCompanyId) return;
+    stopCallsPresencePolling();
+    callsPresenceCompanyId = requestedCompanyId;
+    state.callsPresence = callsPresenceIdle(requestedCompanyId);
+  }
 
   function callsRangeKey(route) {
     const requested = String(route?.params?.get?.('range') || 'today');
@@ -95,7 +108,9 @@ export function createCallsRuntime(ctx) {
   }
 
   async function loadCallsPresence(companyId) {
-    const idle = { agents: [], error: '', forbidden: false, notConnected: false };
+    companyId = String(companyId || '');
+    activateCallsPresenceCompany(companyId);
+    const idle = callsPresenceIdle(companyId);
     const token = activeSession()?.access_token;
     if (!token) {
       state.callsPresence = { ...idle, notConnected: true };
@@ -109,22 +124,28 @@ export function createCallsRuntime(ctx) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const isJson = String(response.headers.get('content-type') || '').includes('application/json');
+      if (callsPresenceCompanyId !== companyId) return;
 
       if (response.status === 403) {
         state.callsPresence = { ...idle, forbidden: true };
         stopCallsPresencePolling();
-      } else if (response.status === 503 || !isJson) {
-        state.callsPresence = { ...idle, notConnected: true };
-        stopCallsPresencePolling();
-      } else if (!response.ok) {
+      } else if (!response.ok || !isJson) {
         state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
       } else {
         const payload = await response.json();
-        state.callsPresence = { ...idle, agents: payload.agents || [] };
+        if (callsPresenceCompanyId !== companyId) return;
+        if (payload.connected === false) {
+          state.callsPresence = { ...idle, notConnected: true };
+          stopCallsPresencePolling();
+        } else {
+          state.callsPresence = { ...idle, agents: payload.agents || [] };
+        }
       }
     } catch {
+      if (callsPresenceCompanyId !== companyId) return;
       state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
     }
+    if (callsPresenceCompanyId !== companyId) return;
     repaintVisibleSurface();
   }
 
@@ -134,9 +155,13 @@ export function createCallsRuntime(ctx) {
   }
 
   function ensureCallsPresencePolling(companyId) {
+    companyId = String(companyId || '');
+    activateCallsPresenceCompany(companyId);
+    if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
     if (callsPresenceTimer) return;
     callsPresenceTimer = setIntervalImpl(() => {
       if (!callsSurfaceVisible()) { stopCallsPresencePolling(); return; }
+      if (String(activeCompanyId() || '') !== companyId) { stopCallsPresencePolling(); return; }
       if (documentRef?.hidden || state.callsPresence.forbidden || state.callsPresence.notConnected) return;
       loadCallsPresence(companyId).catch(() => {});
     }, CALLS_PRESENCE_POLL_MS);
@@ -152,6 +177,8 @@ export function createCallsRuntime(ctx) {
   }
 
   function ensureCallsData(companyId, rangeKey = 'today') {
+    companyId = String(companyId || '');
+    activateCallsPresenceCompany(companyId);
     const key = `${companyId}|${rangeKey}`;
     if (state.callsStats.key !== key) queueMicrotaskImpl(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
     if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;

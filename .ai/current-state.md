@@ -1,6 +1,44 @@
 # Current state
 
-Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-08-27T19:40:15.671Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+
+## 2026-08-28 RingCentral status correction
+
+- Live `ringcentral_sync_state` verification found one active account with a recent successful
+  scheduled sync and zero consecutive failures. The 15-minute Vercel cron is operating on the
+  current Pro project; its old plan-risk note is no longer actionable.
+- A company with no active RingCentral account is now a normal disconnected state, not an HTTP
+  503 outage. The presence endpoint returns `connected: false` with no agents. Database and
+  credential failures remain errors; a RingCentral provider outage retains the existing
+  last-known-status fallback and marks that response stale.
+- The Calls runtime recognizes only that explicit disconnected response as terminal. Transport,
+  hosting, and server failures show an error and remain retryable. Presence state is keyed to the
+  company, so switching companies clears a previous disconnected state and ignores late results.
+- Endpoint and runtime regression tests cover the disconnected, transient-failure, database-error,
+  write-error, missing-credential, and company-switch contracts. No migration, stored record
+  mutation, credential change, or connected-company data change is part of this correction.
+
+## 2026-08-27 priority-finding release candidate
+
+- Proposal and Client Portal marked-PDF exports now import a bundled, same-origin PDF runtime
+  only when export is requested. They no longer inject jsPDF or canvas2svg from cdnjs, so the
+  enforced Content Security Policy does not block the feature.
+- Company Contact field removal now uses the shared 30-day Recycle Bin. Definitions carry
+  `deleted_at`/`deleted_by`, active reads hide recycled definitions, direct browser DELETE is
+  revoked, and restore uses the existing audited recycle operation without losing values keyed
+  by the original field id.
+- Company Contacts permission aliases now live in the one database authorization resolver as
+  well as in the browser. Granular create/edit/delete/field-management grants and legacy
+  `company_contacts.manage` grants therefore make the same allow/deny decision in both layers.
+- The Workspace app strip has one stylesheet owner. The conflicting lazy Builder copy was
+  removed, so long app names, icon sizes and spacing no longer change after the route CSS loads.
+- Moving Company Contact lifecycle logic out of the lazy page and PDF code behind a dynamic
+  import reduced the main JavaScript from 364.08 KiB to 363.02 KiB gzip. The PDF runtime is paid
+  only by users who export a PDF, and the bundle budget has measurable headroom again.
+- Migrations `20260826090000_company_contacts_permission_split` and
+  `20260827100000_company_contact_field_recycle` are live. The forward reconciliation migration
+  `20260827110000_company_contact_permission_reconcile` pins their final policy shape regardless
+  of application order and adds the advisor-requested `deleted_by` index.
 
 ## 2026-08-26 company contacts permission split
 
@@ -10,19 +48,20 @@ Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational s
   access and no role assignment had to be rewritten.
 - Migration `20260826090000_company_contacts_permission_split` rewrites the insert, update and
   delete policies on `company_contacts` and the write policies on `company_contact_fields` and
-  `company_contact_types`. Read access is unchanged: any active member still reads the directory.
-- No new SECURITY DEFINER function was added; the policies call the existing
-  `app_private.has_company_permission` twice, so plugin gating, deny handling and
-  owner/admin/developer elevation keep their reviewed behaviour.
+  `company_contact_options`. Read access is unchanged: any active member still reads the directory.
+- No new SECURITY DEFINER function was added. The existing
+  `app_private.has_company_permission` resolver expands legacy and granular aliases before its
+  normal deny/grant decision, so plugin gating, deny handling and owner/admin/developer elevation
+  keep their reviewed behaviour without two policy calls disagreeing about precedence.
 - This is what stopped a non-elevated role using the Workspace "Lead" button: filing a contact
   and destroying the directory's field definitions shared one key, so the permission was never
   granted. A refused filing now reports the reason instead of a generic failure.
 - The browser's module gate gained the `company_contacts.` branch the SQL side has had since
   20260813180000, so an uninstalled Company Contacts module no longer looks available in the UI.
-- **The migration is written but NOT yet applied to Supabase.** Until it is, the new keys are
-  enforced in the browser only and the database still requires `company_contacts.manage` for
-  every write. Apply it through the Supabase migration workflow, then re-run the advisors and
-  refresh the database map.
+- **The migration is applied to Supabase.** The granular keys and legacy compatibility bridge are
+  enforced in both the browser and database. The later reconciliation migration repeats the
+  resolver replacement so databases that already recorded an older permission-split migration
+  still converge on the same authorization behavior.
 
 ## 2026-08-25 performance release candidate
 
@@ -56,8 +95,8 @@ Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational s
 - Canonical public domains: https://questbase.io and https://www.questbase.io.
 - Stable Vercel URL: https://quest-hq-command-center-gamma.vercel.app.
 - Vercel project: `prj_0MxrYyGIo61QgLNW2M74fvTxlMRV`.
-- Ready production deployment: `dpl_DYtyBPAMLDsDtkKGV4n8EXTNPrH1`.
-- Deployed application revision: `7d430904d7070fc5a9a2f19ea31d025ed1ce956b` from `main`.
+- Ready production deployment: `dpl_GzeyEei6T7jndVA2eakYGSCiFdMT`.
+- Deployed application revision: `204c220485fefd9b16e713dafe6fdb50031f1b92` from `main`.
 - Production smoke passed for the exact revision: 36 of 36 routes and 4 of 4 entry assets.
 - Signed-in browser verification passed for the production Job form's local draft lifecycle: an unfinished edit autosaved, reopening offered Restore or Discard, Restore recovered the exact field value, Discard removed the temporary QA draft, no job record was created, and the browser reported no console errors.
 - Signed-in browser verification passed for the production Job record-history entry point: History opened against the correct workspace and record, completed its live query, showed the expected empty pre-migration state for an older record, and produced no browser warnings or errors. The verification was read-only.
@@ -68,8 +107,8 @@ Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational s
 ## Repository health
 
 - GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
-- Default branch at capture: `main` at `7d430904d7070fc5a9a2f19ea31d025ed1ce956b`.
-- The deployed P0 release-hardening revision passes 764 tests, AI/project-state validation, the production build, and the bundle-budget gate. Its reviewed database migrations are live.
+- Default branch at capture: `main` at `204c220485fefd9b16e713dafe6fdb50031f1b92`.
+- The RingCentral correction at `6f27abb` passes 4,298 tests, AI/project-state and tenancy validation, the production build, the bundle-budget gate, and module startup checks. It has no database migration.
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.
 - The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
@@ -81,8 +120,8 @@ Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational s
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
 - The metadata-only catalog snapshot was refreshed through the workspace-setup release hardening and contains 89 public tables/views, 229 foreign-key column relationships, 271 policies, 79 public functions, 103 trigger-event entries, 6 storage buckets, and 129 applied migration records.
-- Latest repository migration: `20260813150000_workspace_display_order.sql`.
-- The latest live provider ledger entry is `20260810182232_workspace_setup_revision_save_fix`. Repository filenames retain reviewed forward-order timestamps while Supabase records provider-generated ledger timestamps.
+- Latest repository migration: `20260827110000_company_contact_permission_reconcile.sql`.
+- The latest live provider ledger entry is `20260826195939_company_contact_permission_reconcile`. Repository filenames retain reviewed forward-order timestamps while Supabase records provider-generated ledger timestamps.
 - Live verification confirmed the workspace-keyed setup table, SELECT-only authenticated table grant, company-admin RLS, and all three fixed-search-path administrator RPCs. A rollback-only test passed draft save, identical retry, manual-app preservation, sibling isolation, and questionnaire reset, then confirmed zero surviving probe rows.
 - Live verification confirmed the quote request column and unique partial index, SECURITY INVOKER conversion RPC, authenticated-only execute grant, per-kind operational-workspace seeding logic, and zero missing contacts/deals/jobs pipeline kinds across active workspaces.
 - Post-migration advisors reported no ERROR or CRITICAL findings. The operational-workspace RPC retains its previously documented authenticated SECURITY DEFINER warning because it performs its own company-admin authorization with a fixed search path.

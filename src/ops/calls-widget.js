@@ -29,7 +29,7 @@ export function createCallsWidget(ctx) {
       : ((CALLS_WIDGET_RANGE_OPTIONS.find(([id]) => id === widgetRange) || [])[1] || 'Last 7 days');
 
     if (rangeKey) ensureCallsData(companyId, rangeKey);
-    else if (!state.callsPresence.forbidden && !state.callsPresence.notConnected) ensureCallsPresencePolling(companyId);
+    else ensureCallsPresencePolling(companyId);
 
     if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
 

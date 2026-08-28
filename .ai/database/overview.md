@@ -1,6 +1,35 @@
 # Database overview
 
-The live Supabase public catalog was refreshed through 2026-08-10T18:23:17.639Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+The full machine-readable Supabase catalog was refreshed through 2026-08-10T18:23:17.639Z;
+targeted live verification of the 2026-08-27 priority migrations completed at
+2026-08-26T20:00:00.933Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata
+only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## 2026-08-27 priority migrations
+
+The permission split and recycle migrations are applied to production. A third forward-only
+reconciliation migration records the final catalog shape independently of application order:
+
+- `20260826090000_company_contacts_permission_split.sql` centralizes legacy/granular Company
+  Contacts permission aliases in `app_private.has_company_permission` and makes the policies use
+  only their exact granular operation key.
+- `20260827100000_company_contact_field_recycle.sql` adds soft-delete metadata to
+  `company_contact_fields`, limits normal reads to active definitions, revokes direct browser
+  DELETE, and registers the source with the existing Recycle Bin functions.
+- `20260827110000_company_contact_permission_reconcile.sql` removes the superseded broad policies,
+  prevents browser writes from setting recycle metadata directly, splits the retained options
+  catalogue's write policy by operation, and indexes the new `deleted_by` foreign key.
+
+Post-migration catalog verification confirmed the aliases, active-only policies, recycle metadata,
+revoked DELETE grant and both field indexes. The live migration versions are recorded in the
+manifest after the final reconciliation is applied.
+
+Supabase recorded the three forward changes as `20260826195655_company_contact_field_recycle`,
+`20260826195746_company_contacts_permission_split`, and
+`20260826195939_company_contact_permission_reconcile`. Security advisors reported no finding tied
+to the changed objects. Performance advisors reported only the expected new/unused index notices;
+the duplicate-policy warnings seen between the second and third migration were removed by the
+reconciliation.
 
 ## Catalog summary
 
@@ -11,7 +40,7 @@ The live Supabase public catalog was refreshed through 2026-08-10T18:23:17.639Z.
 - Triggers: 103
 - Storage buckets: 6
 - Applied migration ledger entries: 129
-- Latest live ledger entry: `20260810182232_workspace_setup_revision_save_fix`
+- Latest live ledger entry: `20260826195939_company_contact_permission_reconcile`
 
 ## Operational-workspace identity
 

@@ -357,9 +357,10 @@ test('nothing is written until Save, and Save renumbers the order', () => {
   // reordering not worth using.
   assert.match(body, /normalizeCompanyContactField\(\{ \.\.\.field, position: index \+ 1 \}\)/);
   // The field editor writes the directory's SCHEMA, which the 20260826090000 split gave its
-  // own key -- deleting a field here is unrecoverable, unlike editing one contact.
+  // own key. Removed definitions go through the shared 30-day Recycle Bin path.
   assert.match(body, /requirePermission\('company_contacts\.fields\.manage', companyId\)/);
-  assert.match(body, /\.delete\(\)\.in\('id', fieldDraft\.removed\)/);
+  assert.match(body, /recycleCompanyContactFieldDefinitions\(fieldDraft\.removed, recycleDeleteRecord\)/);
+  assert.doesNotMatch(body, /from\('company_contact_fields'\)\.delete/);
   // Adding a field then changing your mind must cost nothing: only fields that were really
   // stored are queued for deletion.
   const remove = fn('removeCompanyContactField', page);
@@ -457,16 +458,18 @@ test('the values live under the field id, and the column is not called values', 
   assert.match(sql, /add column if not exists field_values jsonb/);
   assert.match(sql, /add column if not exists hidden boolean not null default false/);
   assert.match(fn('companyContactValue'), /contact\?\.field_values\?\.\[field\.id\] \?\? ''/);
-  assert.match(fn('saveCompanyContactForm', page), /fieldValues\[field\.id\] = value/);
+  assert.match(fn('saveCompanyContactForm', page), /submittedFieldValues\[field\.id\] = value/);
+  assert.match(fn('saveCompanyContactForm', page), /mergeCompanyContactFieldValues\(existing\?\.field_values, fields, submittedFieldValues\)/);
 });
 
-test('a field the company deleted stops being collected, values and all', () => {
-  // Read against the field list, not the form: a stale input for a field somebody removed
-  // mid-edit must not write a value nothing can display again.
+test('a recycled field cannot be overwritten by a stale form input', () => {
+  // Read submitted values against the active field list, not the form. The merge helper keeps
+  // the stored answer for recovery while refusing a stale input for the recycled definition.
   const body = fn('saveCompanyContactForm', page);
   assert.match(body, /const fields = companyContactFieldsFor\(companyId\);/);
   assert.match(body, /fields\.forEach\(\(field\) => \{/);
-  assert.ok(body.indexOf('const fields = companyContactFieldsFor') < body.indexOf('fieldValues[field.id]'));
+  assert.ok(body.indexOf('const fields = companyContactFieldsFor') < body.indexOf('submittedFieldValues[field.id]'));
+  assert.match(body, /mergeCompanyContactFieldValues\(existing\?\.field_values, fields, submittedFieldValues\)/);
 });
 
 test('name stays a real column, because it is the title', () => {
