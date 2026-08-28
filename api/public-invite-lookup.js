@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody, requireAllowedOrigin, setApiHeaders } from './_lib/http-security.js';
-import { enforceRateLimit } from './_lib/rate-limit.js';
-import { supabaseConfigured, supabaseRpc } from './_lib/supabase-admin.js';
+import { enforceDurableRateLimit } from './_lib/rate-limit.js';
+import { createAdminFetch, supabaseConfigured, supabaseRpc } from './_lib/supabase-admin.js';
 
 // Public company-invite lookup. Rate-limited per IP so invite tokens (which
 // reveal a company name + the invited email) can't be enumerated by brute force.
@@ -10,7 +10,9 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   if (!supabaseConfigured()) return res.status(500).json({ error: 'Invites are not configured.' });
-  if (!enforceRateLimit(req, res, { namespace: 'public-invite-lookup', limit: 40, windowMs: 10 * 60 * 1000 })) return;
+  if (!await enforceDurableRateLimit(req, res, {
+    namespace: 'public-invite-lookup', limit: 40, windowMs: 10 * 60 * 1000, db: createAdminFetch(),
+  })) return;
 
   try {
     requireAllowedOrigin(req);

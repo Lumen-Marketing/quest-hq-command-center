@@ -400,6 +400,48 @@
    "rls_enabled": true
   },
   {
+   "name": "api_rate_limits",
+   "schema": "public",
+   "columns": [
+    {
+     "name": "bucket",
+     "default": null,
+     "nullable": false,
+     "position": 1,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "count",
+     "default": "0",
+     "nullable": false,
+     "position": 2,
+     "udt_name": "int4",
+     "data_type": "integer"
+    },
+    {
+     "name": "reset_at",
+     "default": null,
+     "nullable": false,
+     "position": 3,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    },
+    {
+     "name": "updated_at",
+     "default": "now()",
+     "nullable": false,
+     "position": 4,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    }
+   ],
+   "primary_key": [
+    "bucket"
+   ],
+   "rls_enabled": true
+  },
+  {
    "name": "audit_events",
    "schema": "public",
    "columns": [
@@ -13245,6 +13287,16 @@
    "authenticated_execute": true
   },
   {
+   "name": "consume_rate_limit",
+   "returns": "jsonb",
+   "arguments": "p_bucket text, p_limit integer, p_window_seconds integer",
+   "volatility": "v",
+   "anon_execute": false,
+   "security_definer": true,
+   "service_role_execute": true,
+   "authenticated_execute": false
+  },
+  {
    "name": "convert_contact_to_quote",
    "returns": "jsonb",
    "arguments": "p_contact_id text, p_request_id uuid",
@@ -14619,9 +14671,13 @@
   {
    "name": "revoke_anon_execute_app_private",
    "version": "20260828004405"
+  },
+  {
+   "name": "durable_rate_limits",
+   "version": "20260828005040"
   }
  ],
- "captured_at": "2026-08-28T00:46:12.59339+00:00",
+ "captured_at": "2026-08-28T00:55:36.764677+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",

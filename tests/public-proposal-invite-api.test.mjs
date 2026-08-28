@@ -14,7 +14,9 @@ const migration = readRoot('supabase/migrations/202607151200_revoke_anon_public_
 
 test('every public proposal/invite endpoint is rate-limited, origin-checked, and POST-only', () => {
   for (const source of [open, respond, invite]) {
-    assert.match(source, /enforceRateLimit/);
+    // Durable, not just in-memory. What is guessed at these three is a token, and a counter
+    // that lives in one lambda's memory and resets on every cold start is not a limit on that.
+    assert.match(source, /enforceDurableRateLimit/);
     assert.match(source, /requireAllowedOrigin/);
     assert.match(source, /readJsonBody/);
     assert.match(source, /setApiHeaders/);

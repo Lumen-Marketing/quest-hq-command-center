@@ -4,7 +4,7 @@ Only confirmed, actionable items belong here.
 
 ## Six app_private helpers still carry pg_temp in their search path
 
-Confirmed 2026-08-28, after `20260828010000_revoke_anon_execute_app_private.sql`.
+Confirmed 2026-08-28, after `20260828004405_revoke_anon_execute_app_private.sql`.
 
 `chat_attachment_visible`, `chat_left_at`, `chat_message_visible`, `guard_system_role`,
 `guard_wildcard_permission`, `companies_seed_task_taxonomy` and `seed_company_default_roles`
@@ -19,6 +19,17 @@ than the dangerous one, and anon can no longer execute any of them.
 
 Fix by reading each body, schema-qualifying anything that is not already, and moving it to
 `search_path = ''` one function at a time with a live probe between each.
+
+## Rate limiting is durable on the endpoints that need it
+
+RESOLVED 2026-08-28 by `20260828005040_durable_rate_limits.sql`. The in-memory limiter is still
+per serverless instance and still resets on a cold start -- that is fine for throttling, and it
+remains the only limiter on the endpoints that merely need throttling. The six endpoints where a
+secret is guessed now also count in Postgres. See .ai/decisions.md.
+
+The comment in `api/wb-intake-open.js` saying the limiter "cannot be relied on alone" is still
+accurate and still the reason the per-link lockout exists; it is simply no longer the only
+backstop.
 
 ## Two applied migrations have no file in this repository
 

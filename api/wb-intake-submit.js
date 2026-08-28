@@ -20,7 +20,7 @@ export default defineEndpoint(
     notConfiguredStatus: 500,
     notConfiguredMessage: 'Public intake links are not configured.',
     bodyLimitBytes: 512 * 1024,
-    rateLimit: { namespace: 'wb-intake-submit', limit: 12, windowMs: 10 * 60 * 1000 },
+    rateLimit: { namespace: 'wb-intake-submit', limit: 12, windowMs: 10 * 60 * 1000, durable: true },
   },
   async ({ body, db }) => {
     // Two cheap spam gates, the same pair the public form uses: a honeypot field no human

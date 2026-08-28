@@ -16,7 +16,7 @@ import {
   clientIp,
   HttpError,
 } from './http-security.js';
-import { consumeRateLimit } from './rate-limit.js';
+import { consumeRateLimit, consumeDurableRateLimit } from './rate-limit.js';
 import { verifyPortalSession, portalSessionStillValid } from './portal-session.js';
 import { createAdminFetch, isSupabaseConfigured } from './supabase-admin.js';
 
@@ -126,27 +126,58 @@ export function defineEndpoint(config, handler) {
         return sendJson(res, notConfiguredStatus, { error: notConfiguredMessage });
       }
 
+      const db = overrides.db || createAdminFetch();
+
       if (rateLimit) {
-        const result = consumeRateLimit({
-          key: `${rateLimit.namespace}:${clientIp(req)}`,
+        const ip = clientIp(req);
+        const writeLimitHeaders = (result) => {
+          res.setHeader('X-RateLimit-Limit', String(result.limit));
+          res.setHeader('X-RateLimit-Remaining', String(result.remaining));
+          res.setHeader('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
+        };
+        const refuse = (result) => {
+          res.setHeader('Retry-After', String(result.retryAfterSeconds));
+          return sendJson(res, 429, { error: 'Too many requests. Please try again shortly.' });
+        };
+
+        const local = consumeRateLimit({
+          key: `${rateLimit.namespace}:${ip}`,
           limit: rateLimit.limit,
           windowMs: rateLimit.windowMs,
         });
-        res.setHeader('X-RateLimit-Limit', String(result.limit));
-        res.setHeader('X-RateLimit-Remaining', String(result.remaining));
-        res.setHeader('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
-        if (!result.allowed) {
-          res.setHeader('Retry-After', String(result.retryAfterSeconds));
-          return sendJson(res, 429, { error: 'Too many requests. Please try again shortly.' });
-        }
-      }
+        writeLimitHeaders(local);
+        if (!local.allowed) return refuse(local);
 
-      if (requireOrigin) requireAllowedOrigin(req); // throws HttpError(403)
+        // The origin check happens between the two limiters, not after both. It is free, and a
+        // request from a disallowed origin should not cost a database round trip.
+        if (requireOrigin) requireAllowedOrigin(req); // throws HttpError(403)
+
+        // `durable: true` marks an endpoint where a secret is being guessed. The in-memory
+        // count above is per serverless instance and dies on a cold start, so it cannot be the
+        // whole answer there; this one counts in Postgres for the entire deployment. Only
+        // requests that already passed locally get this far, so the round trip is charged to
+        // attackers rather than to ordinary traffic. Null means the database could not answer
+        // — see consumeDurableRateLimit for why that fails open.
+        if (rateLimit.durable) {
+          const shared = await consumeDurableRateLimit(db, {
+            namespace: rateLimit.namespace,
+            ip,
+            limit: rateLimit.limit,
+            windowMs: rateLimit.windowMs,
+          });
+          if (shared) {
+            writeLimitHeaders(shared);
+            if (!shared.allowed) return refuse(shared);
+          }
+        }
+      } else if (requireOrigin) {
+        requireAllowedOrigin(req); // throws HttpError(403)
+      }
 
       const query = queryFrom(req);
       const body = await readBody(req, bodyLimitBytes);
 
-      const ctx = { req, res, query, body, ...overrides, db: overrides.db || createAdminFetch() };
+      const ctx = { req, res, query, body, ...overrides, db };
 
       if (auth === 'portal-session') {
         const session = verifyPortalSession(body.session || query.session);

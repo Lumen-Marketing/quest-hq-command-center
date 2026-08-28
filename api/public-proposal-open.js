@@ -1,6 +1,6 @@
 import { errorResponse, readJsonBody, requireAllowedOrigin, setApiHeaders } from './_lib/http-security.js';
-import { enforceRateLimit } from './_lib/rate-limit.js';
-import { supabaseConfigured, supabaseRpc } from './_lib/supabase-admin.js';
+import { enforceDurableRateLimit } from './_lib/rate-limit.js';
+import { createAdminFetch, supabaseConfigured, supabaseRpc } from './_lib/supabase-admin.js';
 
 // Public proposal view. Anonymous browsers can no longer call the RPC directly
 // (anon EXECUTE is revoked) — they come through here, where every request is
@@ -11,7 +11,9 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   if (!supabaseConfigured()) return res.status(500).json({ error: 'Proposals are not configured.' });
-  if (!enforceRateLimit(req, res, { namespace: 'public-proposal-open', limit: 60, windowMs: 10 * 60 * 1000 })) return;
+  if (!await enforceDurableRateLimit(req, res, {
+    namespace: 'public-proposal-open', limit: 60, windowMs: 10 * 60 * 1000, db: createAdminFetch(),
+  })) return;
 
   try {
     requireAllowedOrigin(req);

@@ -13,7 +13,9 @@ export default defineEndpoint(
   {
     method: 'POST',
     auth: 'none',
-    rateLimit: { namespace: 'client-portal-open', limit: 10, windowMs: 10 * 60 * 1000 },
+    // durable: the portal password is guessed here, so the count must survive a cold start
+    // and be shared across instances.
+    rateLimit: { namespace: 'client-portal-open', limit: 10, windowMs: 10 * 60 * 1000, durable: true },
     notConfiguredMessage: 'Client portal API is not configured.',
   },
   async ({ body, db }) => {

@@ -24,7 +24,7 @@ export default defineEndpoint(
     // Deliberately tight: this is the endpoint a passcode is guessed against. The per-link
     // lockout below is the real defence -- this limiter is in-memory and per serverless
     // instance, so it does not survive a cold start and cannot be relied on alone.
-    rateLimit: { namespace: 'wb-intake-open', limit: 40, windowMs: 10 * 60 * 1000 },
+    rateLimit: { namespace: 'wb-intake-open', limit: 40, windowMs: 10 * 60 * 1000, durable: true },
   },
   async ({ req, query, body, db }) => {
     const token = String((req.method === 'POST' ? body.token : query.token) || '').trim();

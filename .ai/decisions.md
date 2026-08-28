@@ -1736,3 +1736,35 @@ outright rather than letting an uncounted guess through, because that much simul
 IS the attack. And the submission slot is now claimed BEFORE the row is written, with an
 explicit release if the insert fails — the reverse of the old ordering, which protected against
 a wasted slot at the cost of letting concurrent posts overshoot the cap.
+
+## Rate limiting is two limiters, not one (2026-08-28)
+
+`api/_lib/rate-limit.js` kept its counters in a Map in module scope. On Vercel that makes the
+real ceiling the configured limit multiplied by the number of live lambda instances, reset by
+every cold start. `wb-intake-open.js` already said so in a comment; the gap was that five
+endpoints relied on it as the only thing between an attacker and a secret.
+
+The in-memory limiter stays exactly as it was, and is still the whole story for ordinary
+throttling. Endpoints where a SECRET is being guessed additionally count in Postgres, through
+`public.consume_rate_limit` and `public.api_rate_limits`: portal open (a password), intake open
+and submit (a passcode), and the three public token endpoints (invite, proposal open, proposal
+respond).
+
+Three properties worth keeping:
+
+- **Local first, shared second.** A request refused by the in-memory window never reaches the
+  database, so the round trip is charged to attackers rather than to ordinary traffic. The
+  origin check sits between them, because it is free and a disallowed origin should not cost a
+  query either.
+- **Fails open.** If the RPC cannot answer, the request proceeds on the local ceiling alone.
+  Behind an existing limiter, that degrades to the protection that existed before this change;
+  failing closed would turn a Supabase blip into an outage of every public portal and proposal.
+- **No IP is stored.** The bucket key is a SHA-256 of `namespace:ip`, hashed in the process
+  before it is sent. The digest is enough to count against and useless for identifying anyone,
+  and the namespace inside the hash keeps one endpoint's window from colliding with another's.
+
+`api_rate_limits` is a server-only ledger in the same shape as `wo_counters` and `checkin_log`:
+RLS on, no policies, no grants to any browser role. `consume_rate_limit` is SECURITY DEFINER and
+executable by `service_role` only -- a browser role that could call it could inflate somebody
+else's counter. Expired rows are swept opportunistically on roughly one call in a hundred, with
+a LIMIT, so no cron entry is needed and no single request pays for the cleanup.
