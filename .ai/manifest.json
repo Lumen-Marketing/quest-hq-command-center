@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "generated_at": "2026-08-28T01:05:00.000Z",
-  "generated_from_commit": "e25dcc185e30b02c801d7f13f9f7bf93dcbd9932",
+  "generated_from_commit": "0fea2ae72823c653557c72cdf86984b24e43c7d7",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "e25dcc185e30b02c801d7f13f9f7bf93dcbd9932",
+    "main_commit_at_capture": "0fea2ae72823c653557c72cdf86984b24e43c7d7",
     "latest_migration": "20260828005040_durable_rate_limits.sql"
   },
   "live": {
