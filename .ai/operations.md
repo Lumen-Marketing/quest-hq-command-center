@@ -60,8 +60,15 @@ neither has a working tree to be dirty.
 4. Preserve RLS, company and operational-workspace scope, grants, routines, triggers, storage policy, and rollback/reconciliation intent.
 5. Apply through the Supabase migration workflow; do not paste DDL through an ordinary query path.
 6. Re-query the live catalog.
-7. Refresh database/snapshot.json, generated database pages, current-state.md, and manifest.json.
+7. Refresh database/snapshot.json by running [database/snapshot-refresh.sql](database/snapshot-refresh.sql)
+   and writing its single result to that file, then update the generated database pages,
+   current-state.md, and manifest.json.
 8. Run npm run ai:check and npm run check.
+
+Step 7 is not optional bookkeeping. `npm run tenancy:check` refuses to certify the tenant
+matrix while a migration is dated after the snapshot's `captured_at`, because a snapshot that
+predates the schema cannot describe it. Adding a migration without refreshing the snapshot will
+fail the build; refresh it rather than relaxing the gate.
 
 Supabase's 2026 API hardening means new tables must be deliberately exposed and granted; never assume a created table is automatically reachable from the Data API.
 
