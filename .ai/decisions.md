@@ -1911,3 +1911,20 @@ save did not land, which is what makes `sendToTrashAndSave` put the records back
 A refused record change also aborts the document write rather than continuing. Writing the
 document afterwards would store a half-applied edit: the record removed from the list and parked
 in the app's trash, while the row it was meant to delete is untouched.
+
+## Startup deadlines cancel work, and partial data stays visible (2026-08-29)
+
+The first-workspace loader used a Promise race for its 15-second deadline. The user stopped
+waiting, but the Supabase request kept running, consuming a browser connection and potentially
+settling after the fallback had already painted. Initial query builders now receive one
+AbortSignal and the deadline aborts that request before returning the timeout result.
+
+Independent reads still settle separately: a temporary failure must not blank cached data that
+did load previously. The shell therefore keeps the last safe rows, records the failed areas,
+labels the connection `Quest Supabase partial`, and offers a visible Retry action. `live` is no
+longer used as a claim that every initial query succeeded.
+
+Backup payloads are detail data, not list data. Startup and realtime refresh select backup
+metadata only; download and restore hydrate the exact saved payload by id when requested. There
+is deliberately no fallback that builds a new snapshot from current state, because exporting
+current state under an old backup's label is data corruption disguised as recovery.

@@ -1,6 +1,6 @@
 # Public relationships
 
-Captured through 2026-08-10T18:23:17.639Z. Composite foreign keys appear as one row per paired column.
+Captured through 2026-08-28T19:16:59.435Z. Composite foreign keys appear as one row per paired column.
 
 | Constraint | From | To | Update | Delete |
 | --- | --- | --- | --- | --- |
@@ -46,6 +46,10 @@ Captured through 2026-08-10T18:23:17.639Z. Composite foreign keys appear as one 
 | companies_primary_owner_profile_id_fkey | `companies.primary_owner_profile_id` | `profiles.id` | NO ACTION | SET NULL |
 | company_active_timers_company_id_fkey | `company_active_timers.company_id` | `companies.id` | NO ACTION | CASCADE |
 | company_active_timers_profile_id_fkey | `company_active_timers.profile_id` | `profiles.id` | NO ACTION | CASCADE |
+| company_contact_fields_company_id_fkey | `company_contact_fields.company_id` | `companies.id` | NO ACTION | CASCADE |
+| company_contact_fields_deleted_by_fkey | `company_contact_fields.deleted_by` | `profiles.id` | NO ACTION | SET NULL |
+| company_contact_types_company_id_fkey | `company_contact_options.company_id` | `companies.id` | NO ACTION | CASCADE |
+| company_contacts_company_id_fkey | `company_contacts.company_id` | `companies.id` | NO ACTION | CASCADE |
 | company_invites_accepted_by_fkey | `company_invites.accepted_by` | `profiles.id` | NO ACTION | SET NULL |
 | company_invites_company_id_fkey | `company_invites.company_id` | `companies.id` | NO ACTION | CASCADE |
 | company_invites_invited_by_fkey | `company_invites.invited_by` | `profiles.id` | NO ACTION | SET NULL |
@@ -170,7 +174,6 @@ Captured through 2026-08-10T18:23:17.639Z. Composite foreign keys appear as one 
 | pricebook_vendor_prices_vendor_id_fkey | `pricebook_vendor_prices.vendor_id` | `pricebook_vendors.id` | NO ACTION | CASCADE |
 | pricebook_vendors_company_id_fkey | `pricebook_vendors.company_id` | `companies.id` | NO ACTION | CASCADE |
 | pricebook_vendors_deleted_by_fkey | `pricebook_vendors.deleted_by` | `profiles.id` | NO ACTION | SET NULL |
-| profiles_id_fkey | `profiles.id` | `users.id` | NO ACTION | CASCADE |
 | profiles_member_id_fkey | `profiles.member_id` | `team_members.id` | NO ACTION | NO ACTION |
 | profiles_supervisor_id_fkey | `profiles.supervisor_id` | `team_members.id` | NO ACTION | NO ACTION |
 | projects_company_id_fkey | `projects.company_id` | `companies.id` | NO ACTION | CASCADE |
@@ -197,7 +200,9 @@ Captured through 2026-08-10T18:23:17.639Z. Composite foreign keys appear as one 
 | task_type_statuses_company_id_fkey | `task_type_statuses.company_id` | `companies.id` | NO ACTION | CASCADE |
 | task_types_company_id_fkey | `task_types.company_id` | `companies.id` | NO ACTION | CASCADE |
 | tasks_assignee_id_fkey | `tasks.assignee_id` | `team_members.id` | NO ACTION | RESTRICT |
+| tasks_company_deal_id_fkey | `tasks.company_id` | `deals.id` | NO ACTION | NO ACTION |
 | tasks_company_deal_id_fkey | `tasks.company_id` | `deals.company_id` | NO ACTION | NO ACTION |
+| tasks_company_deal_id_fkey | `tasks.deal_id` | `deals.company_id` | NO ACTION | NO ACTION |
 | tasks_company_deal_id_fkey | `tasks.deal_id` | `deals.id` | NO ACTION | NO ACTION |
 | tasks_company_id_fkey | `tasks.company_id` | `companies.id` | NO ACTION | RESTRICT |
 | tasks_creator_id_fkey | `tasks.creator_id` | `team_members.id` | NO ACTION | RESTRICT |
@@ -206,6 +211,8 @@ Captured through 2026-08-10T18:23:17.639Z. Composite foreign keys appear as one 
 | tasks_workspace_id_fkey | `tasks.workspace_id` | `workspaces.id` | NO ACTION | RESTRICT |
 | time_entries_task_id_fkey | `time_entries.task_id` | `tasks.id` | NO ACTION | CASCADE |
 | time_entries_user_id_fkey | `time_entries.user_id` | `team_members.id` | NO ACTION | RESTRICT |
+| underwriting_calculators_company_id_fkey | `underwriting_calculators.company_id` | `companies.id` | NO ACTION | CASCADE |
+| underwriting_calculators_created_by_fkey | `underwriting_calculators.created_by` | `profiles.id` | NO ACTION | SET NULL |
 | underwriting_cases_company_id_fkey | `underwriting_cases.company_id` | `companies.id` | NO ACTION | CASCADE |
 | underwriting_cases_contact_id_fkey | `underwriting_cases.contact_id` | `contacts.id` | NO ACTION | CASCADE |
 | underwriting_cases_created_by_fkey | `underwriting_cases.created_by` | `profiles.id` | NO ACTION | SET NULL |
@@ -214,6 +221,19 @@ Captured through 2026-08-10T18:23:17.639Z. Composite foreign keys appear as one 
 | user_role_assignments_company_id_fkey | `user_role_assignments.company_id` | `companies.id` | NO ACTION | CASCADE |
 | user_role_assignments_profile_id_fkey | `user_role_assignments.profile_id` | `profiles.id` | NO ACTION | CASCADE |
 | user_role_assignments_role_id_fkey | `user_role_assignments.role_id` | `roles.id` | NO ACTION | CASCADE |
+| wb_intake_links_company_id_fkey | `wb_intake_links.company_id` | `companies.id` | NO ACTION | CASCADE |
+| wb_intake_links_created_by_fkey | `wb_intake_links.created_by` | `profiles.id` | NO ACTION | SET NULL |
+| wb_intake_links_workspace_id_fkey | `wb_intake_links.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
+| wb_intake_submissions_company_id_fkey | `wb_intake_submissions.company_id` | `companies.id` | NO ACTION | CASCADE |
+| wb_intake_submissions_reviewed_by_fkey | `wb_intake_submissions.reviewed_by` | `profiles.id` | NO ACTION | SET NULL |
+| wb_intake_submissions_token_fkey | `wb_intake_submissions.token` | `wb_intake_links.token` | NO ACTION | CASCADE |
+| wb_intake_submissions_workspace_id_fkey | `wb_intake_submissions.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
+| wb_record_events_company_id_fkey | `wb_record_events.company_id` | `companies.id` | NO ACTION | CASCADE |
+| wb_record_events_created_by_fkey | `wb_record_events.created_by` | `profiles.id` | NO ACTION | SET NULL |
+| wb_record_events_workspace_id_fkey | `wb_record_events.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
+| wb_records_company_id_fkey | `wb_records.company_id` | `companies.id` | NO ACTION | CASCADE |
+| wb_records_created_by_fkey | `wb_records.created_by` | `profiles.id` | NO ACTION | SET NULL |
+| wb_records_workspace_id_fkey | `wb_records.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
 | workspace_backup_copies_backup_id_fkey | `workspace_backup_copies.backup_id` | `workspace_backups.id` | NO ACTION | SET NULL |
 | workspace_backup_copies_company_id_fkey | `workspace_backup_copies.company_id` | `companies.id` | NO ACTION | CASCADE |
 | workspace_backup_copies_created_by_fkey | `workspace_backup_copies.created_by` | `profiles.id` | NO ACTION | SET NULL |

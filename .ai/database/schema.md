@@ -1,6 +1,6 @@
 # Public schema catalog
 
-Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullable columns end in `?`.
+Captured through 2026-08-28T19:16:59.435Z from the live Supabase catalog. Nullable columns end in `?`.
 
 ## public.accounts
 
@@ -19,6 +19,12 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 - RLS: enabled
 - Primary key: id
 - Columns: `id text`; `company_id text`; `type text`; `subject text`; `body text`; `related_type text`; `related_id text`; `account_id text?`; `due_at timestamptz?`; `completed_at timestamptz?`; `owner_name text`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `contact_id text?`; `site_id text?`; `deal_id text?`; `job_id uuid?`; `deleted_at timestamptz?`; `deleted_by uuid?`; `workspace_id uuid`
+
+## public.api_rate_limits
+
+- RLS: enabled
+- Primary key: bucket
+- Columns: `bucket text`; `count int4`; `reset_at timestamptz`; `updated_at timestamptz`
 
 ## public.audit_events
 
@@ -104,6 +110,24 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 - Primary key: profile_id
 - Columns: `profile_id uuid`; `company_id text`; `task_id text`; `task_title text`; `started_at timestamptz`; `updated_at timestamptz`
 
+## public.company_contact_fields
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id text`; `company_id text`; `label text`; `type text`; `config jsonb`; `required bool`; `position int4`; `created_at timestamptz`; `updated_at timestamptz`; `hidden bool`; `deleted_at timestamptz?`; `deleted_by uuid?`
+
+## public.company_contact_options
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id text`; `company_id text`; `label text`; `color text`; `position int4`; `created_at timestamptz`; `updated_at timestamptz`; `kind text`
+
+## public.company_contacts
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id text`; `company_id text`; `name text`; `contact_type text`; `organization text`; `phone text`; `email text`; `location text`; `notes text`; `last_activity_at timestamptz?`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `deleted_at timestamptz?`; `deleted_by uuid?`; `field_values jsonb`
+
 ## public.company_invites
 
 - RLS: enabled
@@ -162,7 +186,7 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id text`; `company_id text`; `name text`; `phone text`; `email text`; `location text`; `stage text`; `value numeric`; `owner_name text`; `notes text`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `account_id text?`; `title text`; `source text`; `last_activity_at timestamptz?`; `temperature text?`; `pay_type text`; `roof_system text`; `country_code text`; `country text`; `province text`; `city text`; `barangay text`; `street text`; `block_no text`; `zip text`; `lat text`; `lng text`; `secondary_roof_system text`; `has_multiple_roof_systems bool`; `deleted_at timestamptz?`; `deleted_by uuid?`; `workspace_id uuid`
+- Columns: `id text`; `company_id text`; `name text`; `phone text`; `email text`; `location text`; `stage text`; `value numeric`; `owner_name text`; `notes text`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `account_id text?`; `title text`; `source text`; `last_activity_at timestamptz?`; `temperature text?`; `pay_type text`; `roof_system text`; `country_code text`; `country text`; `province text`; `city text`; `barangay text`; `street text`; `block_no text`; `zip text`; `lat text`; `lng text`; `secondary_roof_system text`; `has_multiple_roof_systems bool`; `deleted_at timestamptz?`; `deleted_by uuid?`; `workspace_id uuid`; `contact_type text`
 
 ## public.crm_sites
 
@@ -174,7 +198,7 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id text`; `company_id text`; `account_id text?`; `primary_contact_id text?`; `name text`; `stage text`; `status text`; `value numeric`; `probability int4`; `close_date date?`; `owner_name text`; `source text`; `job_id uuid?`; `notes text`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `site_id text?`; `line_items jsonb`; `deleted_at timestamptz?`; `deleted_by uuid?`; `workspace_id uuid`; `contact_quote_request_id uuid?`
+- Columns: `id text`; `company_id text`; `account_id text?`; `primary_contact_id text?`; `name text`; `stage text`; `status text`; `value numeric`; `probability int4`; `close_date date?`; `owner_name text`; `source text`; `job_id uuid?`; `notes text`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `site_id text?`; `line_items jsonb`; `deleted_at timestamptz?`; `deleted_by uuid?`; `workspace_id uuid`; `contact_quote_request_id uuid?`; `takeoff jsonb`
 
 ## public.eod_reports
 
@@ -470,24 +494,17 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 - Primary key: id
 - Columns: `id text`; `user_id text`; `task_id text`; `start_at timestamptz`; `end_at timestamptz`; `duration_ms int8`; `note text`; `created_at timestamptz`
 
-## public.underwriting_cases
-
-- RLS: enabled
-- Primary key: id
-- Columns: `id uuid`; `company_id text`; `contact_id text`; `contract_price numeric`; `material_cost numeric`; `labor_cost numeric`; `permit_cost numeric`; `disposal_cost numeric`; `other_cost numeric`; `overhead_percent numeric`; `commission_percent numeric`; `contingency_percent numeric`; `target_margin_percent numeric`; `notes text`; `takeoff jsonb`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `workspace_id uuid`
-- `takeoff` holds the GAF report the decision was priced from: `{ calculator_id, measurements }`. It belongs to the contact, not to the calculator.
-
-## public.deals — takeoff column
-
-- `takeoff jsonb not null default '{}'` holds the GAF measurements a quote was priced from: `{ calculator_id, measurements }`. It is on the deal rather than the contact because the Sales pipeline opens one deal per trade per address, so one customer can carry two quotes with two different roofs.
-
 ## public.underwriting_calculators
 
 - RLS: enabled
 - Primary key: id
 - Columns: `id uuid`; `company_id text`; `workspace_id text`; `name text`; `config jsonb`; `position int4`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`
-- `config` is the whole calculator — waste percent, tax percent and the ordered line items with their formulas and prices. It is read and written as a unit and never queried across, so a table per line would cost a migration every time the shape moves and buy nothing.
-- No rows are seeded. A company with no calculator of its own gets the built-in one from `src/underwriting/takeoff.js`.
+
+## public.underwriting_cases
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id uuid`; `company_id text`; `contact_id text`; `contract_price numeric`; `material_cost numeric`; `labor_cost numeric`; `permit_cost numeric`; `disposal_cost numeric`; `other_cost numeric`; `overhead_percent numeric`; `commission_percent numeric`; `contingency_percent numeric`; `target_margin_percent numeric`; `notes text`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `workspace_id uuid`; `takeoff jsonb`
 
 ## public.user_role_assignments
 
@@ -500,6 +517,30 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 - RLS: disabled
 - Primary key: none
 - Columns: `company_id text?`; `material_id uuid?`; `vendor_id uuid?`; `unit_cost numeric?`; `updated_at timestamptz?`
+
+## public.wb_intake_links
+
+- RLS: enabled
+- Primary key: token
+- Columns: `token text`; `company_id text`; `workspace_id uuid`; `app_id text`; `title text`; `intro text`; `visibility text`; `passcode_hash text?`; `passcode_salt text?`; `field_ids jsonb`; `status text`; `submission_count int4`; `max_submissions int4?`; `expires_at timestamptz?`; `failed_attempts int4`; `locked_until timestamptz?`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`
+
+## public.wb_intake_submissions
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id uuid`; `token text`; `company_id text`; `workspace_id uuid`; `app_id text`; `values jsonb`; `status text`; `accepted_item_id text?`; `reviewed_by uuid?`; `reviewed_at timestamptz?`; `submitted_name text`; `submitted_email text`; `created_at timestamptz`
+
+## public.wb_record_events
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id uuid`; `company_id text`; `workspace_id uuid`; `app_id text`; `item_id text`; `kind text`; `title text`; `body text`; `to_number text`; `scheduled_for timestamptz`; `status text`; `created_by uuid?`; `created_at timestamptz`; `completed_at timestamptz?`; `notified_at timestamptz?`
+
+## public.wb_records
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id text`; `company_id text`; `workspace_id uuid`; `app_id text`; `data jsonb`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`
 
 ## public.wo_counters
 
@@ -547,4 +588,4 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id uuid`; `company_id text`; `slug text`; `name text`; `description text`; `icon_key text`; `color text`; `status text`; `is_default bool`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `icon_image text`
+- Columns: `id uuid`; `company_id text`; `slug text`; `name text`; `description text`; `icon_key text`; `color text`; `status text`; `is_default bool`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `icon_image text`; `position int4`

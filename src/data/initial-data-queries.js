@@ -1,14 +1,40 @@
+import { WORKSPACE_BACKUP_METADATA_COLUMNS } from './workspace-backups.js';
+
 export function safeInitialDataQuery(query, { timeoutMs = 15000 } = {}) {
   const waitMs = Math.max(1, Number(timeoutMs) || 15000);
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const abortableQuery = controller && typeof query?.abortSignal === 'function'
+    ? query.abortSignal(controller.signal)
+    : query;
   let timer = null;
-  const settledQuery = Promise.resolve(query).catch((error) => ({ data: null, error }));
+  let timeoutError = null;
+  const settledQuery = Promise.resolve(abortableQuery).catch((error) => ({
+    data: null,
+    error: timeoutError || error,
+  }));
   const timeout = new Promise((resolve) => {
-    timer = setTimeout(() => resolve({
-      data: null,
-      error: new Error(`Initial workspace request timed out after ${waitMs}ms.`),
-    }), waitMs);
+    timer = setTimeout(() => {
+      timeoutError = new Error(`Initial workspace request timed out after ${waitMs}ms.`);
+      controller?.abort();
+      resolve({ data: null, error: timeoutError });
+    }, waitMs);
   });
   return Promise.race([settledQuery, timeout]).finally(() => clearTimeout(timer));
+}
+
+function initialResultLabel(key) {
+  const words = String(key || '')
+    .replace(/Result$/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .trim()
+    .toLowerCase();
+  return words ? words[0].toUpperCase() + words.slice(1) : 'Workspace data';
+}
+
+export function summarizeInitialDataFailures(results = {}) {
+  return Object.entries(results)
+    .filter(([, result]) => Boolean(result?.error))
+    .map(([key]) => initialResultLabel(key));
 }
 
 export async function loadInitialDataQueries(client, safeQuery = safeInitialDataQuery) {
@@ -48,7 +74,7 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     workspacesResult: client.from('workspaces').select('*').order('name', { ascending: true }),
     workspaceMembershipsResult: client.from('workspace_memberships').select('*'),
     workspacePluginsResult: client.from('workspace_plugins').select('*'),
-    workspaceBackupsResult: client.from('workspace_backups').select('*').order('created_at', { ascending: false }),
+    workspaceBackupsResult: client.from('workspace_backups').select(WORKSPACE_BACKUP_METADATA_COLUMNS).order('created_at', { ascending: false }),
     workspaceBuilderResult: client.from('workspace_builder_state').select('*'),
     // App Builder records moved out of the builder document into rows, so that the four
     // workspaces.records.* permissions have something to attach to. Loaded alongside the

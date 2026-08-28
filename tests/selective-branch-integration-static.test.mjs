@@ -16,6 +16,7 @@ const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const vercelJson = readFileSync(new URL('../vercel.json', import.meta.url), 'utf8');
+const vercelConfig = JSON.parse(vercelJson);
 const migrations = readdirSync(new URL('../supabase/migrations/', import.meta.url));
 
 test('supabase client is pinned and api routes are not swallowed by the SPA rewrite', () => {
@@ -23,7 +24,12 @@ test('supabase client is pinned and api routes are not swallowed by the SPA rewr
   assert.match(source, /supabaseClientCache = createSupabaseJsClient\(CONFIG\.supabaseUrl, CONFIG\.supabaseKey\);/);
   assert.match(packageJson, /"@supabase\/supabase-js":/);
   assert.doesNotMatch(indexHtml, /cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/);
-  assert.match(vercelJson, /"source": "\/\(\(\?!api\/\)\.\*\)"/);
+  const fallback = vercelConfig.rewrites.find((rule) => rule.destination === '/index.html');
+  assert.ok(fallback, 'expected the company-route SPA fallback');
+  const matcher = new RegExp(`^${fallback.source}$`);
+  assert.equal(matcher.test('/api/address-suggestions'), false, 'API routes must stay outside the SPA');
+  assert.equal(matcher.test('/assets/retired-build.js'), false, 'static assets must stay outside the SPA');
+  assert.equal(matcher.test('/company/lumen/jobs'), true, 'company routes must still open the SPA');
   assert.ok(existsSync(new URL('../api/address-suggestions.js', import.meta.url)));
 });
 

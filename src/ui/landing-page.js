@@ -9,9 +9,110 @@
 
 export function createLandingPage(ctx) {
   const {
-    activeCompanyId, appHref, companyPath, defaultCompanyId, getRoute, h, normalizeAuthMode, renderAuthModal, renderLandingWorkspaceBoard, safeReturnUrl,
+    activeCompanyId, appHref, companyPath, defaultCompanyId, getRoute, h, normalizeAuthMode, renderAuthModal, safeReturnUrl,
     CONFIG, state, questLogoMarkUrl, questbaseInteriorJobsUrl, app,
   } = ctx;
+
+  const QUESTBASE_LANDING_WORKSPACES = {
+    'cold-calling': {
+      title: 'Cold calling workspace',
+      description: 'Move lead lists into conversations and qualified opportunities.',
+      status: 'Active',
+      lanes: [
+        ['New lists', ['Phoenix homeowners', 'Monsoon follow-up']],
+        ['In progress', ['East Valley callbacks', 'Storm inquiry list']],
+        ['Qualified', ['Maria Alvarez', 'Daniel Brooks']],
+      ],
+    },
+    sales: {
+      title: 'Sales workspace',
+      description: 'Track every opportunity from lead to signed job.',
+      status: 'Active',
+      lanes: [
+        ['New leads', ['Maria Alvarez', 'Daniel Brooks']],
+        ['Estimate sent', ['Amanda Cole', 'James Patel']],
+        ['Contract out', ['Robert Hill', 'Laura Chen']],
+      ],
+    },
+    underwriting: {
+      title: 'Underwriting workspace',
+      description: 'Review documents, margins, and approvals in one queue.',
+      status: 'Review',
+      lanes: [
+        ['Intake', ['Job #2841', 'Job #2838']],
+        ['In review', ['Job #2829', 'Job #2824']],
+        ['Approved', ['Job #2817', 'Job #2812']],
+      ],
+    },
+    production: {
+      title: 'Production workspace',
+      description: 'Coordinate crews, materials, and completion dates.',
+      status: 'Scheduled',
+      lanes: [
+        ['Ready', ['Alvarez roof', 'Brooks repair']],
+        ['Scheduled', ['Cole install', 'Patel gutters']],
+        ['In progress', ['Hill project', 'Chen project']],
+      ],
+    },
+  };
+
+  function renderLandingWorkspaceBoard(workspaceKey = 'sales') {
+    const workspace = QUESTBASE_LANDING_WORKSPACES[workspaceKey] || QUESTBASE_LANDING_WORKSPACES.sales;
+    return workspace.lanes.map(([lane, cards]) => `
+      <section class="qb-landing-lane">
+        <div class="qb-landing-lane-head"><span>${h(lane)}</span><b>${cards.length}</b></div>
+        ${cards.map((card, index) => `
+          <article class="qb-landing-job-card">
+            <strong>${h(card)}</strong>
+            <p>${index ? 'Updated 2h ago' : 'Updated 18m ago'}</p>
+            <div class="qb-landing-card-foot">
+              <span>${h(workspace.status)}</span>
+              <b>${index ? 'JS' : 'AM'}</b>
+            </div>
+          </article>
+        `).join('')}
+      </section>
+    `).join('');
+  }
+
+  function renderLandingWorkspacePreview(workspaceKey = 'sales') {
+    const workspace = QUESTBASE_LANDING_WORKSPACES[workspaceKey];
+    const landing = document.querySelector('.qb-landing-shell');
+    if (!workspace || !landing) return;
+    landing.dataset.workspace = workspaceKey;
+    const title = landing.querySelector('[data-landing-workspace-title]');
+    const description = landing.querySelector('[data-landing-workspace-description]');
+    const board = landing.querySelector('[data-landing-workspace-board]');
+    if (title) title.textContent = workspace.title;
+    if (description) description.textContent = workspace.description;
+    if (board) {
+      board.innerHTML = renderLandingWorkspaceBoard(workspaceKey);
+      board.setAttribute('aria-labelledby', `landing-workspace-tab-${workspaceKey}`);
+    }
+    landing.querySelectorAll('[data-action="landing-preview-workspace"]').forEach((button) => {
+      const active = button.dataset.workspace === workspaceKey;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+  }
+
+  function handleLandingWorkspaceKeydown(event) {
+    const current = event.target?.closest?.('[role="tab"][data-action="landing-preview-workspace"]');
+    if (!current || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = [...(current.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]') || [])];
+    if (!tabs.length) return;
+    const currentIndex = Math.max(0, tabs.indexOf(current));
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = tabs.length - 1;
+    else if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+    else nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    event.preventDefault();
+    const next = tabs[nextIndex];
+    renderLandingWorkspacePreview(next.dataset.workspace);
+    next.focus();
+  }
 
   function renderLandingPage(forceAuthModal = false) {
     document.title = 'Questbase.io | Connected workspaces for service teams';
@@ -115,12 +216,12 @@ export function createLandingPage(ctx) {
                         ['underwriting', 'ti-calculator', 'Underwriting'],
                         ['production', 'ti-hammer', 'Production'],
                       ].map(([key, icon, label]) => `
-                        <button class="qb-landing-workspace-pill ${key === 'sales' ? 'active' : ''}" type="button" role="tab" aria-selected="${key === 'sales'}" data-action="landing-preview-workspace" data-workspace="${h(key)}">
+                        <button class="qb-landing-workspace-pill ${key === 'sales' ? 'active' : ''}" id="landing-workspace-tab-${h(key)}" type="button" role="tab" aria-selected="${key === 'sales'}" aria-controls="landing-workspace-panel" tabindex="${key === 'sales' ? '0' : '-1'}" data-action="landing-preview-workspace" data-workspace="${h(key)}">
                           <i class="ti ${h(icon)}" aria-hidden="true"></i>${h(label)}
                         </button>
                       `).join('')}
                     </div>
-                    <div class="qb-landing-board" data-landing-workspace-board aria-live="polite">${renderLandingWorkspaceBoard('sales')}</div>
+                    <div class="qb-landing-board" id="landing-workspace-panel" role="tabpanel" aria-labelledby="landing-workspace-tab-sales" tabindex="0" data-landing-workspace-board>${renderLandingWorkspaceBoard('sales')}</div>
                   </section>
                 </div>
               </div>
@@ -205,7 +306,8 @@ export function createLandingPage(ctx) {
         ${showAuthModal ? renderAuthModal(returnUrl, inviteToken, authEnabled) : ''}
       </main>
     `;
+    app.querySelector('.qb-landing-workspace-switcher')?.addEventListener('keydown', handleLandingWorkspaceKeydown);
   }
 
-  return { renderLandingPage };
+  return { renderLandingPage, renderLandingWorkspacePreview };
 }
