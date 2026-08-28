@@ -581,6 +581,14 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 /* One line of history. */
 .wb-act-feed { display: flex; flex-direction: column; }
 .wb-act-feed { gap: 2px; }
+/* No box inside the box.
+ *
+ * `.wb-act-feed` is shared by two surfaces. In the standalone Activity VIEW it is the list's own
+ * card, so the border, radius and background it carries are right there. On a record it sits
+ * inside `.wb-w`, which already draws exactly the same border, radius and background -- so the
+ * feed drew a second frame a few pixels inside the first one. Scoped to the record panel rather
+ * than removed from the rule above, which would flatten the Activity view. */
+.wb-rec-panel .wb-act-feed { border: 0; border-radius: 0; background: none; }
 .wb-act-line { display: flex; gap: 11px; padding: 10px 2px; }
 .wb-act-dot { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-size: 13px; flex: none; }
 .wb-act-main { min-width: 0; flex: 1; }
