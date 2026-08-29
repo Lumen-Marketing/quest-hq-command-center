@@ -69,11 +69,18 @@ test('the entry is keyed to the record, or it shows on none of them', () => {
   });
 });
 
-test('the workspace still gets its one summary line, now naming the file', () => {
+test('the workspace summary line moved to the transfer ledger', () => {
+  // It used to be written into the builder document alongside the per-record lines. Two things
+  // were wrong with that. Persisting the document needs `workspaces.manage`, so a role holding
+  // only `workspaces.records.import` could not write its own summary -- the log went missing
+  // for exactly the people it should cover. And once the ledger fed the activity feed too, the
+  // same import appeared twice.
+  //
+  // public.wb_data_transfers carries it now, written by logTransfer with a policy that asks for
+  // the same permission as the act it records. The per-record lines below are untouched.
   const { logged } = run(CSV, 'leads-august.csv');
-  const summary = logged.filter((e) => !e.itemId);
-  assert.equal(summary.length, 1);
-  assert.match(summary[0].text, /Imported <b>2<\/b> items into 1 from <b>leads-august\.csv<\/b>/);
+  assert.deepEqual(logged.filter((e) => !e.itemId), [], 'no workspace-level line goes into the document');
+  assert.equal(logged.filter((e) => e.itemId).length, 2, 'every imported record still says where it came from');
 });
 
 test('a file with no name still says where the record came from', () => {

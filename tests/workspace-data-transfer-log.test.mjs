@@ -79,3 +79,32 @@ test('compatibility is granted as data, not as an alias', () => {
   assert.match(migration, /insert into public\.role_permissions[\s\S]*'workspaces\.records\.export', 'allow'/);
   assert.match(migration, /insert into public\.role_permissions[\s\S]*'workspaces\.records\.import', 'allow'/);
 });
+
+test('transfers reach the activity feed, so the log is something you can see', () => {
+  // The rows existed before this and nothing rendered them: an export produced a ledger entry
+  // no screen displayed. Reading them from the table rather than the document is what lets an
+  // export by a role with no document write access still appear.
+  assert.match(main, /function wbTransferActivity\(companyId, workspace\)/);
+  assert.match(main, /const transfers = view === 'posts' \? \[\] : wbTransferActivity\(companyId, workspace\)/);
+  assert.match(main, /posts\.concat\(acts, transfers\)/);
+  assert.match(main, /state\.wbTransfers/);
+});
+
+test('the feed names both directions in plain words', () => {
+  const fn = main.slice(main.indexOf('function wbTransferActivity'));
+  const body = fn.slice(0, fn.indexOf('\n}\n'));
+  assert.match(body, /Exported \$\{records\} from/);
+  assert.match(body, /Imported \$\{records\} into/);
+  // An app somebody has since deleted has nothing left to name.
+  assert.match(body, /if \(!name\) return null;/);
+  // Only this workspace's rows.
+  assert.match(body, /String\(row\.workspace_id\) === opsId/);
+});
+
+test('an import is not logged twice', () => {
+  // It used to write a workspace-level activity line AND a transfer row, so the feed showed it
+  // twice -- and the activity line needed workspaces.manage, which an importer may not have.
+  assert.doesNotMatch(io, /Imported <b>\$\{added\}<\/b> item/);
+  // The per-record provenance line stays: it is what you want when opening a row you did not type.
+  assert.match(io, /Imported from <b>\$\{h\(fileName\)\}<\/b>/);
+});

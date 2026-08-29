@@ -80,6 +80,10 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     // workspaces.records.* permissions have something to attach to. Loaded alongside the
     // document rather than after it: they are hydrated onto app.items before first render.
     wbRecordsResult: client.from('wb_records').select('*'),
+    // The export/import ledger. Its own table rather than the builder document, because a role
+    // that may only export cannot write that document -- so its exports would be the ones that
+    // went unrecorded. Bounded: the feed shows the most recent, not the whole history.
+    wbTransfersResult: client.from('wb_data_transfers').select('*').order('created_at', { ascending: false }).limit(200),
     platformAdminResult: client.rpc('is_platform_admin'),
     // The shell paints an active-clock badge on first render.
     activeTimerResult: client.from('company_active_timers').select('*'),

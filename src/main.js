@@ -4931,6 +4931,7 @@ async function loadSupabaseData() {
     workspaceBackupsResult,
     workspaceBuilderResult,
     wbRecordsResult,
+    wbTransfersResult,
     platformAdminResult,
     activeTimerResult,
     timeEntriesResult,
@@ -5041,6 +5042,7 @@ async function loadSupabaseData() {
   if (!workspaceBuilderResult.error) {
     applyWorkspaceBuilderRows(workspaceBuilderResult.data, wbRecordsResult?.error ? null : (wbRecordsResult?.data || []));
   }
+  state.wbTransfers = wbTransfersResult?.error ? [] : (wbTransfersResult?.data || []);
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
   if (!automationsResult.error) state.automations = (automationsResult.data || []).map(normalizeAutomation);
@@ -14104,17 +14106,61 @@ function wbFeedBumpedAt(entry) {
   return latest;
 }
 
+/**
+ * The export/import ledger, as activity-feed entries.
+ *
+ * Reads public.wb_data_transfers rather than the workspace document. That is what lets an
+ * export by a role with no write access to the document still appear: writing the document
+ * needs `workspaces.manage`, so a log kept there would be missing exactly the people it most
+ * needs to cover.
+ *
+ * Only this workspace's rows, and only apps that are still here -- a transfer out of an app
+ * somebody has since deleted has nothing left to name.
+ */
+function wbTransferActivity(companyId, workspace) {
+  const opsId = String(workspace?.id || '').replace(/^ws-/, '');
+  if (!opsId) return [];
+  const appName = (appId) => (workspace.apps || []).find((a) => String(a.id) === String(appId))?.name || '';
+  return (state.wbTransfers || [])
+    .filter((row) => String(row.workspace_id) === opsId)
+    .map((row) => {
+      const name = appName(row.app_id);
+      if (!name) return null;
+      const count = Number(row.record_count) || 0;
+      const records = `${count} record${count === 1 ? '' : 's'}`;
+      const where = row.file_name ? ` as <b>${h(row.file_name)}</b>` : '';
+      const how = row.format === 'print' ? ' to print' : (row.format === 'questapp' ? ' as an app file' : '');
+      return {
+        id: `transfer-${row.id}`,
+        ts: row.created_at,
+        actorId: row.created_by || '',
+        actor: '',
+        appId: row.app_id,
+        icon: row.direction === 'export' ? 'ti-file-export' : 'ti-file-import',
+        color: row.direction === 'export' ? '#b45309' : '#16a34a',
+        text: row.direction === 'export'
+          ? `Exported ${records} from <b>${h(name)}</b>${how || where}`
+          : `Imported ${records} into <b>${h(name)}</b>${where}`,
+      };
+    })
+    .filter(Boolean);
+}
+
 // Merge member posts (rich) and system activity (compact rows) into one stream, most
 // recently active first, so the dashboard reads like Podio's activity feed.
 function wbFeedStream(companyId, workspace) {
   const view = wbFeedView();
   const posts = view === 'activity' ? [] : (workspace.feed || []).map((p) => ({ kind: 'post', ts: wbFeedBumpedAt(p), data: p }));
   const acts = view === 'posts' ? [] : (workspace.activity || []).map((a) => ({ kind: 'act', ts: wbFeedBumpedAt(a), data: a }));
+  // Export and import come from their own table, not the document, so they show up here even
+  // for a role that may take records out and write nothing. Shaped into the same entry the
+  // feed already renders rather than given a branch of their own.
+  const transfers = view === 'posts' ? [] : wbTransferActivity(companyId, workspace).map((a) => ({ kind: 'act', ts: a.ts, data: a }));
   // Sorted by activity, then trimmed -- the other order would drop an old thread with a new
   // reply before its comment was ever taken into account. Filtered BEFORE the trim, so asking
   // for posts on a busy workspace shows sixty posts rather than whichever few survived sixty
   // rows of mostly activity.
-  const stream = posts.concat(acts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60);
+  const stream = posts.concat(acts, transfers).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60);
   if (!stream.length) {
     // Said against what was ASKED FOR. "Nothing here yet" under a filter is wrong twice over:
     // there may be plenty here, and it sends somebody off to write a post when all they had to
@@ -44890,13 +44936,15 @@ async function loadSecondaryRealtimeDomain(client, domain) {
   }
   if (domain === 'workspace') {
     const { WORKSPACE_BACKUP_METADATA_COLUMNS } = await import('./data/workspace-backups.js');
-    const [backups, builder, records] = await Promise.all([
+    const [backups, builder, records, transfers] = await Promise.all([
       safeSupabaseQuery(client.from('workspace_backups').select(WORKSPACE_BACKUP_METADATA_COLUMNS).order('created_at', { ascending: false })),
       safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
       safeSupabaseQuery(client.from('wb_records').select('*')),
+      safeSupabaseQuery(client.from('wb_data_transfers').select('*').order('created_at', { ascending: false }).limit(200)),
     ]);
     if (!backups.error) state.workspaceBackups = (backups.data || []).map(normalizeWorkspaceBackup);
     if (!builder.error) applyWorkspaceBuilderRows(builder.data, records.error ? null : (records.data || []));
+    if (!transfers.error) state.wbTransfers = transfers.data || [];
     return;
   }
   return loadIdentityRealtimeDomain(client, domain);

@@ -63,13 +63,19 @@ const declaredIn = (text) => {
 // of an import, and most of src/ is reached that way.
 const importedInto = (text) => {
   const names = new Set();
-  for (const m of text.matchAll(/import\s*\{([^}]+)\}\s*from/g)) {
+  // Stripped first, the way declaredIn already does it. Without this, prose in a comment is
+  // read as code: the sentence "Export and import come from their own table" matched the
+  // `import <name> from` pattern below and registered `come` as a name main.js owns, which
+  // then collided with the ordinary English word inside a string in doc-editor.js. The check
+  // failed on a file nobody had touched, naming a binding that does not exist.
+  const code = stripComments(text);
+  for (const m of code.matchAll(/import\s*\{([^}]+)\}\s*from/g)) {
     for (const part of m[1].split(',')) {
       const name = part.trim().split(/\s+as\s+/).pop().trim();
       if (name) names.add(name);
     }
   }
-  for (const m of text.matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from/g)) names.add(m[1]);
+  for (const m of code.matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from/g)) names.add(m[1]);
   return names;
 };
 

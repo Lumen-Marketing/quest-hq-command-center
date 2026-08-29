@@ -239,11 +239,13 @@ export function createDataIO(ctx) {
     });
     if (!added) { showToast('No rows could be imported — check that values line up with the headers.', 'local', 'Workspaces'); return; }
     const skipped = headers.length - matched;
-    wbLogActivity(workspace, {
-      icon: 'ti-file-import',
-      color: '#16a34a',
-      text: `Imported <b>${added}</b> item${added === 1 ? '' : 's'} into ${h(app.name)}${fileName ? ` from <b>${h(fileName)}</b>` : ' from CSV'}`,
-    });
+    // The workspace-level summary line used to be written here as well. It is not any more:
+    // the transfer row below says the same thing, and says it from a table a role with import
+    // and nothing else can actually write -- the document needs workspaces.manage. Two sources
+    // for one fact also meant the feed showed the import twice.
+    //
+    // The PER-RECORD line above stays. "Imported from Prospect.csv" on the record itself is
+    // provenance you want when you open a row you did not type, and it is not duplicated here.
     logTransfer(companyId, workspaceId, appId, {
       direction: 'import', format: 'csv', recordCount: added, fileName,
     });
