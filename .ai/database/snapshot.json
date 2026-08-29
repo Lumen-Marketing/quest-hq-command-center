@@ -9096,6 +9096,96 @@
    "rls_enabled": false
   },
   {
+   "name": "wb_data_transfers",
+   "schema": "public",
+   "columns": [
+    {
+     "name": "id",
+     "default": null,
+     "nullable": false,
+     "position": 1,
+     "udt_name": "uuid",
+     "data_type": "uuid"
+    },
+    {
+     "name": "company_id",
+     "default": null,
+     "nullable": false,
+     "position": 2,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "workspace_id",
+     "default": null,
+     "nullable": false,
+     "position": 3,
+     "udt_name": "uuid",
+     "data_type": "uuid"
+    },
+    {
+     "name": "app_id",
+     "default": null,
+     "nullable": false,
+     "position": 4,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "direction",
+     "default": null,
+     "nullable": false,
+     "position": 5,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "format",
+     "default": "''::text",
+     "nullable": false,
+     "position": 6,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "record_count",
+     "default": "0",
+     "nullable": false,
+     "position": 7,
+     "udt_name": "int4",
+     "data_type": "integer"
+    },
+    {
+     "name": "file_name",
+     "default": "''::text",
+     "nullable": false,
+     "position": 8,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "created_by",
+     "default": null,
+     "nullable": true,
+     "position": 9,
+     "udt_name": "uuid",
+     "data_type": "uuid"
+    },
+    {
+     "name": "created_at",
+     "default": "now()",
+     "nullable": false,
+     "position": 10,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    }
+   ],
+   "primary_key": [
+    "id"
+   ],
+   "rls_enabled": true
+  },
+  {
    "name": "wb_intake_links",
    "schema": "public",
    "columns": [
@@ -12329,6 +12419,20 @@
    "permissive": "PERMISSIVE"
   },
   {
+   "name": "wb transfers insert",
+   "roles": "{authenticated}",
+   "table": "wb_data_transfers",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "wb transfers read",
+   "roles": "{authenticated}",
+   "table": "wb_data_transfers",
+   "command": "SELECT",
+   "permissive": "PERMISSIVE"
+  },
+  {
    "name": "managers read intake links",
    "roles": "{authenticated}",
    "table": "wb_intake_links",
@@ -14808,9 +14912,13 @@
   {
    "name": "add_wb_records_created_by_index",
    "version": "20260828191625"
+  },
+  {
+   "version": "20260829005613",
+   "name": "wb_data_transfers"
   }
  ],
- "captured_at": "2026-08-28T19:16:59.435017+00:00",
+ "captured_at": "2026-08-29T00:58:00.000000+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",

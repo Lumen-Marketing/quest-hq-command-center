@@ -16,14 +16,52 @@ import { parseCsvRows } from '../data/csv.js';
 import { describeExtras, portableExtras } from './app-portability.js';
 import { adoptFields, buildFieldSet, presentIn, readFieldSet } from './field-portability.js';
 
+// Imported here rather than passed in from main.js: ops-workspace-id.js exists to stay OUT
+// of the entry chunk, and main.js IS the entry chunk. This module is already lazily loaded.
+import { opsWorkspaceId } from './ops-workspace-id.js';
+
 export function createDataIO(ctx) {
   const {
     h, showToast, render, companyName,
     wbFind, wbPlainVal, wbSave, wbUid, wbLogActivity, wbMembers,
     wbReportContext, wbLoadReports, wbAssignAutoNumbers, loadedReports,
     clone, downloadText, guardUpload, activeSession,
+    createSupabaseClient, isLiveSupabaseSession,
     WB_FIELD_TYPES, WB_PALETTE, openWbModal, closeWbModal, safeHexColor, sanitizeColorConfig,
   } = ctx;
+
+  /**
+   * Record that data crossed the boundary of the product.
+   *
+   * Its own table rather than the workspace activity feed, for a reason that decides the whole
+   * design: `wbLogActivity` appends to the builder document, and persisting that needs
+   * `workspaces.manage`. A role that may export and nothing else could not write its own log
+   * line -- so the log would be missing exactly for the people it most needs to cover.
+   *
+   * Deliberately fire-and-forget. An export is a thing that has already happened by the time
+   * this runs; failing the download because the note about it did not save would be the wrong
+   * trade. A refused insert means the row is not there, and the button that produced it was
+   * gated by the same permission the insert policy checks, so a refusal here means something
+   * changed mid-session rather than that somebody slipped through.
+   */
+  function logTransfer(companyId, workspaceId, appId, { direction, format, recordCount = 0, fileName = '' }) {
+    const supabase = createSupabaseClient?.();
+    const workspace = opsWorkspaceId?.(workspaceId) || '';
+    // A legacy `ws-<companyId>` document has no workspace row to point at, and the column is a
+    // uuid; there is nothing to write against.
+    if (!supabase || !isLiveSupabaseSession?.() || !workspace) return;
+    const actor = activeSession?.()?.profile?.id || null;
+    supabase.from('wb_data_transfers').insert({
+      company_id: companyId,
+      workspace_id: workspace,
+      app_id: appId,
+      direction,
+      format,
+      record_count: Number(recordCount) || 0,
+      file_name: String(fileName || '').slice(0, 240),
+      ...(actor ? { created_by: actor } : {}),
+    }).then(null, () => {});
+  }
 
   // Open a print-ready window carrying the app's own stylesheets (so report cards
   // and tables look identical), then auto-invoke the browser print dialog.
@@ -68,6 +106,11 @@ export function createDataIO(ctx) {
     const subtitle = onlyIds ? `${items.length} selected record${items.length === 1 ? '' : 's'}` : 'Data';
     const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
     wbOpenPrintWindow(`${app.name} — ${onlyIds ? 'selected' : 'data'}`, body);
+    logTransfer(companyId, workspaceId, appId, {
+      direction: 'export',
+      format: 'print',
+      recordCount: onlyIds ? onlyIds.length : ((wbFind(companyId, workspaceId, appId).app?.items) || []).length,
+    });
   }
   // Print the Reports tab (KPIs + charts) using the live report markup.
   //
@@ -110,6 +153,9 @@ export function createDataIO(ctx) {
     const csv = `﻿${[header, ...lines].join('\r\n')}`; // BOM so Excel reads UTF-8
     const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
     downloadText(`${safeName}.csv`, csv, 'text/csv;charset=utf-8;');
+    logTransfer(companyId, workspaceId, appId, {
+      direction: 'export', format: 'csv', recordCount: app.items.length, fileName: `${safeName}.csv`,
+    });
     showToast(`Exported ${app.items.length} item${app.items.length === 1 ? '' : 's'} to CSV.`, 'local', 'Workspaces');
   }
   // RFC-4180-ish parser: handles quoted fields with embedded commas/newlines and "" escapes.
@@ -198,6 +244,9 @@ export function createDataIO(ctx) {
       color: '#16a34a',
       text: `Imported <b>${added}</b> item${added === 1 ? '' : 's'} into ${h(app.name)}${fileName ? ` from <b>${h(fileName)}</b>` : ' from CSV'}`,
     });
+    logTransfer(companyId, workspaceId, appId, {
+      direction: 'import', format: 'csv', recordCount: added, fileName,
+    });
     wbSave(companyId);
     showToast(`Imported ${added} item${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} unmatched column${skipped === 1 ? '' : 's'} skipped` : ''}.`, 'local', 'Workspaces');
     render();
@@ -232,6 +281,9 @@ export function createDataIO(ctx) {
     };
     const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
     downloadText(`${safeName}.questapp.json`, JSON.stringify(bundle, null, 2), 'application/json');
+    logTransfer(companyId, workspaceId, appId, {
+      direction: 'export', format: 'questapp', recordCount: (app.items || []).length, fileName: `${safeName}.questapp.json`,
+    });
     const extras = describeExtras(bundle.app);
     const summary = [`${app.fields.length} fields`, `${app.items.length} records`, `${app.automations.length} automations`, ...extras].join(' · ');
     showToast(`Downloaded "${app.name}" (${summary}).`, 'local', 'Workspaces');

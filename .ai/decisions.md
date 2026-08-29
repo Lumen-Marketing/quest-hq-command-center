@@ -1928,3 +1928,43 @@ Backup payloads are detail data, not list data. Startup and realtime refresh sel
 metadata only; download and restore hydrate the exact saved payload by id when requested. There
 is deliberately no fallback that builds a new snapshot from current state, because exporting
 current state under an old backup's label is data corruption disguised as recovery.
+
+## Taking records out of an app is a permission, and it leaves a trace (2026-08-29)
+
+Two gaps, found together.
+
+**Export was not gated at all.** The four record permissions added on 2026-08-28 controlled what
+somebody could do to records in place. Nothing controlled taking a copy of all of them: anyone
+who could open an app could press Export for CSV, or Download app for JSON. `wbDownloadApp`'s
+bundle carries `items`, so it is a records export whatever else it is.
+
+**Neither direction left a durable trace.** Import wrote a line into the workspace activity feed;
+export wrote nothing anywhere. For the one action that removes data from the product entirely
+there was no record it had happened.
+
+`workspaces.records.export` and `workspaces.records.import` now gate Export, Print, Download app
+and Import, on the press as well as the paint.
+
+**Print is gated with export deliberately.** It renders every record into a window that saves as
+a PDF. Leaving it open would have made the export permission a formality. This is the one place
+the change reaches past what was strictly asked for, and it is noted here so it can be reversed
+knowingly rather than discovered.
+
+**The log is its own table, not the activity feed.** `wbLogActivity` appends to the builder
+document and persisting that needs `workspaces.manage` -- so a role that may export and nothing
+else could not write its own log line, and the log would be missing exactly for the people it
+most needs to cover. `wb_record_events` was the other candidate and does not fit either: it
+requires `item_id` and `scheduled_for`, and its reader filters `status = 'scheduled'`.
+
+`public.wb_data_transfers` is append-only: SELECT for anyone who may read records, INSERT gated
+on the same permission as the act it records, and no UPDATE or DELETE policy at all. A log
+somebody can edit afterwards is not a log. Writing it is fire-and-forget -- the export has
+already happened by the time the row is written, and failing the download because the note about
+it did not save would be the wrong trade.
+
+Compatibility is data again, per 20260828040051: export was granted once to every role that can
+read records (it was ungated, so they could already take a copy -- this names a power rather than
+adding one), and import to every role that could create them.
+
+Verified on live: the reported Worker holds both and can write both; a view-only role answers
+false to both and its inserts are refused; and no role can rewrite a row once written.

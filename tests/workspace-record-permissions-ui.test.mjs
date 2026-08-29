@@ -35,8 +35,9 @@ test('every list view passes the delete permission through to the actions cell',
 test('adding a record follows create, not the app-building permission', () => {
   // Otherwise a role granted only "Add app records" would never see the button that adds one.
   assert.match(main, /can\('workspaces\.records\.create', companyId\) && tab === 'items' && app\.fields\.length\) headBtn \+= `<button class="btn btn-primary" data-add-item/);
-  // Importing a CSV creates records; importing FIELDS changes the app and stays with manage.
-  assert.match(main, /can\('workspaces\.records\.create', companyId\) && tab === 'items' && app\.fields\.length\) headBtn \+= `<button class="btn" data-wb-import>/);
+  // Importing a CSV moved onto its own key once export/import became permissions of their own;
+  // importing FIELDS changes the app and stays with manage.
+  assert.match(main, /can\('workspaces\.records\.import', companyId\) && tab === 'items' && app\.fields\.length\) headBtn \+= `<button class="btn" data-wb-import>/);
   assert.match(main, /canManage && tab === 'fields'\) headBtn \+= `<button class="btn" data-wb-import-fields/);
 });
 

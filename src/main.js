@@ -609,6 +609,11 @@ const PERMISSION_KEYS = [
   ['workspaces.records.create', 'Add app records'],
   ['workspaces.records.edit', 'Edit app records'],
   ['workspaces.records.delete', 'Delete app records'],
+  // Taking a copy of every record out of the product, and bringing a batch in. Separate from
+  // view/create because they are a different risk: Export and Download app hand over the whole
+  // table at once, whatever the row-level permissions say, and until now neither was gated.
+  ['workspaces.records.export', 'Export app records'],
+  ['workspaces.records.import', 'Import app records'],
   ['client_portals.view', 'View client portal'],
   ['client_portals.manage', 'Create/edit client portal'],
   ['crm.view', 'View CRM'],
@@ -15207,9 +15212,12 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   const tabPath = (next) => appHref(companyPath('workspaces', { app_id: app.id, tab: next }, companyId));
   let headBtn = '';
   // Print/Export are read-only and available to all roles; Import writes data.
-  if (tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-export><i class="ti ti-file-export"></i>Export</button>`;
-  if (can('workspaces.records.create', companyId) && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-import><i class="ti ti-file-import"></i>Import</button>`;
-  if (tab === 'items' && app.items.length) headBtn += `<button class="btn" data-wb-print-data><i class="ti ti-printer"></i>Print</button>`;
+  const canExport = can('workspaces.records.export', companyId);
+  if (canExport && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-export><i class="ti ti-file-export"></i>Export</button>`;
+  if (can('workspaces.records.import', companyId) && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-import><i class="ti ti-file-import"></i>Import</button>`;
+  // Print is gated with Export because it is one: it renders every record into a window that
+  // saves as a PDF. Leaving it open would make the export permission a formality.
+  if (canExport && tab === 'items' && app.items.length) headBtn += `<button class="btn" data-wb-print-data><i class="ti ti-printer"></i>Print</button>`;
   if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
   // The field setup travels on its own, beside the whole-app Download on Settings. Rebuilding
   // a form somebody already built next door is the commonest thing anybody does on this tab,
@@ -15233,7 +15241,8 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   // workspace it came from -- there is nothing here to save, share or delete, and its one real
   // action (remove it from this workspace) stays in the body where its explanation is.
   if (tab === 'settings' && !appLinked) {
-    headBtn += `<button class="btn" data-wb-download-app title="Download this app as a .questapp.json file"><i class="ti ti-download"></i>Download app</button>`;
+    // The bundle carries `items` -- every record -- so this is an export whatever else it is.
+    if (can('workspaces.records.export', companyId)) headBtn += `<button class="btn" data-wb-download-app title="Download this app as a .questapp.json file"><i class="ti ti-download"></i>Download app</button>`;
     if (canManage) {
       headBtn += `<button class="btn danger wb-tab-danger" data-del-app><i class="ti ti-trash"></i>Delete app</button>`;
       headBtn += `<button class="btn" data-wb-intake-link title="Give a client a link to fill this in without signing in"><i class="ti ti-link"></i>Share link</button>`;
@@ -18102,6 +18111,10 @@ function wbLoadDataIO() {
         wbReportContext, wbLoadReports, wbAssignAutoNumbers,
         loadedReports: () => wbReportsModule,
         clone, downloadText, guardUpload, activeSession,
+        // For the transfer log: its own table, because the activity feed lives in the builder
+        // document and writing that needs workspaces.manage -- which an export-only role has not
+        // got, so its exports would be the ones that went unrecorded.
+        createSupabaseClient, isLiveSupabaseSession,
         WB_FIELD_TYPES, WB_PALETTE, openWbModal, closeWbModal, safeHexColor, sanitizeColorConfig,
       });
       return wbDataIOModule;
@@ -20225,7 +20238,9 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-tile-lightbox]', (el) => { const [url, name] = el.dataset.wbTileLightbox.split('|'); openWbFilePreview(url, name); });
     bind('[data-wb-cal-nav]', (el) => { const c = wbCalCursor(); const d = new Date(c.year, c.month + Number(el.dataset.wbCalNav), 1); state.wbCalMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; render(); });
     bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
-    bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
+    bind('[data-wb-download-app]', () => (can('workspaces.records.export', companyId)
+      ? wbDownloadApp(companyId, workspaceId, appId)
+      : showToast('Your role cannot export records in this app.', 'local', 'Workspaces')));
     bind('[data-wb-intake-link]', () => { if (!wbGuard()) return; openIntakeManage(companyId, workspaceId, appId); });
     bind('[data-wb-share-app]', () => { if (!wbGuard()) return; const { app } = wbFind(companyId, workspaceId, appId); if (!app) return; app.shared = !app.shared; wbSave(companyId); showToast(app.shared ? `"${app.name}" is now shared to the Quest App Market.` : `"${app.name}" removed from the Quest App Market.`, 'local', 'Workspaces'); render(); });
     // Choosing a company re-renders so its workspaces can be listed.
@@ -20603,10 +20618,18 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-filter-val]', (el) => { const flt = wbItemsUI(appId).filters[+el.dataset.idx]; if (flt) { flt.value = el.value; render(); } }, 'onchange');
     const wbSearchInput = document.querySelector('[data-wb-search-input]');
     if (wbSearchInput) { wbSearchInput.oninput = () => { wbItemsUI(appId).q = wbSearchInput.value; wbApplyItemSearch(); }; wbApplyItemSearch(); }
-    bind('[data-wb-print-data]', () => wbPrintData(companyId, workspaceId, appId));
+    bind('[data-wb-print-data]', () => (can('workspaces.records.export', companyId)
+      ? wbPrintData(companyId, workspaceId, appId)
+      : refuseTransfer('export')));
     bind('[data-wb-print-reports]', () => wbPrintReports(companyId, workspaceId, appId));
-    bind('[data-wb-export]', () => wbExportCsv(companyId, workspaceId, appId));
-    bind('[data-wb-import]', () => wbImportCsvPrompt(companyId, workspaceId, appId));
+    // The press is checked as well as the paint, as everywhere else in the builder.
+    const refuseTransfer = (what) => { showToast(`Your role cannot ${what} records in this app.`, 'local', 'Workspaces'); };
+    bind('[data-wb-export]', () => (can('workspaces.records.export', companyId)
+      ? wbExportCsv(companyId, workspaceId, appId)
+      : refuseTransfer('export')));
+    bind('[data-wb-import]', () => (can('workspaces.records.import', companyId)
+      ? wbImportCsvPrompt(companyId, workspaceId, appId)
+      : refuseTransfer('import')));
     // The Fields tab's own pair: the field SETUP out to a file, and another app's setup in.
     bind('[data-wb-export-fields]', () => wbExportFields(companyId, workspaceId, appId));
     bind('[data-wb-import-fields]', () => { if (!wbGuard()) return; wbImportFieldsPrompt(companyId, workspaceId, appId); });
