@@ -128,6 +128,7 @@ export function createAppSettings(ctx) {
     reports: 'Reports',
     automations: 'Automations',
     trash: 'Recycle bin',
+    transfers: 'Import & export',
     settings: 'Settings',
   };
 

@@ -14146,6 +14146,30 @@ function wbTransferActivity(companyId, workspace) {
     .filter(Boolean);
 }
 
+// ---- Import & export: the app's transfer log ---------------------------------------------
+// Body in ./workspace/transfer-log.js. Lazily loaded like the neighbouring recycle bin: it is
+// one tab of one app, and the entry bundle is measured in bytes.
+let transferLogModule = null;
+let transferLogPending = null;
+
+function loadTransferLog() {
+  if (transferLogModule) return Promise.resolve(transferLogModule);
+  if (!transferLogPending) {
+    transferLogPending = import('./workspace/transfer-log.js').then((mod) => {
+      transferLogModule = mod.createTransferLog({ h, can, state, wbMemberById, wbTimeAgo });
+      return transferLogModule;
+    }).catch((error) => { transferLogPending = null; throw error; });
+  }
+  return transferLogPending;
+}
+
+function wbViewTransfers(companyId, workspace, app) {
+  if (transferLogModule) return transferLogModule.wbViewTransfers(companyId, workspace, app);
+  loadTransferLog().then(() => render()).catch((error) => console.error('transfer log failed to load', error));
+  return questLoader('Loading');
+}
+
+
 // Merge member posts (rich) and system activity (compact rows) into one stream, most
 // recently active first, so the dashboard reads like Podio's activity feed.
 function wbFeedStream(companyId, workspace) {
@@ -15296,7 +15320,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
       headBtn += `<button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save</button>`;
     }
   }
-  const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, trash: `Recycle bin${(app.trash || []).length ? ` <b>${app.trash.length}</b>` : ''}`, settings: 'Settings' };
+  const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, trash: `Recycle bin${(app.trash || []).length ? ` <b>${app.trash.length}</b>` : ''}`, transfers: 'Import &amp; export', settings: 'Settings' };
   let body = '';
   if (tab === 'dashboard') body = renderAppDashboard(companyId, app, state.wbDashManage);
   else if (tab === 'calendar') body = renderAppCalendar(companyId, app, route.params.get('on') || '', route.params.get('field') || '', route.params.get('view') || '');
@@ -15305,6 +15329,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   else if (tab === 'reports') body = wbViewReports(companyId, workspace, app);
   else if (tab === 'automations') body = wbViewAutomations(companyId, workspace, app);
   else if (tab === 'trash') body = wbViewRecycleBin(companyId, workspace, app);
+  else if (tab === 'transfers') body = wbViewTransfers(companyId, workspace, app);
   else body = wbViewAppSettings(companyId, workspace, app, appLinked);
   return `
     ${wbWorkspaceHeader(companyId, workspace, app.id)}
@@ -17918,11 +17943,15 @@ function wbInstallTargetBody(companyId, workspace, app, chosenCompanyId) {
 // An app that has never been told otherwise shows all of them, in the order they were built.
 // Settings is always last and never hidden: it is the only way back to this setting, and a
 // workspace that has hidden the door is one somebody has to be dug out of.
-const WB_ALL_TABS = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'trash', 'settings'];
+const WB_ALL_TABS = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'trash', 'transfers', 'settings'];
 function wbAppTabs(app) {
   const chosen = Array.isArray(app?.tabs) ? app.tabs.filter((tab) => WB_ALL_TABS.includes(tab)) : null;
   if (!chosen) return WB_ALL_TABS;
-  return [...new Set([...chosen.filter((tab) => tab !== 'settings'), 'settings'])];
+  // Settings is pinned last, and Import & export just before it. Both are forced rather than
+  // chosen: an app whose tab list was saved before either existed would otherwise never show
+  // them, and a log you cannot reach is not a log.
+  const rest = chosen.filter((tab) => tab !== 'settings' && tab !== 'transfers');
+  return [...new Set([...rest, 'transfers', 'settings'])];
 }
 
 // ---- the Time & date tile ----------------------------------------------------------------

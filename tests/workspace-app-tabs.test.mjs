@@ -18,7 +18,7 @@ const wbAppTabs = Function(`
   return wbAppTabs;
 `)();
 
-const ALL = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'trash', 'settings'];
+const ALL = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'trash', 'transfers', 'settings'];
 
 test('an app that has never been told otherwise shows every tab', () => {
   assert.deepEqual(wbAppTabs({}), ALL);
@@ -27,21 +27,21 @@ test('an app that has never been told otherwise shows every tab', () => {
 });
 
 test('only the chosen tabs show, in the chosen order', () => {
-  assert.deepEqual(wbAppTabs({ tabs: ['items', 'dashboard'] }), ['items', 'dashboard', 'settings']);
-  assert.deepEqual(wbAppTabs({ tabs: ['reports'] }), ['reports', 'settings']);
+  assert.deepEqual(wbAppTabs({ tabs: ['items', 'dashboard'] }), ['items', 'dashboard', 'transfers', 'settings']);
+  assert.deepEqual(wbAppTabs({ tabs: ['reports'] }), ['reports', 'transfers', 'settings']);
 });
 
 test('Settings is always there and always last', () => {
   // It is the only way back to this setting. An app that has hidden the door is one somebody
   // has to be dug out of.
-  assert.deepEqual(wbAppTabs({ tabs: [] }), ['settings']);
-  assert.deepEqual(wbAppTabs({ tabs: ['settings', 'items'] }), ['items', 'settings']);
+  assert.deepEqual(wbAppTabs({ tabs: [] }), ['transfers', 'settings']);
+  assert.deepEqual(wbAppTabs({ tabs: ['settings', 'items'] }), ['items', 'transfers', 'settings']);
   assert.ok(wbAppTabs({ tabs: ['items'] }).includes('settings'));
 });
 
 test('a tab name that means nothing is dropped rather than drawn', () => {
-  assert.deepEqual(wbAppTabs({ tabs: ['items', 'nope', 'calendar'] }), ['items', 'calendar', 'settings']);
-  assert.deepEqual(wbAppTabs({ tabs: ['items', 'items'] }), ['items', 'settings'], 'and listed once');
+  assert.deepEqual(wbAppTabs({ tabs: ['items', 'nope', 'calendar'] }), ['items', 'calendar', 'transfers', 'settings']);
+  assert.deepEqual(wbAppTabs({ tabs: ['items', 'items'] }), ['items', 'transfers', 'settings'], 'and listed once');
 });
 
 test('a hidden tab cannot strand somebody on it', () => {

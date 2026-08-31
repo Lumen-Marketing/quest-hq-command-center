@@ -262,6 +262,7 @@ const FACTORY_MODULES = [
   ['src/workspace/attachments.js', 'createAttachments'],
   ['src/workspace/app-settings.js', 'createAppSettings'],
   ['src/workspace/recycle-bin.js', 'createRecycleBin'],
+  ['src/workspace/transfer-log.js', 'createTransferLog'],
   ['src/workspace/items-view.js', 'createItemsView'],
   ['src/form/public-form-page.js', 'createPublicFormPage'],
 ];

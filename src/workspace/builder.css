@@ -1439,3 +1439,23 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
     overflow-x: auto;
   }
 }
+
+/* Import & export: the app's own transfer log.
+ *
+ * A table rather than a feed, because every row answers the same six questions and reading
+ * down a column is how you spot the one that does not belong -- an export of everything, on a
+ * Sunday, by somebody who does not normally export. */
+.wb-tx-note { margin: 0 0 12px; }
+.wb-tx-scroll { overflow-x: auto; }
+.wb-tx-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.wb-tx-table th {
+  text-align: left; font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted, #7a6a55); font-weight: 700; padding: 0 12px 8px 0; white-space: nowrap;
+}
+.wb-tx-table td { padding: 10px 12px 10px 0; border-top: 1px solid var(--border, #e2d5bf); vertical-align: middle; }
+.wb-tx-table tbody tr:first-child td { border-top: 0; }
+/* Direction carries the meaning, so it gets the colour and the icon rather than a bare word:
+ * out is the one worth noticing. */
+.wb-tx-dir { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; white-space: nowrap; }
+.wb-tx-dir.out { color: var(--warning, #b45309); }
+.wb-tx-dir.in { color: var(--success, #16a34a); }
