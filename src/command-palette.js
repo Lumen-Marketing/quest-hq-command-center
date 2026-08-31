@@ -71,6 +71,7 @@ export function buildCommandIndex({ modules = [], companies = [], actions = [], 
       hint: record.hint || '',
       icon: record.icon || 'ti-file',
       keywords: record.keywords || '',
+      searchFields: Array.isArray(record.searchFields) ? record.searchFields : [],
       run: { kind: 'record', section: record.section, params: record.params || {} },
     });
   }
@@ -96,10 +97,15 @@ export function scoreCommand(command, query) {
 
   const label = command.label.toLowerCase();
   const keywords = (command.keywords || '').toLowerCase();
+  const fieldValues = (command.searchFields || []).map((field) => String(field?.value || '').trim().toLowerCase()).filter(Boolean);
 
+  if (label === q) return 1400;
+  if (fieldValues.some((value) => value === q)) return 1250;
   if (label.startsWith(q)) return 1000 - label.length;
   if (label.split(/[\s-]+/).some((word) => word.startsWith(q))) return 800 - label.length;
+  if (fieldValues.some((value) => value.startsWith(q))) return 700;
   if (label.includes(q)) return 600 - label.indexOf(q);
+  if (fieldValues.some((value) => value.includes(q))) return 500;
   if (keywords.includes(q)) return 400;
 
   const sub = subsequenceScore(`${label} ${keywords}`, q);
@@ -126,6 +132,25 @@ function subsequenceScore(text, query) {
   return Math.max(0, 100 - gaps);
 }
 
+function matchSnippet(value, query, maxLength = 72) {
+  const text = String(value || '').trim();
+  if (text.length <= maxLength) return text;
+  const at = text.toLowerCase().indexOf(query);
+  const start = Math.max(0, Math.min(at < 0 ? 0 : at - 18, text.length - maxLength));
+  return `${start ? '…' : ''}${text.slice(start, start + maxLength).trim()}${start + maxLength < text.length ? '…' : ''}`;
+}
+
+export function explainCommandMatch(command, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return '';
+  const label = String(command.label || '').trim();
+  if (label.toLowerCase() === q) return 'Exact name';
+  if (label.toLowerCase().includes(q)) return '';
+  const field = (command.searchFields || []).find((entry) => String(entry?.value || '').toLowerCase().includes(q));
+  if (!field) return '';
+  return `${field.label}: ${matchSnippet(field.value, q)}`;
+}
+
 /**
  * Rank the command list for a query. Empty query keeps source order (a menu of
  * everything available); a non-empty query filters to matches, best first, with
@@ -138,7 +163,7 @@ export function filterCommands(commands, query) {
     .map((command, index) => ({ command, index, score: scoreCommand(command, query) }))
     .filter((entry) => entry.score !== null)
     .sort((a, b) => (b.score - a.score) || (a.index - b.index))
-    .map((entry) => entry.command);
+    .map((entry) => ({ ...entry.command, match: explainCommandMatch(entry.command, query) }));
 }
 
 /** Group an ordered command list into [{ group, items }], preserving order. */

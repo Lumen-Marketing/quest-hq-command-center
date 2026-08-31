@@ -1,7 +1,8 @@
 import { WORKSPACE_BACKUP_METADATA_COLUMNS } from './workspace-backups.js';
 
-export function safeInitialDataQuery(query, { timeoutMs = 15000 } = {}) {
+export function safeInitialDataQuery(query, { timeoutMs = 15000, label = '' } = {}) {
   const waitMs = Math.max(1, Number(timeoutMs) || 15000);
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   const abortableQuery = controller && typeof query?.abortSignal === 'function'
     ? query.abortSignal(controller.signal)
@@ -19,7 +20,16 @@ export function safeInitialDataQuery(query, { timeoutMs = 15000 } = {}) {
       resolve({ data: null, error: timeoutError });
     }, waitMs);
   });
-  return Promise.race([settledQuery, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([settledQuery, timeout]).finally(() => {
+    clearTimeout(timer);
+    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const durationMs = Math.max(0, Math.round(endedAt - startedAt));
+    if (label && durationMs >= 2000 && typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('quest:slow-operation', {
+        detail: { label: 'Slow data request', context: String(label).slice(0, 120), durationMs },
+      }));
+    }
+  });
 }
 
 function initialResultLabel(key) {
@@ -92,6 +102,6 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     automationsResult: client.from('automations').select('*'),
   };
   const keys = Object.keys(queries);
-  const values = await Promise.all(Object.values(queries).map((query) => safeQuery(query)));
+  const values = await Promise.all(keys.map((key) => safeQuery(queries[key], { label: initialResultLabel(key) })));
   return Object.fromEntries(keys.map((key, index) => [key, values[index]]));
 }

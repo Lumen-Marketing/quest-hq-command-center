@@ -1,6 +1,32 @@
 # Current state
 
-Captured through 2026-08-28T19:16:59.435Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-09-01T00:00:00.000Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+
+## 2026-09-01 QA priority and usability release candidate
+
+- Role preview now repaints immediately and suppresses the real platform-developer override on
+  every company/admin surface. Owner, Member, Worker, and Cold Caller previews therefore show the
+  same controls their effective permissions allow; existing server RPC authorization remains the
+  final boundary.
+- Setup review always names the selected apps and each app's data scope before Apply. Its modal
+  owns the scroll while open, and the underlying page no longer supplies a second scrollbar.
+- Rich Activity entries use normal text flow, Clock keeps four usable columns at constrained
+  widths, and the Clock dashboard can retry a failed lazy-page download.
+- Time tracking discards accidental sessions under one minute and asks before saving a session
+  longer than sixteen hours. Existing suspicious records are visibly flagged for review but are
+  not rewritten from guessed timestamps.
+- Generic manual jobs now start as `General`, use Add/Save job wording, and no longer inherit a
+  roofing type. When a custom App Builder app called Jobs also exists, a disabled packaged Jobs
+  route explicitly identifies itself as Quest CRM Jobs and links to Custom Jobs.
+- Company search now ranks exact field matches first and explains metadata matches such as email,
+  address, owner, job type, stage, and file details. Its matching engine is fetched only after
+  Search opens rather than being paid for by every route.
+- Slow route renders, initial workspace loads, deferred data loads, and labeled startup queries
+  emit bounded structural diagnostics. The endpoint strips URL secrets, accepts no record content,
+  and records performance separately from browser errors.
+- The detailed disabled-module explanation and time-quality reader are lazy-loaded with their
+  respective surfaces. The production build, startup check, tenant audit, and bundle budget pass;
+  the full repository suite is 4,402 passing tests.
 
 ## 2026-08-29 runtime reliability and startup optimization
 

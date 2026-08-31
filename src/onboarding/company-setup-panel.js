@@ -415,6 +415,7 @@ export function createWorkspaceSetupPanel({
 
   function renderWorkspaceEditor(workspace, workspaceIndex) {
     const selected = new Set(workspace.pluginIds || []);
+    const selectedPlugins = ACTIVE_PLUGINS.filter((plugin) => selected.has(plugin.id));
     return `
       <section class="company-setup-review-card" data-company-setup-workspace="${workspaceIndex}">
         <div class="company-setup-review-card-head">
@@ -422,9 +423,15 @@ export function createWorkspaceSetupPanel({
           <label><span>Workspace name</span><input type="text" value="${h(workspace.name)}" maxlength="64" data-company-setup-workspace-name data-workspace-index="${workspaceIndex}" /></label>
           ${workspaceIndex === 0 ? '<b>Default</b>' : ''}
         </div>
-        <div class="company-setup-review-meta"><span><i class="ti ti-filter"></i>${h((workspace.stages || []).length)} pipeline stages</span><span><i class="ti ti-apps"></i>${h(selected.size)} active apps</span></div>
+        <div class="company-setup-review-meta"><span><i class="ti ti-filter"></i>${h((workspace.stages || []).length)} pipeline stages</span><span><i class="ti ti-apps"></i>${h(selectedPlugins.length)} active apps</span></div>
+        <div class="company-setup-selected-apps" aria-label="Selected apps">
+          ${selectedPlugins.map((plugin) => {
+            const scope = pluginDataScopeDetails(plugin.dataScope);
+            return `<div class="company-setup-selected-app"><i class="ti ${h(plugin.icon)}"></i><span><strong>${h(plugin.label)}</strong><small>${h(scope.label)}</small></span></div>`;
+          }).join('') || '<p>No apps selected. This workspace will start blank.</p>'}
+        </div>
         <details class="company-setup-app-editor">
-          <summary>Choose apps for this workspace <span>${h(selected.size)} selected</span></summary>
+          <summary>Edit app selection <span>${h(selectedPlugins.length)} selected</span></summary>
           <div class="company-setup-app-grid">
             ${ACTIVE_PLUGINS.map((plugin) => {
               const checked = selected.has(plugin.id);

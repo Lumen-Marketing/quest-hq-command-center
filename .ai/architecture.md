@@ -126,6 +126,15 @@ The SPA supports:
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.
 - Company search indexes only records already loaded for operational workspaces the signed-in user may enter, applies each target workspace's plugin and permission checks, and carries that workspace into navigation.
+- Search ranking may use labeled record metadata, but result explanations contain only a matched
+  field already visible to that user. The command matcher and company record index are lazy-loaded
+  together on first Search use.
+- Role preview changes the effective browser identity for all visible company and platform
+  surfaces, including developer-only bypasses. The real authenticated identity remains unchanged,
+  and every privileged write is still re-authorized by the server/database.
+- Client performance reports are bounded structural telemetry: operation label, duration, route,
+  revision, and opaque tenant/profile identifiers. They exclude query strings, fragments, record
+  values, names, email addresses, and file paths, and reporting is loaded only after a slow event.
 - Help Center content is curated and grounded in shipped Questbase behavior rather than generated at request time. A topic tied to a module is visible only when the current role can open that module in the selected operational workspace; manage-only tutorials also require their named permission. The separate Knowledge Base remains customer-authored company SOP content.
 - Local form drafts are recovery copies, not business records. Their storage keys include profile, company, operational workspace, form type, and record id; they expire after seven days, exclude sensitive/file fields, clear after a successful real save or explicit discard, and purge for the signing-out profile. Job, Quote, CRM Contact, Underwriter and **Company Contact** forms are protected. A Company Contact is company-scoped, so its draft is keyed to the sentinel workspace `company` rather than to whichever workspace happened to be open — otherwise switching workspace would hide a half-typed contact from the person who came back for it.
 - Writing a draft stays in the entry bundle (it runs on every keystroke and a fetch there would stall typing); **restoring or discarding** one is fetched on the click, in `src/drafts/draft-recovery.js`, because it drags the whole dependent-address chain (country → province → city → barangay) with it. The mutable module holders it needs are passed as getters, not values — they are null until their own fetch lands.

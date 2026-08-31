@@ -20,6 +20,12 @@ function recordHint(record, workspaceNames, ...details) {
     .join(' · ');
 }
 
+function searchFields(entries) {
+  return entries
+    .map(([label, value]) => ({ label, value: String(value ?? '').trim() }))
+    .filter((entry) => entry.value);
+}
+
 /**
  * Turn the five company-wide business sources into route-ready search records.
  * The caller passes only rows from operational workspaces the user may access.
@@ -52,6 +58,13 @@ export function buildCompanySearchRecords({
         contact.stage,
         'contact',
       ),
+      searchFields: searchFields([
+        ['Email', contact.email],
+        ['Phone', contact.phone],
+        ['Location', contact.location || contact.site_address],
+        ['Owner', contact.owner_name],
+        ['Stage', contact.stage],
+      ]),
       section: 'contacts',
       params: routeParams(contact, { contact_id: contact.id }),
     });
@@ -75,6 +88,13 @@ export function buildCompanySearchRecords({
         quote.value,
         'quote deal estimate',
       ),
+      searchFields: searchFields([
+        ['Contact', quote.contact_name || quote.client_name],
+        ['Owner', quote.owner_name],
+        ['Stage', quote.stage],
+        ['Description', quote.description || quote.notes],
+        ['Amount', quote.amount || quote.value],
+      ]),
       section: 'deals',
       params: routeParams(quote, { tab: 'profile', deal_id: quote.id }),
     });
@@ -99,6 +119,14 @@ export function buildCompanySearchRecords({
         job.notes,
         'job project',
       ),
+      searchFields: searchFields([
+        ['Client', client],
+        ['Address', job.site_address],
+        ['Owner', job.owner_name],
+        ['Job type', job.job_type],
+        ['Stage', job.stage || job.status],
+        ['Scope', job.scope || job.notes],
+      ]),
       section: 'jobs',
       params: routeParams(job, { tab: 'profile', job_id: job.id }),
     });
@@ -122,6 +150,15 @@ export function buildCompanySearchRecords({
         task.context_label,
         'task todo assignment',
       ),
+      searchFields: searchFields([
+        ['Description', task.description],
+        ['Type', task.type],
+        ['Status', task.status],
+        ['Priority', task.priority],
+        ['Due', joinedText(task.due, task.due_time)],
+        ['Assignee', task.assignee_name],
+        ['Job', task.context_label],
+      ]),
       section: 'tasks',
       params: routeParams(task, {
         task_id: task.id,
@@ -146,6 +183,14 @@ export function buildCompanySearchRecords({
         file.mime_type,
         'file document attachment',
       ),
+      searchFields: searchFields([
+        ['Category', file.category],
+        ['Uploaded by', file.uploaded_by_label],
+        ['Notes', file.notes],
+        ['Path', file.object_path],
+        ['Job', file.job_name],
+        ['File type', file.mime_type],
+      ]),
       section: 'files',
       params: routeParams(file, {
         folder: file.folder || (file.job_id ? 'jobs' : 'home'),
@@ -163,6 +208,10 @@ export function buildCompanySearchRecords({
       label: proposal.title || proposal.proposal_no || 'Proposal',
       hint: recordHint(proposal, workspaceNames, proposal.proposal_no),
       keywords: joinedText(proposal.proposal_no, proposal.status, 'proposal document'),
+      searchFields: searchFields([
+        ['Proposal number', proposal.proposal_no],
+        ['Status', proposal.status],
+      ]),
       section: 'proposals',
       params: routeParams(proposal, { proposal_id: proposal.id }),
     });
@@ -180,6 +229,11 @@ export function buildCompanySearchRecords({
       label: entry.label || 'Untitled',
       hint: recordHint(entry, workspaceNames, entry.subOf ? `in ${entry.subOf}` : ''),
       keywords: joinedText(entry.text, entry.appName, entry.subOf, 'app record'),
+      searchFields: searchFields([
+        ['App', entry.appName],
+        ['Collection', entry.subOf],
+        ['Record data', entry.text],
+      ]),
       section: 'workspaces',
       // A sub-item has no page of its own, so it opens the record that holds it.
       params: routeParams(entry, { app_id: entry.appId, tab: 'items', item_id: entry.itemId || entry.id }),

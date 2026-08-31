@@ -48,6 +48,18 @@ test('every independent first-paint query starts in the same batch', async () =>
   assert.deepEqual(results.platformAdminResult, { data: ['rpc:is_platform_admin'], error: null });
 });
 
+test('startup requests carry human-readable timing labels', async () => {
+  const client = queryClient();
+  const labels = [];
+  await loadInitialDataQueries(client, (query, options) => {
+    labels.push(options?.label);
+    return Promise.resolve(query);
+  });
+  assert.ok(labels.includes('Companies'));
+  assert.ok(labels.includes('Workspace builder'));
+  assert.ok(labels.every(Boolean));
+});
+
 test('one stalled initial query cannot hold the workspace loader indefinitely', async () => {
   const started = Date.now();
   const result = await safeInitialDataQuery(new Promise(() => {}), { timeoutMs: 20 });

@@ -136,6 +136,26 @@ test('admin tabs are independently gated by the permission that protects their d
   assert.deepEqual(settingsSurfaceTabs('admin', { isDeveloper: true }).map(({ id }) => id), ADMIN_TABS.map(({ id }) => id));
 });
 
+test('real company-role shapes never inherit the master-account platform console', () => {
+  const rolePermissions = {
+    Owner: ['*'],
+    Member: ['tasks.view', 'crm.view'],
+    Worker: ['tasks.view', 'jobs.view', 'time.track'],
+    'Cold Caller': ['crm.view'],
+  };
+
+  for (const [role, permissions] of Object.entries(rolePermissions)) {
+    const allowed = new Set(permissions);
+    const tabs = settingsSurfaceTabs('admin', {
+      isDeveloper: false,
+      can: (permission) => allowed.has('*') || allowed.has(permission),
+    }).map(({ id }) => id);
+    assert.equal(tabs.includes('platform'), false, `${role} must not see Platform`);
+    if (role === 'Owner') assert.deepEqual(tabs, ['billing', 'data-recovery', 'audit-history', 'diagnostics']);
+    else assert.deepEqual(tabs, [], `${role} must not inherit company administration`);
+  }
+});
+
 test('setup and admin compose the existing screens instead of duplicating their data paths', () => {
   const surfaces = createSettingsSurfaces(fakeSurfaceContext());
   const modules = surfaces.renderSetupPage({ params: new URLSearchParams('tab=modules') }, 'company-a');

@@ -4040,9 +4040,31 @@ textarea:focus {
 
 .clock-table .table-head,
 .clock-table .table-row {
-  grid-template-columns: minmax(240px, 1fr) 150px 150px 110px;
+  grid-template-columns: minmax(150px, 1.2fr) minmax(96px, .8fr) minmax(112px, .8fr) minmax(76px, .55fr);
   gap: 12px;
 }
+
+.clock-entry-needs-review { background: color-mix(in srgb, var(--warning, #d18a00) 7%, transparent); }
+.clock-quality-label {
+  display: block;
+  color: var(--warning, #9a6500);
+  font-size: 10px;
+  font-weight: 750;
+}
+.clock-quality-warning {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning, #d18a00) 35%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning, #d18a00) 8%, var(--surface));
+  color: var(--ink);
+}
+.clock-quality-warning > i { color: var(--warning, #d18a00); }
+.clock-quality-warning span { display: grid; }
+.clock-quality-warning small { color: var(--muted); }
 
 .profile-layout,
 .file-layout,
@@ -23553,7 +23575,15 @@ button {
   font-size: 14px;
 }
 .command-item .ti { font-size: 17px; color: var(--ink-2); flex: none; }
-.command-item-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-item-copy { display: grid; flex: 1; min-width: 0; }
+.command-item-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-item-match {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .command-item-hint {
   font-size: 11px;
   color: var(--ink-2);
@@ -31169,15 +31199,18 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 /* A log line that points at the record it describes. */
 .wb-act-link {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
+  display: block;
   color: inherit;
   text-decoration: none;
 }
 
 .wb-act-link:hover { text-decoration: underline; }
-.wb-act-link i { font-size: 12px; opacity: .5; }
+.wb-act-link i {
+  display: inline;
+  margin-left: 5px;
+  font-size: 12px;
+  opacity: .5;
+}
 
 /* The reaction bar sits under the line, quieter than a post's. */
 .wb-act-bar { margin-top: 6px; }

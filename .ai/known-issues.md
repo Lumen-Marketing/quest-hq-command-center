@@ -297,3 +297,11 @@ data migration rather than a rule change.
 
 A permissions screen is a promise about what the database will do. An alias that survives an
 explicit untick breaks that promise quietly.
+
+## Historical suspicious clock rows require human review
+
+Clock entries under one minute or over sixteen hours now carry visible warnings. New sub-minute
+sessions are discarded and new long sessions require confirmation, but existing rows are not
+automatically altered because the correct timestamps cannot be reconstructed safely. An owner who
+confirms an entry is wrong must correct it through an audited time-entry workflow; no bulk rewrite
+is part of the 2026-09-01 QA cleanup.

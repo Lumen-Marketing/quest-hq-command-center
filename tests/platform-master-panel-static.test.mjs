@@ -24,7 +24,8 @@ test('platform master migration exposes admin-only company and member RPCs', () 
 test('platform master panel is gated to platform admins and lists companies with members', () => {
   assert.match(source, /if \(isDeveloper\) return ADMIN_TABS/);
   assert.match(source, /developerOnly: true/);
-  assert.match(source, /tab === 'platform' && isQuestDeveloper\(\) \? renderPlatformMasterPanel\(companyId\)/);
+  assert.match(source, /tab === 'platform' && isQuestDeveloper\(companyId\) \? renderPlatformMasterPanel\(companyId\)/);
+  assert.match(source, /isQuestDeveloper: isEffectiveQuestDeveloper/);
   assert.match(source, /function renderPlatformMasterPanel\(currentCompanyId\)/);
   assert.match(source, /function renderPlatformCompanyRow\(company, currentCompanyId\)/);
   assert.match(source, /function renderPlatformMemberRow\(member\)/);

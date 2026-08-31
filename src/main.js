@@ -39,7 +39,6 @@ import { requireOk, settleObserved } from './lib/result.js';
 import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequirements } from './auth/password-policy.js';
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh, shouldRenderAfterRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
-import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
 import { INACTIVE_COMPANY_STATUSES, filterCompanyRows, paginate } from './platform-directory.js';
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
@@ -2894,6 +2893,7 @@ let pilotReadinessPromise = null;
 let helpModule = null;
 let helpModulePromise = null;
 let companySearchModule = null;
+let commandPaletteModule = null;
 let commandResults = [];
 const COMMAND_RECENTS_KEY = 'quest.command.recents';
 const COMMAND_RECENTS_MAX = 8;
@@ -3062,7 +3062,7 @@ function refreshResolvedAppearance() {
 }
 
 function canManageCompanyAppearance(companyId = activeCompanyId()) {
-  return isQuestDeveloper() || ['owner', 'admin', 'developer']
+  return isEffectiveQuestDeveloper(companyId) || ['owner', 'admin', 'developer']
     .includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase());
 }
 
@@ -4014,10 +4014,13 @@ function render() {
   const keptScroll = captureScrollForRender();
   queueMicrotask(() => restoreScrollAfterRender(keptScroll));
   queueMicrotask(syncModalFocus);
+  const renderStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   wbInvalidateAppIndex(); // rebuild the builder app-index fresh for this render
   wbForgetImgSets(); // the photo sets the last paint registered go with the markup that held them
   state.route = getRoute();
   adoptRecoveryModeFromUrl();
+  const renderedRoute = `${state.route?.name || ''}/${state.route?.section || ''}`;
+  queueMicrotask(() => finishTimedOperation('Route render', renderStartedAt, 250, renderedRoute));
 
   if (CONFIG.questAuthEnabled && !state.authReady) {
     renderAuthLoading();
@@ -4856,6 +4859,7 @@ function ensureDomainLoaded(domain) {
   if (!client) return true;
   state.loadedDomains[domain] = 'loading';
   (async () => {
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     try {
       await loadRealtimeDomain(client, domain);
       state.loadedDomains[domain] = 'loaded';
@@ -4863,6 +4867,8 @@ function ensureDomainLoaded(domain) {
       // Let it be retried rather than leaving the section permanently empty.
       state.loadedDomains[domain] = '';
       console.error(`Deferred load failed for ${domain}`, error);
+    } finally {
+      finishTimedOperation('Deferred data load', startedAt, 1500, domain);
     }
     render();
   })();
@@ -4885,7 +4891,9 @@ async function loadSupabaseData() {
     safeInitialDataQuery,
     summarizeInitialDataFailures,
   } = await import('./data/initial-data-queries.js');
+  const initialQueriesStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const initialResults = await loadInitialDataQueries(client);
+  finishTimedOperation('Initial workspace data', initialQueriesStartedAt, 2000, 'bootstrap');
   state.initialLoadFailures = summarizeInitialDataFailures(initialResults);
   const recordInitialFailures = (results) => {
     state.initialLoadFailures = [...new Set([
@@ -6938,7 +6946,7 @@ function canViewModule(module, companyId = activeCompanyId()) {
 
 function canViewAdminSurface(companyId = activeCompanyId()) {
   return settingsSurfaceTabs('admin', {
-    isDeveloper: isQuestDeveloper(),
+    isDeveloper: isEffectiveQuestDeveloper(companyId),
     can: (permission) => can(permission, companyId),
   }).length > 0;
 }
@@ -7925,76 +7933,47 @@ function normalizePricebookPrice(input = {}) {
   };
 }
 
+let pluginBlockedPageModule = null;
+let pluginBlockedPagePending = null;
+let pluginBlockedPageError = null;
+
+function renderBlockedPage(method, ...args) {
+  if (pluginBlockedPageModule) return pluginBlockedPageModule[method](...args);
+  if (pluginBlockedPageError) return workspaceHeader('Access details could not load', 'Your data was not changed.', '<button class="btn btn-primary" type="button" data-action="retry-blocked-pages"><i class="ti ti-refresh"></i>Try again</button>');
+  if (!pluginBlockedPagePending) {
+    pluginBlockedPagePending = import('./plugins/plugin-blocked-page.js').then((mod) => {
+      pluginBlockedPageError = null;
+      pluginBlockedPageModule = mod.createPluginBlockedPage({
+        activeCompanyId, activeSession, activeWorkspaceId, appHref, can, companyName, companyPath,
+        companyPluginStatus, contractRows, h, membershipForProfile, pluginsForModule, roleForCompany,
+        subscriptionLabel, subscriptionNeedsReview, titleCase, wbCompanyWorkspacePeek,
+        workspaceHeader, workspacePluginStatus,
+      });
+      render();
+    }).catch((error) => {
+      pluginBlockedPagePending = null;
+      pluginBlockedPageError = error;
+      console.error('Plugin guidance failed to load', error);
+      render();
+    });
+  }
+  return questLoader('Loading module guidance');
+}
+
 function renderSubscriptionBlockedPage(companyId) {
-  const pendingReview = subscriptionNeedsReview(companyId);
-  return `
-    ${workspaceHeader(pendingReview ? 'Workspace awaiting approval' : 'Subscription required', pendingReview ? 'Your company workspace is created. Quest needs to approve billing/access before live company data opens.' : 'This company workspace needs an active subscription before paid modules can open.', `
-      <button class="btn" type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
-      <a class="btn btn-primary" href="${appHref(companyPath('admin', { tab: 'billing' }, companyId))}" data-router><i class="ti ti-credit-card"></i>${pendingReview ? 'Review status' : 'Billing'}</a>
-    `)}
-    <section class="panel">
-      ${contractRows([
-        ['Company', companyName(companyId)],
-        ['Subscription', subscriptionLabel(companyId)],
-        ['Allowed area', 'Settings, profile, and sign out remain available'],
-        ['Next step', pendingReview ? 'Quest approval / billing activation' : 'Restore billing access'],
-      ])}
-    </section>
-  `;
+  return renderBlockedPage('renderSubscriptionBlockedPage', companyId);
 }
 
 function renderPluginBlockedPage(companyId, moduleMeta) {
-  const plugins = pluginsForModule(moduleMeta?.id || '');
-  const plugin = plugins[0] || null;
-  const workspaceId = activeWorkspaceId();
-  const canManagePlugins = can('plugins.manage', companyId);
-  const installablePlugins = plugins.filter((item) => !item.comingSoon && companyPluginStatus(companyId, item.id) === 'installed');
-  return `
-    ${workspaceHeader(`${plugin?.label || moduleMeta?.label || 'Plugin'} not installed`, 'This workspace has not enabled the plugin required for this module.', `
-      <a class="btn" href="${appHref(companyPath('setup', { tab: 'modules' }, companyId))}" data-router><i class="ti ti-plug"></i>${canManagePlugins ? 'Manage modules' : 'View modules'}</a>
-      ${canManagePlugins ? installablePlugins.map((item) => `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(item.id)}" data-status="installed"><i class="ti ti-download"></i>Activate ${h(item.label)}</button>`).join('') : ''}
-    `)}
-    <section class="panel">
-      ${contractRows([
-        ['Company', companyName(companyId)],
-        ['Requested module', moduleMeta?.label || moduleMeta?.id || 'Unknown'],
-        ['Required plugin', plugins.length ? plugins.map((item) => item.label).join(' or ') : 'Unknown'],
-        ['Current status', plugins.length ? plugins.map((item) => `${item.label}: ${titleCase(workspacePluginStatus(companyId, item.id, workspaceId).replace('_', ' '))}`).join(' / ') : 'Unavailable'],
-        ['Data policy', 'Existing plugin data is preserved while the plugin is disabled'],
-      ])}
-    </section>
-  `;
+  return renderBlockedPage('renderPluginBlockedPage', companyId, moduleMeta);
 }
 
 function renderPermissionBlockedPage(companyId, permission) {
-  return `
-    ${workspaceHeader('Access denied', 'Your role does not include the permission required for this module.', `
-      <a class="btn" href="${appHref(companyPath('users', { tab: 'roles' }, companyId))}" data-router><i class="ti ti-shield-lock"></i>Roles</a>
-    `)}
-    <section class="panel">
-      ${contractRows([
-        ['Company', companyName(companyId)],
-        ['Required permission', permission],
-        ['Your role', roleForCompany(companyId)],
-      ])}
-    </section>
-  `;
+  return renderBlockedPage('renderPermissionBlockedPage', companyId, permission);
 }
 
 function renderCompanyAccessDeniedPage(companyId) {
-  return `
-    ${workspaceHeader('Company access denied', 'This workspace is not in your active company memberships.', `
-      <a class="btn" href="${appHref(companyPath('jobs', {}, activeCompanyId()))}" data-router><i class="ti ti-building"></i>Your workspace</a>
-      <a class="btn btn-primary" href="${appHref('/login?mode=request')}" data-router><i class="ti ti-user-plus"></i>Request access</a>
-    `)}
-    <section class="panel">
-      ${contractRows([
-        ['Requested company', companyName(companyId)],
-        ['Access rule', 'Active company membership required'],
-        ['Your status', membershipForProfile(companyId, activeSession().profile.id)?.status ? titleCase(membershipForProfile(companyId, activeSession().profile.id).status) : 'No active membership'],
-      ])}
-    </section>
-  `;
+  return renderBlockedPage('renderCompanyAccessDeniedPage', companyId);
 }
 
 function renderPilotLaunchChecklist(companyId) {
@@ -21467,7 +21446,7 @@ function loadSettingsSurfaces() {
         billingMode: CONFIG.billingMode, companyAuditEvents, companyName, companyPath,
         companyDirectoryFilters, companySubscription, compactTabs,
         contractRows, emptyState, filterCompanyRows, formatDate, h, isPluginInstalled,
-        isQuestDeveloper, navigationLabel, paginate, profileById, renderAvatar,
+        isQuestDeveloper: isEffectiveQuestDeveloper, navigationLabel, paginate, profileById, renderAvatar,
         questAuthEnabled: CONFIG.questAuthEnabled, renderAppearanceControls, renderBackupsSettings,
         renderCompanySetupSettings, renderHandoffReviewPanel, renderPlatformMasterPanel,
         renderPluginsSettings, renderRecycleBinSettings, renderWorkspaceSettingsSurface,
@@ -24534,11 +24513,13 @@ function renderTimePage(companyId) {
 // Body lives in ./ops/clock-dashboard-page.js and is fetched on first use.
 let clockDashboardPageModule = null;
 let clockDashboardPagePending = null;
+let clockDashboardPageError = null;
 
 function loadClockDashboardPage() {
   if (clockDashboardPageModule) return Promise.resolve(clockDashboardPageModule);
   if (!clockDashboardPagePending) {
     clockDashboardPagePending = import('./ops/clock-dashboard-page.js').then((mod) => {
+      clockDashboardPageError = null;
       clockDashboardPageModule = mod.createClockDashboardPage({
         activeTimerForCompany, contractRows, emptyState, formatClock, formatDateTime, formatDuration,
         h, markup, memberName, metricCard, renderOperationsTabs, startOfToday,
@@ -24547,6 +24528,7 @@ function loadClockDashboardPage() {
       return clockDashboardPageModule;
     }).catch((error) => {
       clockDashboardPagePending = null;
+      clockDashboardPageError = error;
       throw error;
     });
   }
@@ -24555,6 +24537,9 @@ function loadClockDashboardPage() {
 
 function renderClockDashboardPage(companyId) {
   if (clockDashboardPageModule) return clockDashboardPageModule.renderClockDashboardPage(companyId);
+  if (clockDashboardPageError) {
+    return workspaceHeader('Clock dashboard could not load', 'The page files did not arrive. Your saved time was not changed.', '<button class="btn btn-primary" type="button" data-action="retry-clock-dashboard"><i class="ti ti-refresh"></i>Try again</button>');
+  }
   loadClockDashboardPage().then(() => render()).catch((error) => console.error('Clock dashboard failed to load', error));
   return questLoader('Loading clock');
 }
@@ -26859,9 +26844,11 @@ function openCommandPalette(initialQuery = '') {
     helpModulePromise = Promise.all([
       import('./assistant/help-index.js'),
       import('./company-search.js'),
-    ]).then(([help, companySearch]) => {
+      import('./command-palette.js'),
+    ]).then(([help, companySearch, commandPalette]) => {
       helpModule = help;
       companySearchModule = companySearch;
+      commandPaletteModule = commandPalette;
       if (state.commandPalette.open) {
         render();
         queueMicrotask(() => document.querySelector('[data-command-input]')?.focus());
@@ -26934,6 +26921,7 @@ function commandPaletteRecords() {
 }
 
 function commandPaletteCommands(query) {
+  if (!commandPaletteModule) return [];
   const companyId = activeCompanyId();
   const modules = MODULE_REGISTRY.filter((module) => module.id !== 'settings' && canViewModule(module, companyId));
   const allowed = new Set(allowedCompanyIds());
@@ -26943,7 +26931,7 @@ function commandPaletteCommands(query) {
   // Records only join the index once the user is actually searching — no point
   // listing every contact in the empty menu.
   const records = query && query.trim() ? commandPaletteRecords() : [];
-  return buildCommandIndex({ modules, companies, actions: commandPaletteQuickActions(), records, activeCompanyId: companyId });
+  return commandPaletteModule.buildCommandIndex({ modules, companies, actions: commandPaletteQuickActions(), records, activeCompanyId: companyId });
 }
 
 // Recently-visited modules and records, per company, so an empty ⌘K is useful
@@ -26989,7 +26977,8 @@ function trackRouteForRecents(route) {
 }
 
 function commandPaletteResultsFor(query) {
-  const ranked = filterCommands(commandPaletteCommands(query), query);
+  if (!commandPaletteModule) return [];
+  const ranked = commandPaletteModule.filterCommands(commandPaletteCommands(query), query);
   const perGroup = new Map();
   const capped = [];
   for (const command of ranked) {
@@ -27191,11 +27180,12 @@ function runCommand(command) {
 }
 
 function renderCommandResultItems() {
+  if (!commandPaletteModule) return '<div class="command-empty">Preparing search…</div>';
   if (!commandResults.length) {
     return `<div class="command-empty">No matches for "${h(state.commandPalette.query)}"</div>`;
   }
   let index = -1;
-  return groupCommands(commandResults).map((group) => `
+  return commandPaletteModule.groupCommands(commandResults).map((group) => `
     <div class="command-group" role="group" aria-label="${h(group.group)}">
       <div class="command-group-label">${h(group.group)}</div>
       ${group.items.map((command) => {
@@ -27205,7 +27195,7 @@ function renderCommandResultItems() {
           id="command-item-${index}" aria-selected="${active ? 'true' : 'false'}"
           data-action="command-run" data-cmd-index="${index}">
           <i class="ti ${h(command.icon)}" aria-hidden="true"></i>
-          <span class="command-item-label">${h(command.label)}</span>
+          <span class="command-item-copy"><span class="command-item-label">${h(command.label)}</span>${command.match ? `<small class="command-item-match">${h(command.match)}</small>` : ''}</span>
           ${command.hint ? `<span class="command-item-hint">${h(command.hint)}</span>` : ''}
         </button>`;
       }).join('')}
@@ -27772,6 +27762,20 @@ function handleAction(event, node) {
     event.preventDefault();
     settingsSurfacesLoadError = null;
     settingsSurfacesPending = null;
+    render();
+    return;
+  }
+  if (action === 'retry-clock-dashboard') {
+    event.preventDefault();
+    clockDashboardPageError = null;
+    clockDashboardPagePending = null;
+    render();
+    return;
+  }
+  if (action === 'retry-blocked-pages') {
+    event.preventDefault();
+    pluginBlockedPageError = null;
+    pluginBlockedPagePending = null;
     render();
     return;
   }
@@ -28830,12 +28834,14 @@ function handleAction(event, node) {
     }
     state.rolePreview = { company_id: companyId, role_id: role.id };
     showToast(`Viewing the workspace as ${role.name}.`, 'local', 'Role preview');
+    render();
     return;
   }
   if (action === 'exit-role-preview') {
     event.preventDefault();
     state.rolePreview = null;
     showToast('Role preview ended.', 'live', 'Role preview');
+    render();
     return;
   }
   if (action === 'open-invite-form') {
@@ -28848,7 +28854,7 @@ function handleAction(event, node) {
   if (action === 'set-company-plugin') {
     event.preventDefault();
     const targetCompanyId = canonicalCompanyId(node.dataset.companyId || activeCompanyId());
-    if (!isQuestDeveloper() && !requirePermission('plugins.manage', targetCompanyId, 'Your role cannot manage workspace plugins.', 'Plugins')) return;
+    if (!isEffectiveQuestDeveloper(targetCompanyId) && !requirePermission('plugins.manage', targetCompanyId, 'Your role cannot manage workspace plugins.', 'Plugins')) return;
     setCompanyPlugin(targetCompanyId, node.dataset.pluginId, node.dataset.status).catch((error) => {
       state.sync = { label: error.message || 'Plugin update failed', mode: 'local' };
       render();
@@ -32007,7 +32013,7 @@ async function saveOperationalWorkspaceSettings(formNode) {
 }
 
 async function createPlatformWorkspace(formNode) {
-  if (!isQuestDeveloper()) {
+  if (!isEffectiveQuestDeveloper()) {
     showToast('Platform owner access is required to create workspaces for others.', 'local', 'Master panel');
     return;
   }
@@ -32390,7 +32396,7 @@ async function startCheckout() {
 async function reviewWorkspace(companyId, status) {
   const targetCompanyId = canonicalCompanyId(companyId);
   const nextStatus = normalizeSubscriptionStatus(status);
-  if (!targetCompanyId || !nextStatus || !isQuestDeveloper()) {
+  if (!targetCompanyId || !nextStatus || !isEffectiveQuestDeveloper(targetCompanyId)) {
     showToast('Platform owner access is required to review workspaces.', 'local', 'Workspace review');
     return;
   }
@@ -32421,7 +32427,7 @@ async function managePlatformCompany(companyId, platformAction) {
   const targetCompanyId = canonicalCompanyId(companyId);
   const action = String(platformAction || '').toLowerCase().trim();
   const nextStatus = platformActionStatus(action);
-  if (!targetCompanyId || !nextStatus || !isQuestDeveloper()) {
+  if (!targetCompanyId || !nextStatus || !isEffectiveQuestDeveloper(targetCompanyId)) {
     showToast('Platform owner access is required to manage companies.', 'local', 'Master panel');
     return;
   }
@@ -37566,7 +37572,7 @@ function routeRedirect(route) {
   }
   if (route.section === 'settings') {
     const destination = canonicalSettingsDestination(route.params.get('tab') || 'company');
-    const tab = destination.section === 'admin' && destination.tab === 'platform' && !isQuestDeveloper()
+    const tab = destination.section === 'admin' && destination.tab === 'platform' && !isEffectiveQuestDeveloper(route.companyId)
       ? 'billing'
       : destination.tab;
     return companyPath(destination.section, {
@@ -40785,6 +40791,9 @@ function timeEntriesForCompany(companyId = activeCompanyId()) {
     .sort((a, b) => Date.parse(b.started_at || 0) - Date.parse(a.started_at || 0));
 }
 
+const MIN_CLOCK_ENTRY_MS = 60 * 1000;
+const LONG_CLOCK_ENTRY_MS = 16 * 60 * 60 * 1000;
+
 function totalTimeForCompany(companyId = activeCompanyId(), sinceMs = 0) {
   return timeEntriesForCompany(companyId)
     .filter((entry) => Date.parse(entry.started_at || 0) >= sinceMs)
@@ -40793,7 +40802,7 @@ function totalTimeForCompany(companyId = activeCompanyId(), sinceMs = 0) {
 
 function startClock(companyId = activeCompanyId(), taskId = '') {
   if (!requirePermission('time.track', companyId, 'Your role cannot track time in this workspace.', 'Time')) return;
-  if (state.activeTimer) stopClock(false);
+  if (state.activeTimer && stopClock(false) === false) return;
   const task = taskId ? taskById(taskId) : null;
   const profile = activeSession().profile;
   state.activeTimer = {
@@ -40815,6 +40824,16 @@ function stopClock(shouldRender = true) {
   if (!timer) return;
   const endedAt = new Date().toISOString();
   const durationMs = Math.max(0, Date.parse(endedAt) - Date.parse(timer.started_at || endedAt));
+  if (durationMs > LONG_CLOCK_ENTRY_MS && typeof window !== 'undefined'
+    && !window.confirm('This shift is longer than 16 hours. Save it anyway?')) return false;
+  if (durationMs < MIN_CLOCK_ENTRY_MS) {
+    state.activeTimer = null;
+    persistTimeState();
+    state.sync = { label: 'Timer under one minute discarded', mode: 'local' };
+    showToast('The timer was under one minute, so no duplicate 0m entry was saved.', 'local', 'Clock');
+    if (shouldRender) render();
+    return true;
+  }
   const entry = {
     id: `time-${crypto.randomUUID()}`,
     company_id: timer.company_id,
@@ -40832,6 +40851,7 @@ function stopClock(shouldRender = true) {
   persistTimeState(entry);
   state.sync = { label: isLiveSupabaseSession() ? 'Clock stopped' : 'Clock stopped locally', mode: isLiveSupabaseSession() ? 'live' : 'local' };
   if (shouldRender) render();
+  return true;
 }
 
 function isOpenTask(task) {
@@ -41772,6 +41792,14 @@ function isQuestDeveloper() {
   return String(activeSession().profile?.role || '').toLowerCase() === 'developer';
 }
 
+// A platform administrator can preview an ordinary company role without changing their real
+// account. During that preview every visible surface must use the previewed role, including the
+// platform-only tabs that normally bypass company permissions. Server RPCs still use the real
+// account and remain the final authorization boundary.
+function isEffectiveQuestDeveloper(companyId = activeCompanyId()) {
+  return isQuestDeveloper() && !rolePreviewForCompany(companyId);
+}
+
 function memberName(id) {
   const profile = profileById(id);
   if (profile) return profile?.full_name || profile?.email || id || 'Unassigned';
@@ -42579,7 +42607,7 @@ function normalizeJob(input) {
     client_name: String(input.client_name || '').trim(),
     contact_name: String(input.contact_name || '').trim(),
     site_address: String(input.site_address || '').trim(),
-    job_type: String(input.job_type || 'Roofing').trim(),
+    job_type: String(input.job_type || 'General').trim(),
     stage: resolveJobStage(input.stage, input.company_id),
     priority: ['Low', 'Medium', 'High', 'Urgent'].includes(input.priority) ? input.priority : 'Medium',
     owner_name: String(input.owner_name || '').trim(),
@@ -43788,7 +43816,7 @@ function blankJob(companyId = activeCompanyId()) {
     name: '',
     stage: 'Lead',
     priority: 'Medium',
-    job_type: 'Roofing',
+    job_type: 'General',
   });
 }
 
@@ -44308,6 +44336,24 @@ function localDateTimeToIso(value) {
 // helper centralized means older call sites also receive the standard content skeleton.
 function questLoader(text) {
   return renderContentSkeleton({ statusText: text });
+}
+
+function finishTimedOperation(label, startedAt, thresholdMs = 1000, context = '') {
+  const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const durationMs = Math.max(0, Math.round(endedAt - Number(startedAt || endedAt)));
+  if (durationMs < thresholdMs) return durationMs;
+  reportSlowOperation(label, durationMs, context);
+  return durationMs;
+}
+
+function reportSlowOperation(label, durationMs, context = '') {
+  console.warn('[quest-performance]', { operation: label, duration_ms: durationMs, context });
+  if (!import.meta.env.PROD) return;
+  import('./telemetry/performance-reporter.js').then(({ sendSlowOperation }) => sendSlowOperation({
+    label,
+    durationMs,
+    context: context || `${state?.route?.name || ''}/${state?.route?.section || ''}`,
+  }, state)).catch(() => {});
 }
 
 function emptyState(text) {
@@ -47236,6 +47282,10 @@ if (import.meta.env.PROD) {
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event?.reason;
     report('unhandledrejection', reason?.message || String(reason || ''), reason?.stack, '');
+  });
+  window.addEventListener('quest:slow-operation', (event) => {
+    const detail = event?.detail || {};
+    reportSlowOperation(detail.label || 'Data request', detail.durationMs || 0, detail.context || '');
   });
 }
 

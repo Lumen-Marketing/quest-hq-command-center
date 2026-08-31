@@ -25,8 +25,15 @@
   width: min(1120px, 96vw);
   max-height: 94vh;
   overflow: auto;
+  overscroll-behavior: contain;
   border-radius: 18px;
   box-shadow: 0 24px 70px rgb(15 23 42 / 24%);
+}
+
+/* The setup dialog owns scrolling while it is open. Leaving the work surface scrollable
+   exposes a second scrollbar behind the overlay and can move the page under the dialog. */
+.quest-app:has(.company-setup-modal-overlay) .work-surface {
+  overflow: hidden;
 }
 
 .company-setup-modal-frame .company-setup-shell {
@@ -561,6 +568,50 @@
   font-weight: 700;
 }
 
+.company-setup-selected-apps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.company-setup-selected-app {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--setup-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--setup-accent) 5%, var(--setup-card));
+}
+
+.company-setup-selected-app > i { color: var(--setup-accent); }
+
+.company-setup-selected-app > span {
+  display: grid;
+  min-width: 0;
+}
+
+.company-setup-selected-app strong,
+.company-setup-selected-app small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-setup-selected-app small {
+  color: var(--setup-muted);
+  font-size: 0.7rem;
+}
+
+.company-setup-selected-apps > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--setup-muted);
+  font-size: 0.76rem;
+}
+
 .company-setup-app-editor {
   border-top: 1px solid var(--setup-line);
   padding-top: 11px;
@@ -820,6 +871,8 @@
     max-height: 100dvh;
     border-radius: 0;
   }
+
+  .company-setup-selected-apps { grid-template-columns: 1fr; }
 
   .company-setup-intro,
   .company-setup-mode-grid,

@@ -1968,3 +1968,27 @@ adding one), and import to every role that could create them.
 
 Verified on live: the reported Worker holds both and can write both; a view-only role answers
 false to both and its inserts are refused; and no role can rewrite a row once written.
+
+## Role preview removes platform bypasses in the browser (2026-09-01)
+
+A Developer previewing a normal company role must see what that role sees, including the absence
+of the Quest approval console and other platform-only controls. Keeping the Developer shortcut
+active during preview made the feature incapable of testing its highest-risk boundary. The browser
+therefore uses `isEffectiveQuestDeveloper(companyId)`: the real Developer flag only applies when no
+role preview is active for that company. This is a presentation/access-discovery rule, not a new
+authorization mechanism; privileged writes remain guarded by database and RPC checks against the
+real authenticated account.
+
+## Suspect historical time is flagged, not guessed (2026-09-01)
+
+Questbase can prevent a new sub-minute duplicate and require confirmation for a new shift over
+sixteen hours. It cannot infer the correct start or end of an existing suspicious row. Historical
+rows stay intact and receive visible review labels; silently shortening, deleting, or merging them
+would turn a QA cleanup into payroll data corruption.
+
+## Search and exceptional guidance do not belong in the default bundle (2026-09-01)
+
+The company-search matcher and the detailed plugin-disabled page are interaction-only code. They
+now arrive through dynamic imports when Search or that exceptional route is opened. This paid for
+the QA features without raising the entry JavaScript ceiling and keeps the existing bundle-budget
+refusal intact.

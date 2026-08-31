@@ -4,6 +4,7 @@ import test from 'node:test';
 import handler from '../api/client-error.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const performanceReporter = readFileSync(new URL('../src/telemetry/performance-reporter.js', import.meta.url), 'utf8');
 
 function mockRes() {
   const res = {
@@ -24,6 +25,13 @@ function captureLog(run) {
   return Promise.resolve(run()).finally(() => { console.error = original; }).then(() => lines.join('\n'));
 }
 
+function captureWarning(run) {
+  const original = console.warn;
+  const lines = [];
+  console.warn = (...args) => lines.push(args.map(String).join(' '));
+  return Promise.resolve(run()).finally(() => { console.warn = original; }).then(() => lines.join('\n'));
+}
+
 test('a well-formed report is accepted and logged', async () => {
   const res = mockRes();
   const logged = await captureLog(() => handler(post({
@@ -36,6 +44,20 @@ test('a well-formed report is accepted and logged', async () => {
   assert.equal(entry.message, 'Boom');
   assert.equal(entry.company, 'acme');
   assert.equal(entry.revision, 'abc123');
+});
+
+test('slow-operation telemetry is kept separate from actual browser errors', async () => {
+  const res = mockRes();
+  const logged = await captureWarning(() => handler(post({
+    kind: 'performance', message: 'Slow data request', duration_ms: 5234,
+    url: 'https://www.questbase.io/company/acme/jobs?secret=nope', route: 'Jobs', company_id: 'acme',
+  }), res));
+  assert.equal(res.statusCode, 204);
+  assert.match(logged, /\[client-performance\]/);
+  assert.doesNotMatch(logged, /secret=nope/);
+  const entry = JSON.parse(logged.slice(logged.indexOf('{')));
+  assert.equal(entry.duration_ms, 5234);
+  assert.equal(entry.kind, 'performance');
 });
 
 // Invite and password-recovery links carry secrets in the query string and fragment.
@@ -101,6 +123,15 @@ test('a render loop cannot flood the log: the client caps and dedupes', () => {
   assert.match(main, /const REPORT_LIMIT = 5;/);
   assert.match(main, /if \(sent >= REPORT_LIMIT\) return;/);
   assert.match(main, /if \(seen\.has\(key\)\) return;/);
+});
+
+test('slow route and data timing is bounded and carries structural context only', () => {
+  assert.match(main, /finishTimedOperation\('Route render'/);
+  assert.match(main, /finishTimedOperation\('Initial workspace data'/);
+  assert.match(main, /finishTimedOperation\('Deferred data load'/);
+  assert.match(main, /import\('\.\/telemetry\/performance-reporter\.js'\)/);
+  assert.match(performanceReporter, /reportCount >= 8/);
+  assert.doesNotMatch(performanceReporter, /email|contact_name|field values/i);
 });
 
 test('the reporter cannot become the error it reports', () => {

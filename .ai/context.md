@@ -43,11 +43,16 @@ Tickets and Templates appear as future/planned areas. Confirm current implementa
 - Account: a company or household related to contacts and deals.
 - Site: the physical service/property location.
 - Deal or Quote: a sales opportunity that can become a job.
-- Job: the operational container for roofing work.
+- Job: the operational container for service work. A manually created generic job starts as
+  `General`; roofing-specific types and fields appear only when the roofing/Quest CRM setup owns
+  them.
 - Task: work execution that also supplies the shared "What's next" value for linked Contacts, Quotes/Deals, and Jobs.
 - Company account: the market customer, subscription, and outer security tenant.
 - Operational workspace: a configurable child environment for a team, pipeline, or role inside one company account.
 - Workspace setup plan: the owner-reviewed, editable apps, pipeline stages, and non-elevated role templates produced for one selected operational workspace by its searchable work-type questionnaire or a ready-made blueprint. It never creates or rewrites sibling workspaces.
 - Workspace App Builder: the configurable custom-app module available inside an operational workspace; it is not the tenancy object itself.
 - Module: the customer-facing tool enabled for a workspace. Internally it remains backed by the existing company plugin entitlement plus workspace plugin activation; disabling it preserves data.
+- Quest CRM Jobs: the packaged CRM/production Jobs module and its predefined pipeline. Custom
+  Jobs: an App Builder app named Jobs, owned and shaped by one operational workspace. They are
+  separate tools even when both use the word Jobs.
 

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   buildCommandIndex,
+  explainCommandMatch,
   filterCommands,
 } from '../src/command-palette.js';
 import { buildCompanySearchRecords, buildCompanySearchRecordsFromState } from '../src/company-search.js';
@@ -89,6 +90,23 @@ test('company search finds module-specific metadata, not only record titles', ()
   assert.equal(filterCommands(commands, '123 Main')[0]?.group, 'Jobs');
   assert.equal(filterCommands(commands, 'Shan')[0]?.group, 'Tasks');
   assert.equal(filterCommands(commands, 'City approved')[0]?.group, 'Files');
+});
+
+test('company search explains metadata matches and ranks exact values first', () => {
+  const records = buildCompanySearchRecords({
+    contacts: [
+      { id: 'c1', name: 'Alex Parra', email: 'roof@example.com' },
+      { id: 'c2', name: 'Roof', email: 'alex@example.com' },
+    ],
+    jobs: [{ id: 'j1', name: 'Smith project', job_type: 'Roof' }],
+  });
+  const commands = buildCommandIndex({ records });
+  const matches = filterCommands(commands, 'Roof');
+
+  assert.equal(matches[0].label, 'Roof', 'an exact record name should win');
+  assert.equal(matches[1].match, 'Job type: Roof');
+  assert.equal(matches[2].match, 'Email: roof@example.com');
+  assert.equal(explainCommandMatch(matches[0], 'Roof'), 'Exact name');
 });
 
 test('company search excludes inaccessible workspaces before indexing records', () => {

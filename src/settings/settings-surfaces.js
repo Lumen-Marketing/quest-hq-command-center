@@ -210,13 +210,13 @@ export function createSettingsSurfaces(ctx) {
           ['Seat billing', 'Tracked later; not charged in v1'],
         ])}
       </article>
-      ${isQuestDeveloper() ? renderWorkspaceApprovalConsole(companyId) : ''}
+      ${isQuestDeveloper(companyId) ? renderWorkspaceApprovalConsole(companyId) : ''}
     `;
   }
 
   function renderAdminPage(route, companyId) {
     const capabilities = {
-      isDeveloper: isQuestDeveloper(),
+      isDeveloper: isQuestDeveloper(companyId),
       can: (permission) => can(permission, companyId),
     };
     const tabs = settingsSurfaceTabs('admin', capabilities);
@@ -237,7 +237,7 @@ export function createSettingsSurfaces(ctx) {
         ${tab === 'data-recovery' ? `<div class="settings-recovery-stack span-3">${renderBackupsSettings(companyId)}${renderRecycleBinSettings(companyId)}</div>` : ''}
         ${tab === 'audit-history' ? renderAuditHistory(companyId) : ''}
         ${tab === 'diagnostics' ? renderWorkspaceSettingsSurface('renderDiagnosticsSettings', companyId) : ''}
-        ${tab === 'platform' && isQuestDeveloper() ? renderPlatformMasterPanel(companyId) : ''}
+        ${tab === 'platform' && isQuestDeveloper(companyId) ? renderPlatformMasterPanel(companyId) : ''}
       </section>
     `;
   }

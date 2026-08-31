@@ -200,6 +200,7 @@ const FACTORY_MODULES = [
   ['src/knowledge/knowledge-page.js', 'createKnowledgePage'],
   ['src/settings/backups-panel.js', 'createBackupsPanel'],
   ['src/settings/plugins-panel.js', 'createPluginsPanel'],
+  ['src/plugins/plugin-blocked-page.js', 'createPluginBlockedPage'],
   ['src/settings/settings-surfaces.js', 'createSettingsSurfaces'],
   ['src/settings/workspace-settings.js', 'createWorkspaceSettings'],
   ['src/portals/client-portals-page.js', 'createClientPortalsPage'],

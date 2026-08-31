@@ -9,6 +9,13 @@ export function createClockDashboardPage(ctx) {
     timeEntriesForCompany, totalTimeForCompany, workspaceHeader,
   } = ctx;
 
+  function timeEntryQuality(entry = {}) {
+    const durationMs = Math.max(0, Number(entry.duration_ms) || 0);
+    if (durationMs < 60 * 1000) return { label: 'Under 1 minute', detail: 'Check or remove this accidental entry.' };
+    if (durationMs > 16 * 60 * 60 * 1000) return { label: 'Unusually long', detail: 'Confirm the start and end time.' };
+    return null;
+  }
+
   function renderClockDashboardPage(companyId) {
     const entries = timeEntriesForCompany(companyId);
     const active = activeTimerForCompany(companyId);
@@ -42,20 +49,24 @@ export function createClockDashboardPage(ctx) {
               ['Started', formatDateTime(active.started_at)],
               ['Task', active.task_title || 'General shift'],
               ['Elapsed', markup(`<span class="clock-elapsed" data-live-clock="${h(active.started_at)}">${h(formatClock(runningMs))}</span>`)],
-            ]) : emptyState('Nobody is clocked in on this device.')}
+            ]) : emptyState('You are not clocked in.')}
+            ${active && runningMs > 16 * 60 * 60 * 1000 ? '<div class="clock-quality-warning"><i class="ti ti-alert-triangle"></i><span><strong>Unusually long shift</strong><small>Check the start time before clocking out.</small></span></div>' : ''}
           </article>
           <article class="panel span-2">
-            <div class="section-head"><div><h2>Recent entries</h2><p>Local time records for this company.</p></div></div>
+            <div class="section-head"><div><h2>Recent entries</h2><p>Your saved time records for this workspace.</p></div></div>
             <div class="data-table clock-table">
               <div class="table-head"><span>Entry</span><span>User</span><span>Start</span><span>Duration</span></div>
-              ${entries.slice(0, 10).map((entry) => `
-                <div class="table-row">
+              ${entries.slice(0, 10).map((entry) => {
+                const quality = timeEntryQuality(entry);
+                return `
+                <div class="table-row ${quality ? 'clock-entry-needs-review' : ''}">
                   <span><strong>${h(entry.task_title || 'General shift')}</strong><small>${h(entry.notes || 'Clock entry')}</small></span>
                   <span>${h(memberName(entry.user_id))}</span>
                   <span>${formatDateTime(entry.started_at)}</span>
-                  <span>${formatDuration(entry.duration_ms)}</span>
+                  <span><strong>${formatDuration(entry.duration_ms)}</strong>${quality ? `<small class="clock-quality-label" title="${h(quality.detail)}">${h(quality.label)}</small>` : ''}</span>
                 </div>
-              `).join('') || emptyState('No clock entries yet.')}
+              `;
+              }).join('') || emptyState('No clock entries yet.')}
             </div>
           </article>
         </section>

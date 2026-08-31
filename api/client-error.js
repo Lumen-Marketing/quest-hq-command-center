@@ -53,10 +53,12 @@ export default async function handler(req, res) {
     else { for await (const chunk of req) { raw += chunk; if (raw.length > 16 * 1024) break; } }
 
     const body = JSON.parse(raw || '{}') || {};
+    const kind = ['error', 'unhandledrejection', 'performance'].includes(body.kind) ? body.kind : 'error';
     const entry = {
-      kind: body.kind === 'unhandledrejection' ? 'unhandledrejection' : 'error',
+      kind,
       message: text(body.message, MAX.message) || '(no message)',
       stack: safeStack(body.stack),
+      duration_ms: kind === 'performance' ? Math.max(0, Math.min(360000, Math.round(Number(body.duration_ms) || 0))) : undefined,
       at: safeUrl(body.url),
       // Structural only: which screen, not what was on it.
       route: text(body.route, MAX.route),
@@ -67,7 +69,8 @@ export default async function handler(req, res) {
       workspace: text(body.workspace_id, MAX.id),
       profile: text(body.profile_id, MAX.id),
     };
-    console.error('[client-error]', JSON.stringify(entry));
+    if (kind === 'performance') console.warn('[client-performance]', JSON.stringify(entry));
+    else console.error('[client-error]', JSON.stringify(entry));
   } catch {
     // Ignore malformed reports — never error on a best-effort telemetry endpoint.
   }

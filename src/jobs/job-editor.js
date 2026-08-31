@@ -45,7 +45,7 @@ export function createJobEditor(ctx) {
         ${field('Contact', 'contact_name', edit.contact_name)}
         <input type="hidden" name="contact_id" value="${h(edit.contact_id || '')}" data-job-contact-id />
         ${ownerField(edit.owner_name, companyId)}
-        ${field('Job type', 'job_type', edit.job_type || 'Roofing')}
+        ${field('Job type', 'job_type', edit.job_type || 'General')}
         ${selectField('Stage', 'stage', resolveJobStage(edit.stage), jobStageNames().map((stage) => [stage, stage]))}
         ${selectField('Client urgency', 'priority', edit.priority || 'Medium', ['Low', 'Medium', 'High', 'Urgent'].map((item) => [item, item]))}
         ${currencyField('Estimate total', 'estimate_total', edit.estimate_total || 0)}
@@ -54,7 +54,7 @@ export function createJobEditor(ctx) {
         ${textareaField('Scope', 'scope', edit.scope, 'span-2')}
         ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
         <div class="form-actions span-2">
-          <button class="btn btn-primary" type="submit">Save job</button>
+          <button class="btn btn-primary" type="submit">${job ? 'Save job' : 'Add job'}</button>
           ${job ? `<button class="btn danger" type="button" data-action="delete-job" data-job-id="${h(job.id)}">Delete</button>` : ''}
           <button class="btn" type="button" data-action="close-modal">Cancel</button>
         </div>

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+const clockDashboard = readFileSync(join(root, 'src', 'ops', 'clock-dashboard-page.js'), 'utf8');
 const initialQueries = readFileSync(join(root, 'src', 'data', 'initial-data-queries.js'), 'utf8');
 const migration = readFileSync(
   join(root, 'supabase', 'migrations', '202608081000_company_time_clock.sql'),
@@ -83,4 +84,21 @@ test('the standard roles can actually clock in', () => {
   // been refused by the database for the action they use most.
   assert.match(migration, /insert into public\.role_permissions \(role_id, permission_key, effect\)[\s\S]*?'time\.track', 'allow'/);
   assert.match(migration, /where lower\(name\) in \('owner', 'admin', 'manager', 'staff', 'member', 'worker'\)/);
+});
+
+test('short and unusually long shifts have guardrails instead of silently creating bad rows', () => {
+  const stop = main.slice(main.indexOf('function stopClock(shouldRender = true)'));
+  const body = stop.slice(0, stop.indexOf('\n}', 1) + 2);
+  assert.match(main, /const MIN_CLOCK_ENTRY_MS = 60 \* 1000/);
+  assert.match(main, /const LONG_CLOCK_ENTRY_MS = 16 \* 60 \* 60 \* 1000/);
+  assert.match(body, /window\.confirm\('This shift is longer than 16 hours\. Save it anyway\?'\)/);
+  assert.match(body, /durationMs < MIN_CLOCK_ENTRY_MS/);
+  assert.match(body, /no duplicate 0m entry was saved/);
+  assert.match(clockDashboard, /function timeEntryQuality\(entry = \{\}\)/);
+});
+
+test('the clock lazy-load failure gives the user a working retry', () => {
+  assert.match(main, /let clockDashboardPageError = null/);
+  assert.match(main, /workspaceHeader\('Clock dashboard could not load'[^\n]+retry-clock-dashboard/);
+  assert.match(main, /if \(action === 'retry-clock-dashboard'\)/);
 });
