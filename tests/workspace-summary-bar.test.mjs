@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createSummaryBar, summaryTitleOf } from '../src/workspace/summary-bar.js';
+import { calcName } from '../src/workspace/summary.js';
 
 // The arithmetic is covered in workspace-summary.test.mjs. This is the part that decides what a
 // column's values ARE -- an option id is not what the reader sees -- and what the strip does
@@ -86,7 +87,8 @@ test('printing gets a table of its own, not the strip', () => {
   // Paper has no scroll: the strip runs off the side of the page, a table reads down.
   const html = bar.summaryPrintTable('co', {}, APP, ROWS, { sel: new Set() });
   assert.match(html, /<table class="wb-sum-print">/);
-  assert.match(html, /<th>Field<\/th><th>Calculation<\/th><th>Value<\/th>/);
+  // "Field" stopped being accurate once the first column carries a name the reader chose.
+  assert.match(html, /<th>Label<\/th><th>Calculation<\/th><th>Value<\/th>/);
   assert.match(html, /Count if Male/);
 });
 
@@ -175,4 +177,51 @@ test('clearing the name removes it rather than storing an empty heading', () => 
   const block = main.slice(main.indexOf("bind('[data-wb-sum-title]'"));
   assert.match(block.slice(0, 700), /if \(name\) target\.summaryTitle = name;/);
   assert.match(block.slice(0, 700), /else delete target\.summaryTitle;/);
+});
+
+// ---- naming each calculation ------------------------------------------------------------------
+
+test('a calculation is named after its field until somebody says otherwise', () => {
+  // The field name answers "which column"; a total often wants to answer "which number".
+  assert.equal(calcName({ label: 'Number' }, {}), 'Number');
+  assert.equal(calcName({ label: 'Number' }, { label: 'Total contract value' }), 'Total contract value');
+  assert.equal(calcName({ label: 'Number' }, { label: '   ' }), 'Number', 'blank falls back');
+  assert.equal(calcName({}, {}), 'Field', 'and something is always shown');
+});
+
+test('the printout shows the name, not the field it came from', () => {
+  const app = { ...APP, summary: { amt: { fn: 'sum', label: 'Total contract value' } } };
+  const html = bar.summaryPrintTable('co', {}, app, ROWS, { sel: new Set() });
+  assert.match(html, /Total contract value/);
+  assert.doesNotMatch(html, /<td>Amount<\/td>/, 'the field name is not what was asked for');
+  // "Field" stops being accurate once the name is the reader's own.
+  assert.match(html, /<th>Label<\/th>/);
+});
+
+test('the strip shows the name too', () => {
+  const app = { ...APP, summary: { amt: { fn: 'sum', label: 'Total contract value' } } };
+  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, false);
+  assert.match(html, /Total contract value/);
+});
+
+test('the name is editable only once the column has been asked something', () => {
+  // A row of editable names above fifteen "None"s would read as fifteen calculations that are
+  // not there.
+  const app = { ...APP, summary: { amt: { fn: 'sum' }, who: { fn: 'none' } } };
+  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, true);
+  assert.match(html, /data-wb-sum-label="amt"/);
+  assert.doesNotMatch(html, /data-wb-sum-label="who"/);
+});
+
+test('a reader gets the name as text, never a box', () => {
+  const app = { ...APP, summary: { amt: { fn: 'sum', label: 'Total contract value' } } };
+  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, false);
+  assert.doesNotMatch(html, /data-wb-sum-label/);
+  assert.match(html, /Total contract value/);
+});
+
+test('clearing the name falls back rather than storing the field name', () => {
+  const block = main.slice(main.indexOf("bind('[data-wb-sum-label]'"));
+  assert.match(block.slice(0, 800), /if \(name\) entry\.label = name;/);
+  assert.match(block.slice(0, 800), /else delete entry\.label;/);
 });

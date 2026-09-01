@@ -161,6 +161,19 @@ export function formatSummary(value) {
   return String(Math.round(value * 100) / 100);
 }
 
+/**
+ * What a calculation is called.
+ *
+ * Defaults to the field's name, because that is right until somebody says otherwise -- but the
+ * field name answers "which column" and a total often wants to answer "which number": a Sum of
+ * a column called Number reads better as "Total contract value". Falls back rather than storing
+ * a blank, so a calculation is never nameless.
+ */
+export function calcName(field, config) {
+  const given = String(config?.label ?? '').trim();
+  return given || String(field?.label ?? '').trim() || 'Field';
+}
+
 /** The label under the number: "Sum", or "Count if Male" so the answer says what it counted. */
 export function summaryLabel(config) {
   const fn = SUMMARY_FUNCTIONS.find((item) => item.id === String(config?.fn || 'none'));

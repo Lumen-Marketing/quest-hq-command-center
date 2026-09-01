@@ -9,7 +9,7 @@
 // what the strip looks like.
 
 import {
-  OPTION_FIELD_TYPES, activeSummaries, computeSummary, formatSummary, functionsForType,
+  OPTION_FIELD_TYPES, activeSummaries, calcName, computeSummary, formatSummary, functionsForType,
   isNumericType, summaryLabel,
 } from './summary.js';
 
@@ -95,8 +95,13 @@ export function createSummaryBar(ctx) {
       const choices = functionsForType(field.type)
         .map((fn) => `<option value="${fn.id}"${fn.id === config.fn ? ' selected' : ''}>${h(fn.label)}</option>`)
         .join('');
+      // The name is editable only once the column has been asked something. A row of editable
+      // names above fifteen "None"s would read as fifteen calculations that are not there.
+      const named = canManage && config.fn && config.fn !== 'none'
+        ? `<input class="wb-sum-field wb-sum-field-edit" data-wb-sum-label="${h(field.id)}" value="${h(calcName(field, config))}" aria-label="What this calculation is called" spellcheck="false" maxlength="60" placeholder="${h(field.label)}">`
+        : `<small class="wb-sum-field" title="${h(field.label)}">${h(calcName(field, config))}</small>`;
       return `<div class="wb-sum-cell${answer ? ' on' : ''}">
-        <small class="wb-sum-field" title="${h(field.label)}">${h(field.label)}</small>
+        ${named}
         <b class="wb-sum-value">${answer || '—'}</b>
         ${canManage ? `<select class="wb-sum-fn" data-wb-sum-fn="${h(field.id)}" aria-label="Calculation for ${h(field.label)}">${choices}</select>` : `<small class="wb-sum-static">${h(summaryLabel(config))}</small>`}
         ${canManage && config.fn === 'countIf' ? valueControl(field, config) : ''}
@@ -129,13 +134,13 @@ export function createSummaryBar(ctx) {
     if (!active.length) return '';
     const scope = scopeRows(rows, ui);
     const body = active.map(({ field, config }) => `<tr>
-      <td>${h(field.label)}</td>
+      <td>${h(calcName(field, config))}</td>
       <td>${h(summaryLabel(config))}</td>
       <td class="wb-sum-print-num">${formatSummary(valueFor(companyId, workspace, app, field, config, scope.rows))}</td>
     </tr>`).join('');
     return `<table class="wb-sum-print">
       ${app.summaryHideLabel ? '' : `<caption>${h(summaryTitleOf(app))} — ${h(scope.selected ? `${scope.rows.length} selected records` : `${scope.rows.length} records`)}</caption>`}
-      <thead><tr><th>Field</th><th>Calculation</th><th>Value</th></tr></thead>
+      <thead><tr><th>Label</th><th>Calculation</th><th>Value</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`;
   }

@@ -1508,3 +1508,16 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
 }
 .wb-sum-title-edit:hover { border-color: var(--border, #e2d5bf); }
 .wb-sum-title-edit:focus { border-color: var(--orange, #e0552d); background: var(--surface, #fffaf0); outline: none; width: 26ch; }
+
+/* A calculation's own name, editable in place once the column has been asked something. Same
+   treatment as the heading: a label until you touch it. */
+.wb-sum-field-edit {
+  font: inherit; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted, #7a6a55); background: none; border: 1px solid transparent;
+  border-radius: 5px; padding: 1px 4px; margin-left: -4px; width: 100%; min-width: 0;
+}
+.wb-sum-field-edit:hover { border-color: var(--border, #e2d5bf); }
+.wb-sum-field-edit:focus {
+  border-color: var(--orange, #e0552d); background: var(--surface, #fffaf0);
+  color: var(--text, #2b2118); outline: none;
+}

@@ -20762,6 +20762,19 @@ function mountWorkspaceBuilder() {
       wbSave(companyId);
       render();
     }, 'onchange');
+    bind('[data-wb-sum-label]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      const fieldId = el.dataset.wbSumLabel;
+      const entry = target.summary[fieldId] || (target.summary[fieldId] = { fn: 'none', value: '' });
+      // Blank clears it and calcName falls back to the field's own name, so a calculation is
+      // never left nameless and the field name is never copied into storage just to sit there.
+      const name = String(el.value || '').trim().slice(0, 60);
+      if (name) entry.label = name;
+      else delete entry.label;
+      wbSave(companyId);
+      render();
+    }, 'onchange');
     bind('[data-wb-sum-hide]', (el) => {
       const target = summaryApp();
       if (!target) return;
