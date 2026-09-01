@@ -65,6 +65,13 @@ test('the focus trap and the focus mover agree on what is focusable', () => {
 });
 
 test('the signed-out auth dialog uses the same focus trap, Escape close, and background isolation', () => {
+  const authDialog = fn('renderAuthModal');
+  assert.match(
+    authDialog,
+    /landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" tabindex="-1"/,
+    'the dialog must be programmatically focusable before syncModalFocus calls focus()',
+  );
+
   const keys = fn('onDocumentKeydown');
   assert.match(keys, /activeModalOverlay\(\)/);
   assert.match(keys, /landing-auth-modal/);

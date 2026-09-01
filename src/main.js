@@ -24595,7 +24595,7 @@ function renderAuthModal(returnUrl, inviteToken, authEnabled) {
   const inviteLookup = inviteLookupForToken(inviteToken);
   return `
     <div class="modal-overlay">
-      <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" tabindex="-1">
         <div class="modal-head landing-auth-head">
           <div>
             <div class="eyebrow">${authEnabled ? 'Tenant access' : 'Local access'}</div>

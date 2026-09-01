@@ -71,6 +71,56 @@ test('a DB error rolls the optimistic apply back to the previous list', async ()
   assert.equal(store.byId('t1').title, 'Old'); // rolled back
 });
 
+test('a failed write only rolls back its own task when another write finishes first', async () => {
+  let rejectFirst;
+  const calls = [];
+  const db = {
+    from() {
+      return {
+        update(payload) {
+          const builder = {
+            eq() { return this; },
+            select() { return this; },
+            single() {
+              calls.push(payload.id);
+              if (payload.id === 't1') {
+                return new Promise((resolve) => { rejectFirst = () => resolve({ data: null, error: { message: 'boom' } }); });
+              }
+              return Promise.resolve({ data: { ...payload, updated_at: 'server-ts' }, error: null });
+            },
+          };
+          return builder;
+        },
+      };
+    },
+  };
+  const store = createTasks({ db, isLive: () => true, normalize, toPayload, onChange() {} });
+  store.seed([
+    normalize({ id: 't1', title: 'Old one', workspace_id: 'ws-7' }),
+    normalize({ id: 't2', title: 'Old two', workspace_id: 'ws-7' }),
+  ]);
+
+  const first = store.save({ id: 't1', title: 'Fails later', workspace_id: 'ws-7' });
+  const second = await store.save({ id: 't2', title: 'Saved meanwhile', workspace_id: 'ws-7' });
+  rejectFirst();
+  const failed = await first;
+
+  assert.equal(second.ok, true);
+  assert.equal(failed.ok, false);
+  assert.equal(store.byId('t1').title, 'Old one');
+  assert.equal(store.byId('t2').title, 'Saved meanwhile');
+  assert.equal(store.byId('t2').updated_at, 'server-ts');
+  assert.deepEqual(calls, ['t1', 't2']);
+});
+
+test('all returns a copy so callers cannot mutate the backing list', () => {
+  const store = createTasks({ db: null, isLive: () => false, normalize, toPayload, onChange() {} });
+  store.seed([{ id: 't1', title: 'Safe', workspace_id: 'ws-7' }].map(normalize));
+  const visible = store.all();
+  visible.length = 0;
+  assert.equal(store.all().length, 1);
+});
+
 test('with no live session the store stays local and never touches db', async () => {
   const db = fakeDb();
   const store = createTasks({ db, isLive: () => false, normalize, toPayload, onChange() {} });

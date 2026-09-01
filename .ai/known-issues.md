@@ -102,12 +102,14 @@ The Supabase security advisor still reports leaked-password protection as disabl
 enabled by a repository migration. A project owner must enable it in Supabase Auth settings and
 then rerun the security advisor; application code must not claim that control is active first.
 
-## Tasks write store has rollback concurrency footguns (unwired)
+## Native Tasks write store concurrency risks are resolved (still unwired)
 
-src/tasks/task-store.js is not yet wired into src/main.js, so these are latent, but must be resolved before wiring it into the native Tasks surface:
+RESOLVED 2026-09-02 in `src/tasks/task-store.js`. `all()` now returns a copy, and a failed
+optimistic write rolls back only its own task instead of restoring a whole-list snapshot that
+could erase another completed write. Unit coverage holds one write open, completes a second,
+then fails the first and proves the successful task remains saved.
 
-- `all()` returns the internal `tasks` array by reference; `put()` mutates in place while `seed()` and the error rollback reassign (`tasks = snapshot`). A caller holding a cached `all()` reference can keep a phantom optimistic task after a rollback. Fix by returning a copy from `all()` or restoring in place.
-- `save()` captures a whole-array `snapshot` per call and rolls back with `tasks = snapshot`. Two overlapping saves (or a save racing a `seed()` refresh) can let a failed save discard another save that already committed. Scope rollback to the affected row, or serialise writes, before relying on it under concurrency.
+The store is still not wired into `src/main.js`; the default embedded Tasks surface is unchanged.
 
 ## Browser code and styling are monolithic
 
