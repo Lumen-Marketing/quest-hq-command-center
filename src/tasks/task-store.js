@@ -19,14 +19,15 @@ export function createTasks({ db, isLive, normalize, toPayload, onChange }) {
     else tasks.unshift(task);
   };
 
-  function all() { return tasks; }
+  // Never expose the store's backing array. A caller retaining it could mutate
+  // task state without going through save(), tenant guards, or onChange().
+  function all() { return tasks.slice(); }
   function byId(id) { return tasks.find((t) => t.id === id) || null; }
   function seed(next) { tasks = Array.isArray(next) ? next.slice() : []; }
 
   async function save(input) {
     const previous = byId(input.id);
     const optimistic = normalize(input);
-    const snapshot = tasks.slice();
     put(optimistic); // optimistic apply
 
     if (!db || !isLive()) {
@@ -43,7 +44,13 @@ export function createTasks({ db, isLive, normalize, toPayload, onChange }) {
     const result = await Promise.resolve(query).catch((error) => ({ error }));
     const error = resultError(result);
     if (error || !result.data) {
-      tasks = snapshot; // rollback
+      // Roll back only this write. Restoring a whole-list snapshot would erase
+      // another task that completed while this request was in flight.
+      if (previous) put(previous);
+      else {
+        const optimisticIndex = indexOf(optimistic.id);
+        if (optimisticIndex >= 0) tasks.splice(optimisticIndex, 1);
+      }
       return { ok: false, task: previous || optimistic, error: error || new Error('Task write returned no record.') };
     }
 

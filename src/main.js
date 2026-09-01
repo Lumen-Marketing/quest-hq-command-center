@@ -40,8 +40,6 @@ import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequi
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh, shouldRenderAfterRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { INACTIVE_COMPANY_STATUSES, filterCompanyRows, paginate } from './platform-directory.js';
-import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
-import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
 import { addRecordLabel, newRecordLabel, singularize } from './workspace/naming.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
@@ -225,6 +223,7 @@ const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
 const WB_FEED_VIEW_KEY = 'quest-hq-wb-feed-view';
 const THEME_KEY = 'quest-theme';
 const ACCENT_KEY = 'quest-accent';
+const EMBEDDED_TASKS_THEME_KEY = 'questhq:theme';
 const NOTIFICATION_CACHE_KEY = 'quest-hq-notification-cache-v1';
 const AUTOMATION_CACHE_KEY = 'quest-hq-automation-cache-v1';
 const MESSAGE_CONVERSATION_CACHE_KEY = 'quest-hq-message-conversation-cache-v1';
@@ -2894,6 +2893,8 @@ let helpModule = null;
 let helpModulePromise = null;
 let companySearchModule = null;
 let commandPaletteModule = null;
+let taskInstructionModule = null;
+let contactInstructionModule = null;
 let commandResults = [];
 const COMMAND_RECENTS_KEY = 'quest.command.recents';
 const COMMAND_RECENTS_MAX = 8;
@@ -2989,6 +2990,43 @@ function applyTheme(theme = getTheme(), accent = getAccent()) {
   document.documentElement.dataset.themeMode = mode;
   document.documentElement.dataset.theme = resolveThemeMode(mode);
   document.documentElement.dataset.accent = accent;
+  syncEmbeddedTasksAppearance();
+}
+
+function syncEmbeddedTasksAppearance() {
+  const resolvedTheme = resolveThemeMode(getThemeMode());
+  // TaskManagement boots before the host can touch its document. Because it is
+  // same-origin, seeding its existing preference key prevents a wrong-theme flash.
+  try { localStorage.setItem(EMBEDDED_TASKS_THEME_KEY, resolvedTheme); } catch {}
+
+  const frame = document.querySelector('.taskapp-frame');
+  if (!frame) return;
+  if (frame.dataset.appearanceSyncBound !== '1') {
+    frame.dataset.appearanceSyncBound = '1';
+    frame.addEventListener('load', syncEmbeddedTasksAppearance);
+  }
+
+  try {
+    const root = frame.contentDocument?.documentElement;
+    if (!root) return;
+    const hostStyle = getComputedStyle(document.documentElement);
+    const accent = hostStyle.getPropertyValue('--orange').trim();
+    const accentBright = hostStyle.getPropertyValue('--amber').trim() || accent;
+    const accentSoft = hostStyle.getPropertyValue('--accent-soft').trim();
+    root.dataset.theme = resolvedTheme;
+    if (accentBright) root.style.setProperty('--amber', accentBright);
+    if (accentSoft) root.style.setProperty('--amber-bg', accentSoft);
+    if (accent) {
+      root.style.setProperty('--amber-ink', accent);
+      root.style.setProperty('--accent', accent);
+      root.style.setProperty('--qt-orange', accent);
+    }
+    const themeMeta = frame.contentDocument.querySelector('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.setAttribute('content', resolvedTheme === 'dark' ? '#08090A' : '#FBFAF8');
+  } catch {
+    // The production frame is same-origin. If a deployment temporarily serves
+    // it elsewhere, theme sync must fail quietly rather than blocking Tasks.
+  }
 }
 
 function setTheme(theme) {
@@ -4185,6 +4223,7 @@ function render() {
   queueMicrotask(mountContactSmsThread);
   queueMicrotask(mountProtectedFormDrafts);
   queueMicrotask(mountPipeBoardScroll);
+  queueMicrotask(syncEmbeddedTasksAppearance);
   // innerHTML replaced every live-clock element, so the interval has nothing to write to
   // until it is re-armed against the new nodes.
   queueMicrotask(ensureLiveClocks);
@@ -24595,7 +24634,7 @@ function renderAuthModal(returnUrl, inviteToken, authEnabled) {
   const inviteLookup = inviteLookupForToken(inviteToken);
   return `
     <div class="modal-overlay">
-      <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" tabindex="-1">
         <div class="modal-head landing-auth-head">
           <div>
             <div class="eyebrow">${authEnabled ? 'Tenant access' : 'Local access'}</div>
@@ -26845,10 +26884,14 @@ function openCommandPalette(initialQuery = '') {
       import('./assistant/help-index.js'),
       import('./company-search.js'),
       import('./command-palette.js'),
-    ]).then(([help, companySearch, commandPalette]) => {
+      import('./assistant/task-parser.js'),
+      import('./assistant/contact-parser.js'),
+    ]).then(([help, companySearch, commandPalette, taskInstructions, contactInstructions]) => {
       helpModule = help;
       companySearchModule = companySearch;
       commandPaletteModule = commandPalette;
+      taskInstructionModule = taskInstructions;
+      contactInstructionModule = contactInstructions;
       if (state.commandPalette.open) {
         render();
         queueMicrotask(() => document.querySelector('[data-command-input]')?.focus());
@@ -27012,15 +27055,15 @@ function commandAssistantResults(query) {
 
   const companyId = activeCompanyId();
   // An explicit "add contact ..." offers contact creation; anything else offers a task.
-  if (looksLikeContactInstruction(q) && can('contacts.manage', companyId)) {
-    const contact = parseContactInstruction(q);
+  if (contactInstructionModule?.looksLikeContactInstruction(q) && can('contacts.manage', companyId)) {
+    const contact = contactInstructionModule.parseContactInstruction(q);
     extras.push({
       id: 'create-contact', group: 'Create', icon: 'ti-user-plus',
       label: `Create contact: ${contact.name}`, hint: contact.email || contact.phone || '',
       run: { kind: 'create-contact', query: q },
     });
-  } else if (can('tasks.manage', companyId)) {
-    const draft = parseTaskInstruction(q, new Date());
+  } else if (taskInstructionModule && can('tasks.manage', companyId)) {
+    const draft = taskInstructionModule.parseTaskInstruction(q, new Date());
     const hint = [draft.found.date ? draft.due : '', draft.found.time ? draft.due_time : '']
       .filter(Boolean).join(' ');
     extras.push({
@@ -27057,10 +27100,10 @@ function commandPaletteMembers(companyId = activeCompanyId()) {
 // auto-link a contact named in the text. Both are best guesses the confirm card
 // lets the user change or clear.
 function buildCommandTaskDraft(query) {
-  const draft = parseTaskInstruction(query, new Date());
+  const draft = taskInstructionModule.parseTaskInstruction(query, new Date());
   const companyId = activeCompanyId();
-  draft.assignee_id = draft.assignee ? matchPerson(draft.assignee, commandPaletteMembers(companyId)) : '';
-  draft.contact_id = matchContactInText(draft.raw, companyContacts(companyId).map((c) => ({ id: c.id, name: c.name })));
+  draft.assignee_id = draft.assignee ? taskInstructionModule.matchPerson(draft.assignee, commandPaletteMembers(companyId)) : '';
+  draft.contact_id = taskInstructionModule.matchContactInText(draft.raw, companyContacts(companyId).map((c) => ({ id: c.id, name: c.name })));
   return draft;
 }
 
@@ -27148,7 +27191,7 @@ function runCommand(command) {
     return;
   }
   if (run.kind === 'create-contact') {
-    state.commandPalette.contactDraft = parseContactInstruction(run.query);
+    state.commandPalette.contactDraft = contactInstructionModule.parseContactInstruction(run.query);
     render();
     queueMicrotask(() => {
       const el = document.querySelector('[data-command-contact-name]');

@@ -1,6 +1,6 @@
 # Public relationships
 
-Captured through 2026-08-28T19:16:59.435Z. Composite foreign keys appear as one row per paired column.
+Captured through 2026-09-01T20:02:47.185039Z. Composite foreign keys appear as one row per paired column.
 
 | Constraint | From | To | Update | Delete |
 | --- | --- | --- | --- | --- |

@@ -2,24 +2,6 @@
 
 Only confirmed, actionable items belong here.
 
-## Six app_private helpers still carry pg_temp in their search path
-
-Confirmed 2026-08-28, after `20260828004405_revoke_anon_execute_app_private.sql`.
-
-`chat_attachment_visible`, `chat_left_at`, `chat_message_visible`, `guard_system_role`,
-`guard_wildcard_permission`, `companies_seed_task_taxonomy` and `seed_company_default_roles`
-are SECURITY DEFINER with `search_path = 'public', pg_temp'`. `20260828002845` fixed the same
-inconsistency for `is_company_member` and `has_company_permission`, which were safe to rewrite
-because every reference in them was already schema-qualified and both are exercised by tests.
-
-These were left alone deliberately. Three are trigger functions and three are RLS helpers; none
-has direct test coverage, and rewriting a definer body blind is how a policy quietly starts
-returning the wrong answer. `pg_temp` last in the search path is the defensive position rather
-than the dangerous one, and anon can no longer execute any of them.
-
-Fix by reading each body, schema-qualifying anything that is not already, and moving it to
-`search_path = ''` one function at a time with a live probe between each.
-
 ## Rate limiting is durable on the endpoints that need it
 
 RESOLVED 2026-08-28 by `20260828005040_durable_rate_limits.sql`. The in-memory limiter is still
@@ -86,7 +68,7 @@ text a contact belonging to another. Fix the authorization at the same time as t
 
 ## Main browser bundle remains large
 
-Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js plus the RingCentral calls runtime are lazy-loaded, but src/main.js remains a performance and maintainability risk. Measure production behavior before splitting and retain the budget guard.
+Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js, RingCentral calls, company search, and the command palette's instruction parsers are lazy-loaded. The 2026-09-02 parser split reduced the entry from 365.05 KiB to 363.21 KiB gzip, but src/main.js remains a performance and maintainability risk. Measure each extraction and retain the budget guard.
 
 ## The strict CSP target is still report-only
 
@@ -102,12 +84,14 @@ The Supabase security advisor still reports leaked-password protection as disabl
 enabled by a repository migration. A project owner must enable it in Supabase Auth settings and
 then rerun the security advisor; application code must not claim that control is active first.
 
-## Tasks write store has rollback concurrency footguns (unwired)
+## Native Tasks write store concurrency risks are resolved (still unwired)
 
-src/tasks/task-store.js is not yet wired into src/main.js, so these are latent, but must be resolved before wiring it into the native Tasks surface:
+RESOLVED 2026-09-02 in `src/tasks/task-store.js`. `all()` now returns a copy, and a failed
+optimistic write rolls back only its own task instead of restoring a whole-list snapshot that
+could erase another completed write. Unit coverage holds one write open, completes a second,
+then fails the first and proves the successful task remains saved.
 
-- `all()` returns the internal `tasks` array by reference; `put()` mutates in place while `seed()` and the error rollback reassign (`tasks = snapshot`). A caller holding a cached `all()` reference can keep a phantom optimistic task after a rollback. Fix by returning a copy from `all()` or restoring in place.
-- `save()` captures a whole-array `snapshot` per call and rolls back with `tasks = snapshot`. Two overlapping saves (or a save racing a `seed()` refresh) can let a failed save discard another save that already committed. Scope rollback to the affected row, or serialise writes, before relying on it under concurrency.
+The store is still not wired into `src/main.js`; the default embedded Tasks surface is unchanged.
 
 ## Browser code and styling are monolithic
 
@@ -187,16 +171,17 @@ remains on Tasks. The durable end state is to reuse a persistent iframe host acr
 renders or finish the native Tasks migration; until then, review new asynchronous render
 callers for whether they can fire while Tasks is open.
 
-## Appearance customization is per-browser and cannot reach the Tasks iframe
+## Appearance customization is per-browser; Tasks receives theme/accent only
 
 Settings → Appearance (theme, accent, background pattern/upload, card solid/glass) stores choices in
 `localStorage` and applies them as CSS variables + `data-*` attributes on `<html>`, so they survive
-the full `render()` rebuilds without reapplying. Two scope limits: the embedded Task-management view
-is an `<iframe>` (a separate document) and cannot inherit the host page's background/card styling; and
-the accent picker mainly affects light mode, because the dark-mode palette block re-hardcodes
-`--orange` after the `[data-accent]` blocks. Widening either requires, respectively, passing the
-appearance into the iframe (URL param / postMessage) and having dark mode derive `--orange` from the
-accent rather than hardcoding it.
+the full `render()` rebuilds without reapplying. The same-origin Task-management iframe now receives
+the resolved light/dark theme and accent tokens at boot and whenever either choice changes.
+
+Background patterns/uploads and card solid/glass styling remain host-only by design: the embedded
+Tasks document owns a separate layout and applying those surface rules across it would make its
+internal panels inconsistent. The accent picker also still has reduced reach on a few host dark-mode
+subsystems that locally re-declare `--orange`.
 
 ## Storage buckets need a SELECT policy for uploads to succeed
 

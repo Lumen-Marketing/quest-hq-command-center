@@ -1,6 +1,27 @@
 # Current state
 
-Captured through 2026-09-01T00:00:00.000Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+
+- Production Supabase migration `20260901200003_harden_remaining_app_private_search_paths` is
+  applied to project `rqundirizvojpzhljtdn`. All seven deferred `app_private` SECURITY DEFINER
+  helpers now have an empty search path. Live verification preserved all owners, grants and three
+  trigger bindings, and the three callable chat helpers passed direct probes.
+
+## 2026-09-02 QA follow-through release
+
+- The signed-out authentication dialog is now explicitly programmatically focusable. Opening it
+  moves keyboard focus into the dialog instead of leaving focus on the removed landing-page
+  trigger; the existing focus trap, Escape close, focus return, and background isolation remain.
+- The feature-flagged native Tasks write store no longer exposes its backing list. A failed
+  optimistic save rolls back only the affected task, so it cannot erase another task save that
+  completed while the first request was in flight. The default embedded Tasks app is unchanged.
+- The embedded Tasks app now starts in the host's resolved light/dark theme and receives live theme
+  and accent changes through its same-origin frame. Tasks keeps its own panel/background design.
+- The command palette's task/contact instruction parsers now load with Search instead of on every
+  page. The production entry bundle drops from 365.05 KiB to 363.21 KiB gzip while preserving the
+  same command suggestions and creation flow.
+- Commit `243481b40443afc4e6a28d4d1145ae403ec65eee` is live on `www.questbase.io`; all 36
+  production smoke routes and all four entry assets passed after deployment.
 
 ## 2026-09-01 QA priority and usability release candidate
 
