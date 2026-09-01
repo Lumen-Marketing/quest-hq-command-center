@@ -1498,3 +1498,13 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
 .wb-sum-print caption { text-align: left; font-weight: 800; padding-bottom: 6px; }
 .wb-sum-print th, .wb-sum-print td { border: 1px solid #999; padding: 5px 8px; text-align: left; }
 .wb-sum-print-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* The heading is editable in place: it reads as a label until you touch it, because a text box
+   sitting there permanently would suggest the row is a form rather than an answer. */
+.wb-sum-title-edit {
+  font: inherit; font-weight: 800; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase;
+  color: inherit; background: none; border: 1px solid transparent; border-radius: 6px;
+  padding: 2px 6px; margin-left: -6px; min-width: 8ch; max-width: 26ch; width: 14ch;
+}
+.wb-sum-title-edit:hover { border-color: var(--border, #e2d5bf); }
+.wb-sum-title-edit:focus { border-color: var(--orange, #e0552d); background: var(--surface, #fffaf0); outline: none; width: 26ch; }

@@ -13503,6 +13503,9 @@ function normalizeWorkspaceBuilderDoc(doc) {
           ? { summary: app.summary }
           : {}),
         ...(app.summaryHideLabel ? { summaryHideLabel: true } : {}),
+        ...(typeof app.summaryTitle === 'string' && app.summaryTitle.trim()
+          ? { summaryTitle: app.summaryTitle.trim().slice(0, 60) }
+          : {}),
         // Deleted records, kept so a misclick is recoverable. Same shape plus when it went.
         trash: Array.isArray(app.trash) ? app.trash.map((item) => ({ ...normalizeWbItem(item), deletedAt: item.deletedAt || new Date().toISOString(), deletedBy: item.deletedBy || '' })) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
@@ -20745,6 +20748,17 @@ function mountWorkspaceBuilder() {
       const fieldId = el.dataset.wbSumVal;
       const entry = target.summary[fieldId] || (target.summary[fieldId] = { fn: 'countIf', value: '' });
       entry.value = el.value;
+      wbSave(companyId);
+      render();
+    }, 'onchange');
+    bind('[data-wb-sum-title]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      // Blank clears it rather than storing an empty heading; summaryTitleOf falls back to
+      // "Calculations", so the row is never left unlabelled.
+      const name = String(el.value || '').trim().slice(0, 60);
+      if (name) target.summaryTitle = name;
+      else delete target.summaryTitle;
       wbSave(companyId);
       render();
     }, 'onchange');

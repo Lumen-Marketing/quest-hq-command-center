@@ -13,6 +13,18 @@ import {
   isNumericType, summaryLabel,
 } from './summary.js';
 
+/**
+ * What the strip is called.
+ *
+ * "Calculations" is only ever a default. What a team is actually totalling has a name of its own
+ * -- Totals, Job costs, This month -- and the heading is the one place to say it, on screen and
+ * on the printout. A blank falls back rather than leaving an unlabelled row of numbers.
+ */
+export function summaryTitleOf(app) {
+  const given = String(app?.summaryTitle ?? '').trim();
+  return given || 'Calculations';
+}
+
 export function createSummaryBar(ctx) {
   const { h, wbPlainVal } = ctx;
 
@@ -91,9 +103,11 @@ export function createSummaryBar(ctx) {
       </div>`;
     };
 
-    return `<section class="wb-sum" data-wb-sum aria-label="Calculations">
+    return `<section class="wb-sum" data-wb-sum aria-label="${h(summaryTitleOf(app))}">
       <div class="wb-sum-head">
-        <b class="wb-sum-title">Calculations</b>
+        ${canManage
+          ? `<input class="wb-sum-title wb-sum-title-edit" data-wb-sum-title value="${h(summaryTitleOf(app))}" aria-label="What this row of calculations is called" spellcheck="false" maxlength="60">`
+          : `<b class="wb-sum-title">${h(summaryTitleOf(app))}</b>`}
         <span class="wb-sum-scope">${scope.selected
           ? `<i class="ti ti-checkbox"></i>${scope.rows.length} selected record${scope.rows.length === 1 ? '' : 's'}`
           : `${scope.rows.length} record${scope.rows.length === 1 ? '' : 's'}`}</span>
@@ -120,7 +134,7 @@ export function createSummaryBar(ctx) {
       <td class="wb-sum-print-num">${formatSummary(valueFor(companyId, workspace, app, field, config, scope.rows))}</td>
     </tr>`).join('');
     return `<table class="wb-sum-print">
-      ${app.summaryHideLabel ? '' : `<caption>Calculations — ${h(scope.selected ? `${scope.rows.length} selected records` : `${scope.rows.length} records`)}</caption>`}
+      ${app.summaryHideLabel ? '' : `<caption>${h(summaryTitleOf(app))} — ${h(scope.selected ? `${scope.rows.length} selected records` : `${scope.rows.length} records`)}</caption>`}
       <thead><tr><th>Field</th><th>Calculation</th><th>Value</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`;

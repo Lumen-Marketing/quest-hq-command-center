@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { createSummaryBar } from '../src/workspace/summary-bar.js';
+import { createSummaryBar, summaryTitleOf } from '../src/workspace/summary-bar.js';
 
 // The arithmetic is covered in workspace-summary.test.mjs. This is the part that decides what a
 // column's values ARE -- an option id is not what the reader sees -- and what the strip does
@@ -132,4 +132,47 @@ test('changing a calculation saves it, and only a manager may', () => {
 
 test('print passes the selection through, so a selected print totals the selection', () => {
   assert.match(io, /summaryPrintTable\(companyId, workspace, app, items, \{ sel: onlyIds \|\| new Set\(\) \}\)/);
+});
+
+// ---- naming it --------------------------------------------------------------------------------
+
+test('the heading is a default, not a fixed word', () => {
+  // What a team is totalling has a name of its own -- Totals, Job costs, This month.
+  assert.equal(summaryTitleOf({}), 'Calculations');
+  assert.equal(summaryTitleOf({ summaryTitle: 'Job costs' }), 'Job costs');
+  assert.equal(summaryTitleOf({ summaryTitle: '   ' }), 'Calculations', 'blank falls back');
+  assert.equal(summaryTitleOf(undefined), 'Calculations');
+});
+
+test('a manager edits the heading in place; a reader just reads it', () => {
+  const app = { ...APP, summaryTitle: 'Job costs' };
+  const editable = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, true);
+  assert.match(editable, /data-wb-sum-title value="Job costs"/);
+  const readOnly = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, false);
+  assert.doesNotMatch(readOnly, /data-wb-sum-title/);
+  assert.match(readOnly, /<b class="wb-sum-title">Job costs<\/b>/);
+});
+
+test('the name it was given is the name on the printout', () => {
+  const html = bar.summaryPrintTable('co', {}, { ...APP, summaryTitle: 'Job costs' }, ROWS, { sel: new Set() });
+  assert.match(html, /<caption>Job costs — 3 records<\/caption>/);
+});
+
+test('hiding the label on print still hides it, whatever it was renamed to', () => {
+  const html = bar.summaryPrintTable('co', {}, { ...APP, summaryTitle: 'Job costs', summaryHideLabel: true }, ROWS, { sel: new Set() });
+  assert.doesNotMatch(html, /Job costs/);
+  assert.match(html, /Count if Male/, 'the numbers stay');
+});
+
+test('the name survives a reload, trimmed and bounded', () => {
+  // normalizeWorkspaceBuilderDoc drops what it does not name; 60 characters is a heading, not
+  // a paragraph pushed into one.
+  assert.match(main, /typeof app\.summaryTitle === 'string' && app\.summaryTitle\.trim\(\)/);
+  assert.match(main, /summaryTitle: app\.summaryTitle\.trim\(\)\.slice\(0, 60\)/);
+});
+
+test('clearing the name removes it rather than storing an empty heading', () => {
+  const block = main.slice(main.indexOf("bind('[data-wb-sum-title]'"));
+  assert.match(block.slice(0, 700), /if \(name\) target\.summaryTitle = name;/);
+  assert.match(block.slice(0, 700), /else delete target\.summaryTitle;/);
 });
