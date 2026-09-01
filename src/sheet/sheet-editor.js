@@ -25,6 +25,9 @@ import {
   shownValue,
 } from './sheet-model.js';
 import {
+  applyFunction, functionQueryAt, insertReference, matchFunctions, rangeReference, referenceSlotAt,
+} from './formula-assist.js';
+import {
   BORDER_PRESETS,
   DEFAULT_FONT,
   DEFAULT_SIZE,
@@ -81,6 +84,15 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   let sel = rangeOf('A1', 'A1');
   let editing = false;
   let dragging = null;
+  // Which input a clicked reference goes into: the formula bar, or the in-cell editor. Null
+  // when nothing is being typed, which is when a click means "select this cell" as before.
+  let writing = null;
+  let picking = null;
+  let suggestions = [];
+  let suggestIndex = 0;
+  // The cells the half-written reference points at. Its own state rather than fillTo's, which
+  // means "where the fill handle would reach" and is painted as such.
+  let pickBox = null;
   // Where a fill drag currently reaches, drawn as a preview until the mouse comes up.
   let fillTo = null;
 
@@ -108,6 +120,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
         <input class="sh-formula" data-sh-formula placeholder="Value, or =SUM(A1:A9)" ${readOnly ? 'disabled' : ''} spellcheck="false" aria-label="Cell contents">
       </div>
       <div class="sh-scroll" data-sh-scroll></div>
+      <div class="sh-suggest" data-sh-suggest role="listbox" aria-label="Functions" hidden></div>
       <div class="sh-help"><span data-sh-status></span><span class="sh-fns">${esc(SHEET_FUNCTIONS.join('  '))}</span></div>
     </div>`;
 
@@ -115,6 +128,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   const formula = overlay.querySelector('[data-sh-formula]');
   const refLabel = overlay.querySelector('[data-sh-ref]');
   const status = overlay.querySelector('[data-sh-status]');
+  const suggestBox = overlay.querySelector('[data-sh-suggest]');
   const menus = new Map();
 
   // ---- the toolbar ---------------------------------------------------------------------------
@@ -309,7 +323,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
 
   /** Selection is classes, not a repaint: redrawing 8,000 cells to move a box is how a grid stutters. */
   function paintSelection() {
-    gridHost.querySelectorAll('.sel, .sel-lead, .fill-preview').forEach((cell) => cell.classList.remove('sel', 'sel-lead', 'fill-preview'));
+    gridHost.querySelectorAll('.sel, .sel-lead, .fill-preview, .ref-pick').forEach((cell) => cell.classList.remove('sel', 'sel-lead', 'fill-preview', 'ref-pick'));
     gridHost.querySelectorAll('.sh-fill-handle').forEach((node) => node.remove());
     refsIn(sel).forEach((ref) => {
       gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('sel');
@@ -320,6 +334,10 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
       const corner = gridHost.querySelector(`[data-sh-cell="${cellRef(sel.r2, sel.c2)}"]`);
       if (corner) corner.insertAdjacentHTML('beforeend', '<span class="sh-fill-handle" data-sh-fill title="Drag to fill"></span>');
     }
+    // What the reference being written points at, so the sheet shows what the text says.
+    if (pickBox) refsIn(pickBox).forEach((ref) => {
+      gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('ref-pick');
+    });
     if (fillTo) refsIn(fillTo).forEach((ref) => {
       if (!rangeHas(sel, ref)) gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('fill-preview');
     });
@@ -369,6 +387,105 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
         ? `${count} cells${numbers.length ? ` · Sum ${Math.round(sum * 1e6) / 1e6}` : ''}`
         : '';
     }
+  }
+
+  // ---- writing a formula by pointing ---------------------------------------------------------
+
+  /**
+   * Put the clicked cell -- or the dragged rectangle -- into whichever editor is open.
+   *
+   * `picking.at` is the caret as it was when the drag began, so every mousemove replaces the
+   * same reference rather than appending a trail of them across the sheet.
+   */
+  function writeReference(fromRef, toRef) {
+    if (!writing || !picking) return;
+    const ref = rangeReference(fromRef, toRef);
+    const out = insertReference(writing.value, picking.at, ref);
+    if (!out.changed) return;
+    writing.value = out.text;
+    writing.setSelectionRange(out.caret, out.caret);
+    // The reference the formula now points at, highlighted on the grid, so the sheet shows what
+    // the text says while it is being written.
+    pickBox = parseRef(fromRef) && parseRef(toRef) ? rangeOf(fromRef, toRef) : null;
+    paintSelection();
+    showSuggestions();
+  }
+
+  /**
+   * The function list, narrowed to what is being typed.
+   *
+   * The names were already on screen -- a strip of grey text along the bottom of the editor --
+   * which meant reading them off and spelling them by hand. This is the same list, offered at
+   * the caret and insertable with a key.
+   */
+  function showSuggestions() {
+    if (!writing) return hideSuggestions();
+    const query = functionQueryAt(writing.value, writing.selectionStart);
+    const hits = matchFunctions(query, SHEET_FUNCTIONS).slice(0, 8);
+    if (!hits.length) return hideSuggestions();
+    suggestIndex = Math.min(suggestIndex, hits.length - 1);
+    suggestions = hits;
+    suggestBox.innerHTML = hits.map((name, i) => (
+      `<button type="button" class="sh-sug${i === suggestIndex ? ' on' : ''}" data-sh-sug="${esc(name)}" tabindex="-1">${esc(name)}</button>`
+    )).join('');
+    suggestBox.hidden = false;
+    // Under the editor it belongs to: the bar spans the width, an in-cell input does not.
+    const box = writing.getBoundingClientRect();
+    const host = overlay.getBoundingClientRect();
+    suggestBox.style.left = `${Math.round(box.left - host.left)}px`;
+    suggestBox.style.top = `${Math.round(box.bottom - host.top + 2)}px`;
+    return undefined;
+  }
+
+  function hideSuggestions() {
+    suggestions = [];
+    suggestIndex = 0;
+    suggestBox.hidden = true;
+    return undefined;
+  }
+
+  /** Accept one: the half-typed name becomes NAME(, caret inside the bracket. */
+  function acceptSuggestion(name) {
+    if (!writing || !name) return false;
+    const out = applyFunction(writing.value, writing.selectionStart, name);
+    if (!out.changed) return false;
+    writing.value = out.text;
+    writing.setSelectionRange(out.caret, out.caret);
+    hideSuggestions();
+    return true;
+  }
+
+  /**
+   * The keys the suggestion list owns while it is open.
+   *
+   * Returns true when it consumed the key, so the caller can stop there -- Enter must accept
+   * the name rather than commit the cell, which is the whole reason this is worth having.
+   */
+  function suggestionKey(event) {
+    if (suggestBox.hidden || !suggestions.length) return false;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      suggestIndex = (suggestIndex + (event.key === 'ArrowDown' ? 1 : suggestions.length - 1)) % suggestions.length;
+      showSuggestions();
+      return true;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') return acceptSuggestion(suggestions[suggestIndex]);
+    if (event.key === 'Escape') { hideSuggestions(); return true; }
+    return false;
+  }
+
+  /** Every editor -- the bar and each in-cell input -- is wired the same way. */
+  function bindFormulaAssist(input) {
+    input.addEventListener('focus', () => { writing = input; });
+    input.addEventListener('blur', () => {
+      if (writing === input) writing = null;
+      hideSuggestions();
+      if (pickBox) { pickBox = null; paintSelection(); }
+    });
+    input.addEventListener('input', showSuggestions);
+    input.addEventListener('click', showSuggestions);
+    input.addEventListener('keyup', (event) => {
+      if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) showSuggestions();
+    });
   }
 
   // ---- selecting -----------------------------------------------------------------------------
@@ -438,6 +555,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     input.spellcheck = false;
     cell.textContent = '';
     cell.appendChild(input);
+    bindFormulaAssist(input);
     input.focus();
     if (seed === undefined) input.select();
 
@@ -450,6 +568,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     };
     input.addEventListener('blur', () => finish(null));
     input.addEventListener('keydown', (event) => {
+      if (suggestionKey(event)) { event.preventDefault(); event.stopPropagation(); return; }
       // Stopped here, or the grid's own handler sees the same Enter a moment later -- by which
       // point `editing` is already false -- and steps a second time, so one Enter moved two
       // rows down.
@@ -571,8 +690,30 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
 
   // ---- events --------------------------------------------------------------------------------
 
+  suggestBox.addEventListener('mousedown', (event) => {
+    const hit = event.target.closest('[data-sh-sug]');
+    if (!hit) return;
+    // Mousedown rather than click: a click lands after blur, by which point the editor has
+    // committed and there is no half-typed name left to complete.
+    event.preventDefault();
+    acceptSuggestion(hit.dataset.shSug);
+  });
+
   gridHost.addEventListener('mousedown', (event) => {
     if (event.target.matches('input')) return;
+    // Pointing at a cell to put its reference into a half-written formula, the way every other
+    // spreadsheet does it. Only while a formula is being typed AND the caret is somewhere a
+    // reference may go -- otherwise a click still means "select this cell", which is what it
+    // means the rest of the time.
+    const target = event.target.closest('[data-sh-cell]');
+    if (writing && target && referenceSlotAt(writing.value, writing.selectionStart)) {
+      picking = { from: target.dataset.shCell, at: writing.selectionStart };
+      writeReference(picking.from, picking.from);
+      dragging = { kind: 'pick' };
+      // The editor must keep focus: losing it commits the half-written formula.
+      event.preventDefault();
+      return;
+    }
     if (editing) return;
     closeMenus();
 
@@ -624,6 +765,12 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
 
   gridHost.addEventListener('mousemove', (event) => {
     if (!dragging) return;
+    if (dragging.kind === 'pick') {
+      // Dragging widens it to a range, so =SUM( plus a drag is the whole gesture.
+      const over = event.target.closest('[data-sh-cell]');
+      if (over && picking) writeReference(picking.from, over.dataset.shCell);
+      return;
+    }
     if (dragging.kind === 'size') {
       const now = dragging.isCol ? event.clientX : event.clientY;
       const next = dragging.start + (now - dragging.from);
@@ -682,6 +829,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     }
     fillTo = null;
     dragging = null;
+    picking = null;
   };
   document.addEventListener('mouseup', stopDrag);
 
@@ -691,9 +839,13 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   });
 
   // The formula bar edits the anchor cell, which is the other way in.
+  bindFormulaAssist(formula);
   formula.addEventListener('focus', () => { editing = true; });
   formula.addEventListener('blur', () => { if (editing) { editing = false; commit(anchor, formula.value); select(anchor); } });
   formula.addEventListener('keydown', (event) => {
+    // The list gets first refusal on Enter, Tab, Escape and the arrows: while it is open those
+    // keys are choosing a name, not finishing the cell.
+    if (suggestionKey(event)) { event.preventDefault(); event.stopPropagation(); return; }
     if (['Enter', 'Escape'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); }
     if (event.key === 'Enter') { editing = false; commit(anchor, formula.value); step(1, 0); }
     if (event.key === 'Escape') { editing = false; syncBar(); formula.blur(); }
