@@ -13499,6 +13499,10 @@ function normalizeWorkspaceBuilderDoc(doc) {
         // What the calculation strip under the list is asked, per field: { fn, value }. Named
         // here because everything this function does not name is dropped on load -- without
         // these two lines the totals would come back blank on the next reload.
+        // Calculation LINES: one row of the table under the list, each holding a calculation per
+        // column. `summary` is the older one-line shape and is still read, so an app set up
+        // before lines existed keeps its totals -- summaryLines() turns it into line one.
+        ...(Array.isArray(app.summaryRows) ? { summaryRows: app.summaryRows } : {}),
         ...(app.summary && typeof app.summary === 'object' && !Array.isArray(app.summary)
           ? { summary: app.summary }
           : {}),
@@ -20726,54 +20730,89 @@ function mountWorkspaceBuilder() {
     const summaryApp = () => {
       if (!can('workspaces.manage', companyId)) return null;
       const { app: target } = wbFind(companyId, workspaceId, appId);
-      if (!target) return null;
-      if (!target.summary || typeof target.summary !== 'object') target.summary = {};
-      return target;
+      return target || null;
     };
+    // Editing always works on the LINE array, migrating the older one-line `summary` shape on
+    // first touch so there is never a document carrying both and disagreeing with itself.
+    const summaryLinesOf = (target) => {
+      if (!Array.isArray(target.summaryRows)) {
+        const legacy = target.summary && typeof target.summary === 'object' ? target.summary : null;
+        target.summaryRows = legacy && Object.keys(legacy).length
+          ? [{ id: 'line-1', label: '', calc: legacy }]
+          : [{ id: 'line-1', label: '', calc: {} }];
+        delete target.summary;
+      }
+      return target.summaryRows;
+    };
+    const lineById = (target, lineId) => {
+      const lines = summaryLinesOf(target);
+      return lines.find((line) => String(line.id) === String(lineId))
+        || (lines[0] || (lines[0] = { id: 'line-1', label: '', calc: {} }));
+    };
+    const calcIn = (line, fieldId) => {
+      if (!line.calc || typeof line.calc !== 'object') line.calc = {};
+      if (!line.calc[fieldId]) line.calc[fieldId] = { fn: 'none', value: '' };
+      return line.calc[fieldId];
+    };
+    const saveSummary = () => { wbSave(companyId); render(); };
+
     bind('[data-wb-sum-fn]', (el) => {
       const target = summaryApp();
       if (!target) return;
-      const fieldId = el.dataset.wbSumFn;
-      const entry = target.summary[fieldId] || (target.summary[fieldId] = { fn: 'none', value: '' });
+      const entry = calcIn(lineById(target, el.dataset.wbSumLine), el.dataset.wbSumFn);
       entry.fn = el.value;
       // Dropping back to something that takes no value clears the value with it, or the next
       // "count if" silently inherits a word nobody typed for it.
       if (el.value !== 'countIf') entry.value = '';
-      wbSave(companyId);
-      render();
+      saveSummary();
     }, 'onchange');
     bind('[data-wb-sum-val]', (el) => {
       const target = summaryApp();
       if (!target) return;
-      const fieldId = el.dataset.wbSumVal;
-      const entry = target.summary[fieldId] || (target.summary[fieldId] = { fn: 'countIf', value: '' });
-      entry.value = el.value;
-      wbSave(companyId);
-      render();
-    }, 'onchange');
-    bind('[data-wb-sum-title]', (el) => {
-      const target = summaryApp();
-      if (!target) return;
-      // Blank clears it rather than storing an empty heading; summaryTitleOf falls back to
-      // "Calculations", so the row is never left unlabelled.
-      const name = String(el.value || '').trim().slice(0, 60);
-      if (name) target.summaryTitle = name;
-      else delete target.summaryTitle;
-      wbSave(companyId);
-      render();
+      calcIn(lineById(target, el.dataset.wbSumLine), el.dataset.wbSumVal).value = el.value;
+      saveSummary();
     }, 'onchange');
     bind('[data-wb-sum-label]', (el) => {
       const target = summaryApp();
       if (!target) return;
-      const fieldId = el.dataset.wbSumLabel;
-      const entry = target.summary[fieldId] || (target.summary[fieldId] = { fn: 'none', value: '' });
+      const entry = calcIn(lineById(target, el.dataset.wbSumLine), el.dataset.wbSumLabel);
       // Blank clears it and calcName falls back to the field's own name, so a calculation is
-      // never left nameless and the field name is never copied into storage just to sit there.
+      // never nameless and the field name is never copied into storage just to sit there.
       const name = String(el.value || '').trim().slice(0, 60);
       if (name) entry.label = name;
       else delete entry.label;
-      wbSave(companyId);
-      render();
+      saveSummary();
+    }, 'onchange');
+    bind('[data-wb-sum-line-name]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      lineById(target, el.dataset.wbSumLineName).label = String(el.value || '').trim().slice(0, 40);
+      saveSummary();
+    }, 'onchange');
+    bind('[data-wb-sum-add]', () => {
+      const target = summaryApp();
+      if (!target) return;
+      const lines = summaryLinesOf(target);
+      lines.push({ id: `line-${Date.now().toString(36)}`, label: '', calc: {} });
+      saveSummary();
+    });
+    bind('[data-wb-sum-drop]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      const lines = summaryLinesOf(target);
+      // Never down to nothing: one empty line is where the next calculation gets made, and a
+      // table with no rows at all offers nowhere to start again.
+      if (lines.length <= 1) return;
+      target.summaryRows = lines.filter((line) => String(line.id) !== String(el.dataset.wbSumDrop));
+      saveSummary();
+    });
+    bind('[data-wb-sum-title]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      const name = String(el.value || '').trim().slice(0, 60);
+      if (name) target.summaryTitle = name;
+      else delete target.summaryTitle;
+      saveSummary();
     }, 'onchange');
     bind('[data-wb-sum-hide]', (el) => {
       const target = summaryApp();

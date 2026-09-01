@@ -1460,11 +1460,11 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
 .wb-tx-dir.out { color: var(--warning, #b45309); }
 .wb-tx-dir.in { color: var(--success, #16a34a); }
 
-/* The calculation strip under a list.
+/* The calculation TABLE under a list.
  *
- * Below the list and always last, whichever layout is showing: a total that moves around is one
- * you have to go looking for. A horizontal strip because the columns it describes are
- * horizontal -- the answer sits under the column it belongs to. */
+ * Its columns are the app's own columns, so a total sits under the column it describes, and its
+ * rows are calculation lines -- the same shape the printout has, so what is set up here is what
+ * comes out rather than two layouts to reconcile. */
 .wb-sum {
   margin-top: 10px; border: 1px solid var(--border, #e2d5bf); border-radius: 12px;
   background: var(--surface, #fffaf0); padding: 10px 12px 12px;
@@ -1476,48 +1476,64 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
   color: var(--muted, #7a6a55);
 }
 .wb-sum-hide { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--muted, #7a6a55); }
-.wb-sum-grid { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
-.wb-sum-cell {
-  flex: 0 0 auto; min-width: 132px; display: flex; flex-direction: column; gap: 4px;
-  padding: 8px 10px; border-radius: 9px; border: 1px solid transparent;
+.wb-sum-scroll { overflow-x: auto; }
+.wb-sum-table { border-collapse: collapse; min-width: 100%; }
+.wb-sum-table th, .wb-sum-table td { border: 1px solid var(--border, #e2d5bf); padding: 6px 8px; vertical-align: top; }
+.wb-sum-table thead th {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted, #7a6a55);
+  text-align: left; white-space: nowrap; background: var(--surface-2, #f6efe2);
 }
-/* Only a column that was asked something is drawn as an answer. The rest are just the picker,
-   so a strip of fifteen fields does not read as fifteen results. */
-.wb-sum-cell.on { border-color: var(--border, #e2d5bf); background: var(--surface-2, #f6efe2); }
-.wb-sum-field { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted, #7a6a55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wb-sum-value { font-size: 1.06rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.wb-sum-cell:not(.on) .wb-sum-value { color: var(--muted, #7a6a55); font-weight: 400; }
+.wb-sum-corner { border-color: transparent !important; background: none !important; }
+.wb-sum-line-head {
+  min-width: 128px; text-align: left; background: var(--surface-2, #f6efe2);
+  display: flex; align-items: center; gap: 4px;
+}
+.wb-sum-cell { min-width: 132px; }
+/* Only a column that was asked something reads as an answer, so a table of fifteen columns does
+   not look like fifteen results. */
+.wb-sum-cell.on { background: color-mix(in srgb, var(--orange, #e0552d) 6%, transparent); }
+.wb-sum-value { display: block; font-size: 1.02rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
 .wb-sum-fn, .wb-sum-val {
-  font: inherit; font-size: .74rem; padding: 3px 6px; border-radius: 6px;
-  border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0); max-width: 156px;
+  font: inherit; font-size: .74rem; padding: 3px 6px; border-radius: 6px; margin-top: 4px;
+  border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0);
+  width: 100%; max-width: 168px;
 }
-.wb-sum-static { font-size: .72rem; font-weight: 700; color: var(--muted, #7a6a55); }
+.wb-sum-static { display: block; font-size: .72rem; font-weight: 700; color: var(--muted, #7a6a55); }
+.wb-sum-add { margin-top: 10px; }
+.wb-sum-drop {
+  margin-left: auto; border: 0; background: none; cursor: pointer; padding: 2px;
+  color: var(--muted, #7a6a55); border-radius: 5px; line-height: 1;
+}
+.wb-sum-drop:hover { background: var(--danger-soft, #fdeaea); color: var(--danger, #dc2626); }
 
-/* On paper the strip becomes a table, and the caption is what the tick hides. */
-.wb-sum-print { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: .86rem; }
-.wb-sum-print caption { text-align: left; font-weight: 800; padding-bottom: 6px; }
-.wb-sum-print th, .wb-sum-print td { border: 1px solid #999; padding: 5px 8px; text-align: left; }
-.wb-sum-print-num { text-align: right; font-variant-numeric: tabular-nums; }
-
-/* The heading is editable in place: it reads as a label until you touch it, because a text box
-   sitting there permanently would suggest the row is a form rather than an answer. */
+/* The heading and the names are editable in place: they read as labels until you touch them,
+   because text boxes sitting there permanently would make the table look like a form to fill in
+   rather than an answer to read. */
 .wb-sum-title-edit {
   font: inherit; font-weight: 800; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase;
   color: inherit; background: none; border: 1px solid transparent; border-radius: 6px;
   padding: 2px 6px; margin-left: -6px; min-width: 8ch; max-width: 26ch; width: 14ch;
 }
-.wb-sum-title-edit:hover { border-color: var(--border, #e2d5bf); }
-.wb-sum-title-edit:focus { border-color: var(--orange, #e0552d); background: var(--surface, #fffaf0); outline: none; width: 26ch; }
-
-/* A calculation's own name, editable in place once the column has been asked something. Same
-   treatment as the heading: a label until you touch it. */
-.wb-sum-field-edit {
-  font: inherit; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
-  color: var(--muted, #7a6a55); background: none; border: 1px solid transparent;
-  border-radius: 5px; padding: 1px 4px; margin-left: -4px; width: 100%; min-width: 0;
+.wb-sum-line-name, .wb-sum-field-edit {
+  font: inherit; font-size: .74rem; font-weight: 700; color: inherit; background: none;
+  border: 1px solid transparent; border-radius: 5px; padding: 1px 4px; width: 100%; min-width: 0;
 }
-.wb-sum-field-edit:hover { border-color: var(--border, #e2d5bf); }
-.wb-sum-field-edit:focus {
+.wb-sum-field-edit { font-size: .7rem; font-weight: 400; color: var(--muted, #7a6a55); margin-top: 3px; }
+.wb-sum-title-edit:hover, .wb-sum-line-name:hover, .wb-sum-field-edit:hover { border-color: var(--border, #e2d5bf); }
+.wb-sum-title-edit:focus, .wb-sum-line-name:focus, .wb-sum-field-edit:focus {
   border-color: var(--orange, #e0552d); background: var(--surface, #fffaf0);
   color: var(--text, #2b2118); outline: none;
 }
+.wb-sum-title-edit:focus { width: 26ch; }
+
+/* On paper the totals are rows of the data table itself, so they line up under the columns they
+   describe. Two separate tables would size their columns independently and a total would drift
+   out from under its own heading. */
+.wb-sum-print-gap td { border: 0; height: 10px; padding: 0; }
+.wb-sum-print-row th, .wb-sum-print-row td { font-weight: 800; }
+.wb-sum-print-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* What each number is, under it. These are the rows the Hide-when-printing tick removes. */
+.wb-sum-print-labels td {
+  font-size: .74rem; color: #555; border-top: 0; padding-top: 0; text-align: right; font-weight: 400;
+}
+.wb-sum-print-labels td:first-child { text-align: left; }

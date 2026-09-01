@@ -64,7 +64,7 @@ export function createDataIO(ctx) {
     }).then(null, () => {});
   }
 
-  const { summaryPrintTable } = createSummaryBar({ h, wbPlainVal });
+  const { summaryPrintRows } = createSummaryBar({ h, wbPlainVal });
 
   // Open a print-ready window carrying the app's own stylesheets (so report cards
   // and tables look identical), then auto-invoke the browser print dialog.
@@ -107,11 +107,12 @@ export function createDataIO(ctx) {
     const thead = `<tr><th>#</th>${cols.map((f) => `<th>${h(f.label)}</th>`).join('')}</tr>`;
     const rows = items.map((it, i) => `<tr><td>${i + 1}</td>${cols.map((f) => `<td>${h(wbPlainVal(companyId, workspace, app, f, it.values[f.id], it.values))}</td>`).join('')}</tr>`).join('');
     const subtitle = onlyIds ? `${items.length} selected record${items.length === 1 ? '' : 's'}` : 'Data';
-    // The calculations print as a table of their own, after the data. Paper has no scroll: the
-    // on-screen strip is a row that runs off the side of the page, while one row per calculation
-    // reads down. Its caption is what the Hide-when-printing tick removes.
-    const totals = summaryPrintTable(companyId, workspace, app, items, { sel: onlyIds || new Set() });
-    const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>${totals}`;
+    // The totals go INSIDE the data table, as a foot. That is the only way they are guaranteed
+    // to sit under the columns they describe: two separate tables size their columns
+    // independently, so the total would drift out from under its own heading. A blank row above
+    // them is the gap that keeps them reading as separate from the data.
+    const totals = summaryPrintRows(companyId, workspace, app, cols, items, { sel: onlyIds || new Set() });
+    const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody>${totals}</table>`;
     wbOpenPrintWindow(`${app.name} — ${onlyIds ? 'selected' : 'data'}`, body);
     logTransfer(companyId, workspaceId, appId, {
       direction: 'export',

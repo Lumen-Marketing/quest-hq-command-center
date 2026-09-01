@@ -7,6 +7,44 @@ Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational s
   helpers now have an empty search path. Live verification preserved all owners, grants and three
   trigger bindings, and the three callable chat helpers passed direct probes.
 
+## 2026-09-02 Calculations under a list, and formulas by pointing
+
+- **A calculation table sits under every App Builder record list** (`src/workspace/summary.js`,
+  `summary-bar.js`). A list answered "which ones" and never "how much"; the answer was export to
+  CSV and total it somewhere else, which is also how a number stops matching the list it came
+  from. Fifteen functions: count / filled / empty / unique / **count if** on any field, and sum,
+  average, median, mode, min, max, range, variance, std deviation on the numeric types
+  (`number`, `money`, `duration`, `rating`, `progress`, `calculation`, `rollup`, `autonumber`).
+  Offering Sum on a text column would only ever return a blank, so it is not offered.
+- **It is a table whose columns are the app's own columns and whose rows are calculation LINES.**
+  The first version was a strip of one answer per column, which made a Sum and an Average of the
+  same money mutually exclusive, and printed a Field/Calculation/Value list the reader had to
+  match back against the data by name. Lines are added and removed from the table itself; the
+  last one cannot be removed, because an empty line is where the next calculation gets made.
+- **On paper the totals are `tfoot` rows of the data table, not a table beside it**
+  (`summaryPrintRows`). Two tables size their columns independently and a total drifts out from
+  under its own heading; sharing the data table's `tfoot` is the only shape that cannot drift. A
+  column nobody asked anything of prints as an empty cell rather than a placeholder.
+- **Every part of it is named.** The heading defaults to "Calculations", each line to "Line N" and
+  each calculation to its field's name -- all three overridable, because a Sum of a column called
+  Number reads better as "Total contract value". A per-app tick hides the label rows on print
+  while keeping the numbers.
+- **A selection is the scope.** Tick four records and every line totals those four. A selection
+  that survives no filter falls back to the whole list, since a table of dashes is a worse answer
+  than the one the reader can see.
+- **Storage is `app.summaryRows`**, an array of `{id, label, calc}`. Documents written before
+  lines existed carried one unnamed line as `app.summary`; `summaryLines` still reads it, and the
+  first edit migrates it into `summaryRows` and deletes it rather than keeping both. All four keys
+  (`summaryRows`, `summary`, `summaryTitle`, `summaryHideLabel`) are named in
+  `normalizeWorkspaceBuilderDoc` -- anything it does not name is dropped on save.
+- Only `workspaces.manage` may change any of it. A reader is shown finished lines and never a
+  control, and never a bare number without the words for what it counted.
+- **Spreadsheet formulas can be built by pointing** (`src/sheet/formula-assist.js`, pure). While a
+  formula is being typed, clicking a cell inserts its reference at the caret and dragging inserts
+  a range, as in Excel and Sheets; typing `=` suggests the function names. `LOG10` is deliberately
+  a valid cell reference (column LOG, row 10) rather than a function match -- a guard test asserts
+  no `SHEET_FUNCTIONS` name ends in a digit, which is what keeps the two unambiguous.
+
 ## 2026-09-02 QA follow-through release
 
 - The signed-out authentication dialog is now explicitly programmatically focusable. Opening it

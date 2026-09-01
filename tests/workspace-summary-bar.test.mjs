@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createSummaryBar, summaryTitleOf } from '../src/workspace/summary-bar.js';
-import { calcName } from '../src/workspace/summary.js';
+import { calcName, lineIsEmpty, summaryLines, summaryLinesForEdit } from '../src/workspace/summary.js';
 
 // The arithmetic is covered in workspace-summary.test.mjs. This is the part that decides what a
-// column's values ARE -- an option id is not what the reader sees -- and what the strip does
-// with a selection.
+// column's values ARE (an option id is not what the reader sees), what a selection does, and the
+// shape the table takes on screen and on paper.
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const items = readFileSync(new URL('../src/workspace/items-view.js', import.meta.url), 'utf8');
@@ -21,207 +21,230 @@ const plain = (_c, _w, _a, field, raw) => {
 };
 const bar = createSummaryBar({ h: esc, wbPlainVal: plain });
 
-const APP = {
-  name: 'Prospects',
-  fields: [
-    { id: 'amt', label: 'Amount', type: 'number' },
-    { id: 'sex', label: 'Sex', type: 'category', config: { options: [{ id: 'm', label: 'Male' }, { id: 'f', label: 'Female' }] } },
-    { id: 'who', label: 'Name', type: 'text' },
-  ],
-  summary: { amt: { fn: 'sum' }, sex: { fn: 'countIf', value: 'Male' }, who: { fn: 'count' } },
-};
-const ROWS = [
-  { id: 'r1', values: { amt: 10, sex: 'm', who: 'Ana' } },
-  { id: 'r2', values: { amt: 20, sex: 'f', who: 'Bo' } },
-  { id: 'r3', values: { amt: 30, sex: 'm', who: '' } },
+const FIELDS = [
+  { id: 'amt', label: 'Allowance', type: 'number' },
+  { id: 'sex', label: 'Sex', type: 'category', config: { options: [{ id: 'm', label: 'Male' }, { id: 'f', label: 'Female' }] } },
+  { id: 'who', label: 'Name', type: 'text' },
 ];
+const ROWS = [
+  { id: 'r1', values: { amt: 3000, sex: 'm', who: 'Roman' } },
+  { id: 'r2', values: { amt: 1000, sex: 'f', who: 'Juan' } },
+];
+const line = (calc, over = {}) => ({ id: 'line-1', label: '', calc, ...over });
+const appWith = (...lines) => ({ name: 'calc', fields: FIELDS, summaryRows: lines });
 
-test('the answers appear under the columns they belong to', () => {
-  const html = bar.summaryBar('co', {}, APP, ROWS, { sel: new Set() }, true);
-  assert.match(html, /Amount/);
-  assert.match(html, />60</, 'sum of the amounts');
-  assert.match(html, />2</, 'two of them are Male');
-  assert.match(html, />3</, 'three records counted');
-});
+const ALL = { sel: new Set() };
 
-test('ticking records narrows the calculation to those records', () => {
-  // This is what makes the strip worth having: tick four and the total is those four.
-  const html = bar.summaryBar('co', {}, APP, ROWS, { sel: new Set(['r1', 'r2']) }, true);
-  assert.match(html, />30</, 'only the ticked amounts');
-  assert.match(html, /2 selected records/);
-});
+// ---- what a column's values mean ---------------------------------------------------------------
 
-test('a selection that survives no filter falls back to everything', () => {
-  // A row of dashes is a worse answer than the whole list.
-  const scope = bar.scopeRows(ROWS, { sel: new Set(['gone']) });
-  assert.equal(scope.selected, false);
-  assert.equal(scope.rows.length, 3);
-});
-
-test('count if is matched against the label, not the stored id', () => {
-  // The cell holds `m`. Nobody has seen `m`; they have seen Male.
-  assert.equal(bar.readerValue('co', {}, APP, APP.fields[1], ROWS[0]), 'Male');
-  // A number stays a number, because the arithmetic wants the number and not "$10.00".
-  assert.equal(bar.readerValue('co', {}, APP, APP.fields[0], ROWS[0]), 10);
+test('a number stays a number; everything else becomes what the reader sees', () => {
+  // The arithmetic wants 3000, not "$3,000.00". Count if wants "Male", not the id `m`.
+  assert.equal(bar.readerValue('co', {}, appWith(), FIELDS[0], ROWS[0]), 3000);
+  assert.equal(bar.readerValue('co', {}, appWith(), FIELDS[1], ROWS[0]), 'Male');
 });
 
 test('a tags cell reads as its labels, so one row can match several counts', () => {
   const field = { id: 't', label: 'Tags', type: 'tags', config: { options: [{ id: 'a', label: 'Roofing' }, { id: 'b', label: 'Urgent' }] } };
-  assert.deepEqual(bar.readerValue('co', {}, APP, field, { values: { t: ['a', 'b'] } }), ['Roofing', 'Urgent']);
+  assert.deepEqual(bar.readerValue('co', {}, appWith(), field, { values: { t: ['a', 'b'] } }), ['Roofing', 'Urgent']);
 });
 
-test('a reader without manage sees the answers but not the pickers', () => {
-  const html = bar.summaryBar('co', {}, APP, ROWS, { sel: new Set() }, false);
-  assert.doesNotMatch(html, /data-wb-sum-fn/);
-  assert.match(html, />60</, 'the totals still show');
-  assert.match(html, /Sum/, 'named, so a number without a label is never shown');
+// ---- the table on screen -----------------------------------------------------------------------
+
+test('the answers sit under the columns they describe', () => {
+  const app = appWith(line({ amt: { fn: 'sum' }, sex: { fn: 'countIf', value: 'Male' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, false);
+  assert.match(html, /<th title="Allowance">Allowance<\/th>/);
+  assert.match(html, />4000</, 'the allowances add up');
+  assert.match(html, />1</, 'one of them is Male');
 });
 
-test('an app with no fields shows no strip at all', () => {
-  assert.equal(bar.summaryBar('co', {}, { fields: [] }, [], { sel: new Set() }, true), '');
+test('a column asked nothing is an empty cell', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, false);
+  const cells = html.match(/<td class="wb-sum-cell[^"]*">[\s\S]*?<\/td>/g) || [];
+  assert.equal(cells.length, 3, 'one cell per field');
+  assert.ok(cells.some((cell) => cell.replace(/<[^>]+>/g, '').trim() === ''), 'and the unasked ones are blank');
 });
 
-// ---- printing ---------------------------------------------------------------------------------
+test('ticking records narrows every line to those records', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set(['r1']) }, false);
+  assert.match(html, />3000</, 'only the ticked allowance');
+  assert.match(html, /1 selected record</);
+});
 
-test('printing gets a table of its own, not the strip', () => {
-  // Paper has no scroll: the strip runs off the side of the page, a table reads down.
-  const html = bar.summaryPrintTable('co', {}, APP, ROWS, { sel: new Set() });
-  assert.match(html, /<table class="wb-sum-print">/);
-  // "Field" stopped being accurate once the first column carries a name the reader chose.
-  assert.match(html, /<th>Label<\/th><th>Calculation<\/th><th>Value<\/th>/);
+test('a selection that survives no filter falls back to everything', () => {
+  // A table of dashes is a worse answer than the whole list.
+  const scope = bar.scopeRows(ROWS, { sel: new Set(['gone']) });
+  assert.equal(scope.selected, false);
+  assert.equal(scope.rows.length, 2);
+});
+
+test('more than one line, so a column can be asked two things', () => {
+  // A Sum and an Average of the same money were mutually exclusive when there was one line.
+  const app = appWith(
+    line({ amt: { fn: 'sum' } }, { id: 'l1', label: 'Totals' }),
+    line({ amt: { fn: 'average' } }, { id: 'l2', label: 'Averages' }),
+  );
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, false);
+  assert.match(html, /Totals/);
+  assert.match(html, /Averages/);
+  assert.match(html, />4000</);
+  assert.match(html, />2000</);
+});
+
+test('a manager always gets a line to start in; a reader is shown only finished ones', () => {
+  const empty = appWith();
+  assert.match(bar.summaryBar('co', {}, empty, ROWS, ALL, true), /data-wb-sum-fn/, 'a line to choose in');
+  assert.equal(bar.summaryBar('co', {}, empty, ROWS, ALL, false), '', 'and nothing published until it says something');
+});
+
+test('a reader gets the numbers and what they mean, never a control', () => {
+  const app = appWith(line({ sex: { fn: 'countIf', value: 'Male' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, false);
+  assert.doesNotMatch(html, /<select|<input/);
+  // "1" under a Name column means nothing without the words beside it.
   assert.match(html, /Count if Male/);
 });
 
-test('only the columns actually asked something are printed', () => {
-  const app = { ...APP, summary: { amt: { fn: 'sum' } } };
-  const html = bar.summaryPrintTable('co', {}, app, ROWS, { sel: new Set() });
-  assert.match(html, /Amount/);
-  assert.doesNotMatch(html, /Name/, 'printing dashes helps nobody');
+test('the remove button appears only when there is more than one line', () => {
+  const one = appWith(line({ amt: { fn: 'sum' } }));
+  assert.doesNotMatch(bar.summaryBar('co', {}, one, ROWS, ALL, true), /data-wb-sum-drop/);
+  const two = appWith(line({ amt: { fn: 'sum' } }, { id: 'l1' }), line({}, { id: 'l2' }));
+  assert.match(bar.summaryBar('co', {}, two, ROWS, ALL, true), /data-wb-sum-drop="l2"/);
 });
 
-test('nothing configured prints nothing', () => {
-  assert.equal(bar.summaryPrintTable('co', {}, { ...APP, summary: {} }, ROWS, { sel: new Set() }), '');
+test('an app with no fields shows no table at all', () => {
+  assert.equal(bar.summaryBar('co', {}, { fields: [] }, [], ALL, true), '');
 });
 
-test('the label can be hidden on print, and only the label goes', () => {
-  const shown = bar.summaryPrintTable('co', {}, APP, ROWS, { sel: new Set() });
-  assert.match(shown, /<caption>Calculations/);
-  const hidden = bar.summaryPrintTable('co', {}, { ...APP, summaryHideLabel: true }, ROWS, { sel: new Set() });
-  assert.doesNotMatch(hidden, /<caption>/);
-  assert.match(hidden, /Count if Male/, 'the numbers stay');
-});
-
-// ---- wiring -----------------------------------------------------------------------------------
-
-test('the strip renders below the list and above the footer', () => {
-  // Always last, whichever layout is showing. A total that moves is one you go looking for.
-  assert.match(items, /<div id="wbItemsList">\$\{listBody\}<\/div>\s*\n\s*\$\{summary\}/);
-});
-
-test('the configuration survives a reload', () => {
-  // normalizeWorkspaceBuilderDoc drops everything it does not name, so without these two the
-  // totals come back blank on the next load.
-  assert.match(main, /\{ summary: app\.summary \}/);
-  assert.match(main, /\.\.\.\(app\.summaryHideLabel \? \{ summaryHideLabel: true \} : \{\}\)/);
-});
-
-test('changing a calculation saves it, and only a manager may', () => {
-  const block = main.slice(main.indexOf('const summaryApp = ()'));
-  assert.match(block.slice(0, 1800), /if \(!can\('workspaces\.manage', companyId\)\) return null;/);
-  assert.match(block.slice(0, 1800), /if \(el\.value !== 'countIf'\) entry\.value = '';/);
-  assert.match(block.slice(0, 1800), /wbSave\(companyId\);/);
-});
-
-test('print passes the selection through, so a selected print totals the selection', () => {
-  assert.match(io, /summaryPrintTable\(companyId, workspace, app, items, \{ sel: onlyIds \|\| new Set\(\) \}\)/);
-});
-
-// ---- naming it --------------------------------------------------------------------------------
+// ---- naming ------------------------------------------------------------------------------------
 
 test('the heading is a default, not a fixed word', () => {
-  // What a team is totalling has a name of its own -- Totals, Job costs, This month.
   assert.equal(summaryTitleOf({}), 'Calculations');
   assert.equal(summaryTitleOf({ summaryTitle: 'Job costs' }), 'Job costs');
   assert.equal(summaryTitleOf({ summaryTitle: '   ' }), 'Calculations', 'blank falls back');
-  assert.equal(summaryTitleOf(undefined), 'Calculations');
 });
-
-test('a manager edits the heading in place; a reader just reads it', () => {
-  const app = { ...APP, summaryTitle: 'Job costs' };
-  const editable = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, true);
-  assert.match(editable, /data-wb-sum-title value="Job costs"/);
-  const readOnly = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, false);
-  assert.doesNotMatch(readOnly, /data-wb-sum-title/);
-  assert.match(readOnly, /<b class="wb-sum-title">Job costs<\/b>/);
-});
-
-test('the name it was given is the name on the printout', () => {
-  const html = bar.summaryPrintTable('co', {}, { ...APP, summaryTitle: 'Job costs' }, ROWS, { sel: new Set() });
-  assert.match(html, /<caption>Job costs — 3 records<\/caption>/);
-});
-
-test('hiding the label on print still hides it, whatever it was renamed to', () => {
-  const html = bar.summaryPrintTable('co', {}, { ...APP, summaryTitle: 'Job costs', summaryHideLabel: true }, ROWS, { sel: new Set() });
-  assert.doesNotMatch(html, /Job costs/);
-  assert.match(html, /Count if Male/, 'the numbers stay');
-});
-
-test('the name survives a reload, trimmed and bounded', () => {
-  // normalizeWorkspaceBuilderDoc drops what it does not name; 60 characters is a heading, not
-  // a paragraph pushed into one.
-  assert.match(main, /typeof app\.summaryTitle === 'string' && app\.summaryTitle\.trim\(\)/);
-  assert.match(main, /summaryTitle: app\.summaryTitle\.trim\(\)\.slice\(0, 60\)/);
-});
-
-test('clearing the name removes it rather than storing an empty heading', () => {
-  const block = main.slice(main.indexOf("bind('[data-wb-sum-title]'"));
-  assert.match(block.slice(0, 700), /if \(name\) target\.summaryTitle = name;/);
-  assert.match(block.slice(0, 700), /else delete target\.summaryTitle;/);
-});
-
-// ---- naming each calculation ------------------------------------------------------------------
 
 test('a calculation is named after its field until somebody says otherwise', () => {
-  // The field name answers "which column"; a total often wants to answer "which number".
-  assert.equal(calcName({ label: 'Number' }, {}), 'Number');
-  assert.equal(calcName({ label: 'Number' }, { label: 'Total contract value' }), 'Total contract value');
-  assert.equal(calcName({ label: 'Number' }, { label: '   ' }), 'Number', 'blank falls back');
-  assert.equal(calcName({}, {}), 'Field', 'and something is always shown');
+  assert.equal(calcName({ label: 'Allowance' }, {}), 'Allowance');
+  assert.equal(calcName({ label: 'Allowance' }, { label: 'Total paid' }), 'Total paid');
+  assert.equal(calcName({ label: 'Allowance' }, { label: '  ' }), 'Allowance', 'blank falls back');
 });
 
-test('the printout shows the name, not the field it came from', () => {
-  const app = { ...APP, summary: { amt: { fn: 'sum', label: 'Total contract value' } } };
-  const html = bar.summaryPrintTable('co', {}, app, ROWS, { sel: new Set() });
-  assert.match(html, /Total contract value/);
-  assert.doesNotMatch(html, /<td>Amount<\/td>/, 'the field name is not what was asked for');
-  // "Field" stops being accurate once the name is the reader's own.
-  assert.match(html, /<th>Label<\/th>/);
+// ---- the older one-line shape ------------------------------------------------------------------
+
+test('an app set up before lines existed keeps its totals', () => {
+  // `summary` was a single unnamed line. It is read as exactly that rather than discarded.
+  const legacy = { fields: FIELDS, summary: { amt: { fn: 'sum' } } };
+  const lines = summaryLines(legacy);
+  assert.equal(lines.length, 1);
+  assert.deepEqual(lines[0].calc, { amt: { fn: 'sum' } });
+  assert.match(bar.summaryBar('co', {}, legacy, ROWS, ALL, false), />4000</);
 });
 
-test('the strip shows the name too', () => {
-  const app = { ...APP, summary: { amt: { fn: 'sum', label: 'Total contract value' } } };
-  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, false);
-  assert.match(html, /Total contract value/);
+test('an empty line is one nobody has asked anything of', () => {
+  assert.equal(lineIsEmpty({ calc: {} }), true);
+  assert.equal(lineIsEmpty({ calc: { amt: { fn: 'none' } } }), true);
+  assert.equal(lineIsEmpty({ calc: { amt: { fn: 'sum' } } }), false);
+  assert.equal(summaryLinesForEdit({}).length, 1, 'and there is always one to start in');
 });
 
-test('the name is editable only once the column has been asked something', () => {
-  // A row of editable names above fifteen "None"s would read as fifteen calculations that are
-  // not there.
-  const app = { ...APP, summary: { amt: { fn: 'sum' }, who: { fn: 'none' } } };
-  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, true);
-  assert.match(html, /data-wb-sum-label="amt"/);
-  assert.doesNotMatch(html, /data-wb-sum-label="who"/);
+// ---- printing ----------------------------------------------------------------------------------
+
+test('the totals print as rows of the data table, so they line up', () => {
+  // Two separate tables size their columns independently and the total drifts out from under
+  // its own heading. A tfoot shares the data table's widths.
+  const app = appWith(line({ amt: { fn: 'sum' }, who: { fn: 'countIf', value: 'Roman' } }, { label: 'Totals' }));
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(html, /^<tfoot>/);
+  assert.match(html, /wb-sum-print-gap/, 'a blank row separates them from the data');
+  assert.match(html, /<th scope="row">Totals<\/th>/);
 });
 
-test('a reader gets the name as text, never a box', () => {
-  const app = { ...APP, summary: { amt: { fn: 'sum', label: 'Total contract value' } } };
-  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, false);
-  assert.doesNotMatch(html, /data-wb-sum-label/);
-  assert.match(html, /Total contract value/);
+test('a printed row has one cell per column, blank where nothing was asked', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  const row = /<tr class="wb-sum-print-row">([\s\S]*?)<\/tr>/.exec(html)[1];
+  const cells = row.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/g);
+  assert.equal(cells.length, FIELDS.length + 1, 'the row label plus every column');
+  assert.match(cells[1], />4000</, 'the answer under its own column');
+  assert.equal(cells[2].replace(/<[^>]+>/g, ''), '', 'and the rest are blank');
 });
 
-test('clearing the name falls back rather than storing the field name', () => {
-  const block = main.slice(main.indexOf("bind('[data-wb-sum-label]'"));
-  assert.match(block.slice(0, 800), /if \(name\) entry\.label = name;/);
-  assert.match(block.slice(0, 800), /else delete entry\.label;/);
+test('each line prints as its own row', () => {
+  const app = appWith(
+    line({ amt: { fn: 'sum' } }, { id: 'l1', label: 'Totals' }),
+    line({ amt: { fn: 'average' } }, { id: 'l2', label: 'Averages' }),
+  );
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  assert.equal((html.match(/wb-sum-print-row/g) || []).length, 2);
+  assert.match(html, /Totals/);
+  assert.match(html, /Averages/);
+});
+
+test('what each number is prints under it', () => {
+  const app = appWith(line({ who: { fn: 'countIf', value: 'Roman' } }));
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(html, /Count if Roman/, 'a bare 1 under Name would mean nothing');
+});
+
+test('a renamed calculation prints under its own name', () => {
+  const app = appWith(line({ amt: { fn: 'sum', label: 'Total paid' } }));
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(html, /Total paid/);
+  assert.doesNotMatch(html, />Sum</);
+});
+
+test('hiding the labels removes the words and keeps the numbers', () => {
+  const app = { ...appWith(line({ amt: { fn: 'sum' } }, { label: 'Totals' })), summaryHideLabel: true };
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  assert.doesNotMatch(html, /Totals/);
+  assert.doesNotMatch(html, /wb-sum-print-labels/);
+  assert.match(html, />4000</);
+});
+
+test('nothing configured prints nothing', () => {
+  assert.equal(bar.summaryPrintRows('co', {}, appWith(), FIELDS, ROWS, ALL), '');
+  assert.equal(bar.summaryPrintRows('co', {}, appWith(line({ amt: { fn: 'none' } })), FIELDS, ROWS, ALL), '');
+});
+
+test('a selected print totals the selection', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, { sel: new Set(['r1']) });
+  assert.match(html, />3000</);
+});
+
+// ---- wiring ------------------------------------------------------------------------------------
+
+test('the table renders below the list and above the footer', () => {
+  assert.match(items, /<div id="wbItemsList">\$\{listBody\}<\/div>\s*\n\s*\$\{summary\}/);
+});
+
+test('the totals go inside the printed data table, not beside it', () => {
+  assert.match(io, /<tbody>\$\{rows\}<\/tbody>\$\{totals\}<\/table>/);
+  assert.match(io, /summaryPrintRows\(companyId, workspace, app, cols, items, \{ sel: onlyIds \|\| new Set\(\) \}\)/);
+});
+
+test('the lines survive a reload', () => {
+  // normalizeWorkspaceBuilderDoc drops everything it does not name.
+  assert.match(main, /Array\.isArray\(app\.summaryRows\) \? \{ summaryRows: app\.summaryRows \} : \{\}/);
+  assert.match(main, /\{ summary: app\.summary \}/, 'and the older one-line shape is still read');
+});
+
+test('editing migrates the older shape once, rather than keeping both', () => {
+  const block = main.slice(main.indexOf('const summaryLinesOf ='));
+  assert.match(block.slice(0, 900), /delete target\.summary;/);
+});
+
+test('the last line cannot be removed', () => {
+  // One empty line is where the next calculation gets made; a table with no rows offers nowhere
+  // to start again.
+  const block = main.slice(main.indexOf("bind('[data-wb-sum-drop]'"));
+  assert.match(block.slice(0, 700), /if \(lines\.length <= 1\) return;/);
+});
+
+test('only a manager may change any of it', () => {
+  const block = main.slice(main.indexOf('const summaryApp = ()'));
+  assert.match(block.slice(0, 400), /if \(!can\('workspaces\.manage', companyId\)\) return null;/);
 });

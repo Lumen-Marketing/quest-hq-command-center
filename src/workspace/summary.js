@@ -162,6 +162,46 @@ export function formatSummary(value) {
 }
 
 /**
+ * The calculation LINES under a list.
+ *
+ * One line was the first shape and it was too few: a column often wants two answers -- a Sum and
+ * an Average of the same money, a Count and a Count-if of the same status -- and a single line
+ * makes those mutually exclusive. Lines are rows in the printed table and rows in the strip, so
+ * "add another line" is the same gesture in both places.
+ *
+ * A document written before lines existed carried one unnamed line as `app.summary`; it is read
+ * as exactly that, so nothing set up under the old shape is lost.
+ */
+export function summaryLines(app) {
+  const given = Array.isArray(app?.summaryRows) ? app.summaryRows : null;
+  if (given) {
+    return given
+      .filter((row) => row && typeof row === 'object')
+      .map((row, index) => ({
+        id: String(row.id || `line-${index + 1}`),
+        label: String(row.label ?? ''),
+        calc: row.calc && typeof row.calc === 'object' && !Array.isArray(row.calc) ? row.calc : {},
+      }));
+  }
+  const legacy = app?.summary && typeof app.summary === 'object' && !Array.isArray(app.summary)
+    ? app.summary
+    : null;
+  if (legacy && Object.keys(legacy).length) return [{ id: 'line-1', label: '', calc: legacy }];
+  return [];
+}
+
+/** The lines to DRAW: always at least one, so there is somewhere to make the first choice. */
+export function summaryLinesForEdit(app) {
+  const lines = summaryLines(app);
+  return lines.length ? lines : [{ id: 'line-1', label: '', calc: {} }];
+}
+
+/** True when a line asks nothing of any column, which is what makes it hideable rather than drawn. */
+export function lineIsEmpty(line) {
+  return !Object.values(line?.calc || {}).some((one) => one && one.fn && one.fn !== 'none');
+}
+
+/**
  * What a calculation is called.
  *
  * Defaults to the field's name, because that is right until somebody says otherwise -- but the
