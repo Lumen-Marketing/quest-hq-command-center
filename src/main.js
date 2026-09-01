@@ -40,8 +40,6 @@ import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequi
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh, shouldRenderAfterRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { INACTIVE_COMPANY_STATUSES, filterCompanyRows, paginate } from './platform-directory.js';
-import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
-import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
 import { addRecordLabel, newRecordLabel, singularize } from './workspace/naming.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
@@ -2895,6 +2893,8 @@ let helpModule = null;
 let helpModulePromise = null;
 let companySearchModule = null;
 let commandPaletteModule = null;
+let taskInstructionModule = null;
+let contactInstructionModule = null;
 let commandResults = [];
 const COMMAND_RECENTS_KEY = 'quest.command.recents';
 const COMMAND_RECENTS_MAX = 8;
@@ -26884,10 +26884,14 @@ function openCommandPalette(initialQuery = '') {
       import('./assistant/help-index.js'),
       import('./company-search.js'),
       import('./command-palette.js'),
-    ]).then(([help, companySearch, commandPalette]) => {
+      import('./assistant/task-parser.js'),
+      import('./assistant/contact-parser.js'),
+    ]).then(([help, companySearch, commandPalette, taskInstructions, contactInstructions]) => {
       helpModule = help;
       companySearchModule = companySearch;
       commandPaletteModule = commandPalette;
+      taskInstructionModule = taskInstructions;
+      contactInstructionModule = contactInstructions;
       if (state.commandPalette.open) {
         render();
         queueMicrotask(() => document.querySelector('[data-command-input]')?.focus());
@@ -27051,15 +27055,15 @@ function commandAssistantResults(query) {
 
   const companyId = activeCompanyId();
   // An explicit "add contact ..." offers contact creation; anything else offers a task.
-  if (looksLikeContactInstruction(q) && can('contacts.manage', companyId)) {
-    const contact = parseContactInstruction(q);
+  if (contactInstructionModule?.looksLikeContactInstruction(q) && can('contacts.manage', companyId)) {
+    const contact = contactInstructionModule.parseContactInstruction(q);
     extras.push({
       id: 'create-contact', group: 'Create', icon: 'ti-user-plus',
       label: `Create contact: ${contact.name}`, hint: contact.email || contact.phone || '',
       run: { kind: 'create-contact', query: q },
     });
-  } else if (can('tasks.manage', companyId)) {
-    const draft = parseTaskInstruction(q, new Date());
+  } else if (taskInstructionModule && can('tasks.manage', companyId)) {
+    const draft = taskInstructionModule.parseTaskInstruction(q, new Date());
     const hint = [draft.found.date ? draft.due : '', draft.found.time ? draft.due_time : '']
       .filter(Boolean).join(' ');
     extras.push({
@@ -27096,10 +27100,10 @@ function commandPaletteMembers(companyId = activeCompanyId()) {
 // auto-link a contact named in the text. Both are best guesses the confirm card
 // lets the user change or clear.
 function buildCommandTaskDraft(query) {
-  const draft = parseTaskInstruction(query, new Date());
+  const draft = taskInstructionModule.parseTaskInstruction(query, new Date());
   const companyId = activeCompanyId();
-  draft.assignee_id = draft.assignee ? matchPerson(draft.assignee, commandPaletteMembers(companyId)) : '';
-  draft.contact_id = matchContactInText(draft.raw, companyContacts(companyId).map((c) => ({ id: c.id, name: c.name })));
+  draft.assignee_id = draft.assignee ? taskInstructionModule.matchPerson(draft.assignee, commandPaletteMembers(companyId)) : '';
+  draft.contact_id = taskInstructionModule.matchContactInText(draft.raw, companyContacts(companyId).map((c) => ({ id: c.id, name: c.name })));
   return draft;
 }
 
@@ -27187,7 +27191,7 @@ function runCommand(command) {
     return;
   }
   if (run.kind === 'create-contact') {
-    state.commandPalette.contactDraft = parseContactInstruction(run.query);
+    state.commandPalette.contactDraft = contactInstructionModule.parseContactInstruction(run.query);
     render();
     queueMicrotask(() => {
       const el = document.querySelector('[data-command-contact-name]');

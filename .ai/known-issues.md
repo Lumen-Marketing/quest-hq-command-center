@@ -86,7 +86,7 @@ text a contact belonging to another. Fix the authorization at the same time as t
 
 ## Main browser bundle remains large
 
-Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js plus the RingCentral calls runtime are lazy-loaded, but src/main.js remains a performance and maintainability risk. Measure production behavior before splitting and retain the budget guard.
+Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js, RingCentral calls, company search, and the command palette's instruction parsers are lazy-loaded. The 2026-09-02 parser split reduced the entry from 365.05 KiB to 363.21 KiB gzip, but src/main.js remains a performance and maintainability risk. Measure each extraction and retain the budget guard.
 
 ## The strict CSP target is still report-only
 
