@@ -189,16 +189,17 @@ remains on Tasks. The durable end state is to reuse a persistent iframe host acr
 renders or finish the native Tasks migration; until then, review new asynchronous render
 callers for whether they can fire while Tasks is open.
 
-## Appearance customization is per-browser and cannot reach the Tasks iframe
+## Appearance customization is per-browser; Tasks receives theme/accent only
 
 Settings → Appearance (theme, accent, background pattern/upload, card solid/glass) stores choices in
 `localStorage` and applies them as CSS variables + `data-*` attributes on `<html>`, so they survive
-the full `render()` rebuilds without reapplying. Two scope limits: the embedded Task-management view
-is an `<iframe>` (a separate document) and cannot inherit the host page's background/card styling; and
-the accent picker mainly affects light mode, because the dark-mode palette block re-hardcodes
-`--orange` after the `[data-accent]` blocks. Widening either requires, respectively, passing the
-appearance into the iframe (URL param / postMessage) and having dark mode derive `--orange` from the
-accent rather than hardcoding it.
+the full `render()` rebuilds without reapplying. The same-origin Task-management iframe now receives
+the resolved light/dark theme and accent tokens at boot and whenever either choice changes.
+
+Background patterns/uploads and card solid/glass styling remain host-only by design: the embedded
+Tasks document owns a separate layout and applying those surface rules across it would make its
+internal panels inconsistent. The accent picker also still has reduced reach on a few host dark-mode
+subsystems that locally re-declare `--orange`.
 
 ## Storage buckets need a SELECT policy for uploads to succeed
 

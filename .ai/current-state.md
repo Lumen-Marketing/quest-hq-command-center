@@ -10,6 +10,8 @@ Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational s
 - The feature-flagged native Tasks write store no longer exposes its backing list. A failed
   optimistic save rolls back only the affected task, so it cannot erase another task save that
   completed while the first request was in flight. The default embedded Tasks app is unchanged.
+- The embedded Tasks app now starts in the host's resolved light/dark theme and receives live theme
+  and accent changes through its same-origin frame. Tasks keeps its own panel/background design.
 - Commit `9eb4cfb92052804047d1b1b69e7dc544f4db8943` is live on `www.questbase.io` through
   Vercel deployment `dpl_AhVL8K3VakBntY5aie7bWX1jCefz`; all 36 production smoke routes and
   all four entry assets passed after deployment.

@@ -225,6 +225,7 @@ const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
 const WB_FEED_VIEW_KEY = 'quest-hq-wb-feed-view';
 const THEME_KEY = 'quest-theme';
 const ACCENT_KEY = 'quest-accent';
+const EMBEDDED_TASKS_THEME_KEY = 'questhq:theme';
 const NOTIFICATION_CACHE_KEY = 'quest-hq-notification-cache-v1';
 const AUTOMATION_CACHE_KEY = 'quest-hq-automation-cache-v1';
 const MESSAGE_CONVERSATION_CACHE_KEY = 'quest-hq-message-conversation-cache-v1';
@@ -2989,6 +2990,43 @@ function applyTheme(theme = getTheme(), accent = getAccent()) {
   document.documentElement.dataset.themeMode = mode;
   document.documentElement.dataset.theme = resolveThemeMode(mode);
   document.documentElement.dataset.accent = accent;
+  syncEmbeddedTasksAppearance();
+}
+
+function syncEmbeddedTasksAppearance() {
+  const resolvedTheme = resolveThemeMode(getThemeMode());
+  // TaskManagement boots before the host can touch its document. Because it is
+  // same-origin, seeding its existing preference key prevents a wrong-theme flash.
+  try { localStorage.setItem(EMBEDDED_TASKS_THEME_KEY, resolvedTheme); } catch {}
+
+  const frame = document.querySelector('.taskapp-frame');
+  if (!frame) return;
+  if (frame.dataset.appearanceSyncBound !== '1') {
+    frame.dataset.appearanceSyncBound = '1';
+    frame.addEventListener('load', syncEmbeddedTasksAppearance);
+  }
+
+  try {
+    const root = frame.contentDocument?.documentElement;
+    if (!root) return;
+    const hostStyle = getComputedStyle(document.documentElement);
+    const accent = hostStyle.getPropertyValue('--orange').trim();
+    const accentBright = hostStyle.getPropertyValue('--amber').trim() || accent;
+    const accentSoft = hostStyle.getPropertyValue('--accent-soft').trim();
+    root.dataset.theme = resolvedTheme;
+    if (accentBright) root.style.setProperty('--amber', accentBright);
+    if (accentSoft) root.style.setProperty('--amber-bg', accentSoft);
+    if (accent) {
+      root.style.setProperty('--amber-ink', accent);
+      root.style.setProperty('--accent', accent);
+      root.style.setProperty('--qt-orange', accent);
+    }
+    const themeMeta = frame.contentDocument.querySelector('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.setAttribute('content', resolvedTheme === 'dark' ? '#08090A' : '#FBFAF8');
+  } catch {
+    // The production frame is same-origin. If a deployment temporarily serves
+    // it elsewhere, theme sync must fail quietly rather than blocking Tasks.
+  }
 }
 
 function setTheme(theme) {
@@ -4185,6 +4223,7 @@ function render() {
   queueMicrotask(mountContactSmsThread);
   queueMicrotask(mountProtectedFormDrafts);
   queueMicrotask(mountPipeBoardScroll);
+  queueMicrotask(syncEmbeddedTasksAppearance);
   // innerHTML replaced every live-clock element, so the interval has nothing to write to
   // until it is re-armed against the new nodes.
   queueMicrotask(ensureLiveClocks);
