@@ -172,6 +172,31 @@ test('a printed row has one cell per column, blank where nothing was asked', () 
   assert.equal(cells[2].replace(/<[^>]+>/g, ''), '', 'and the rest are blank');
 });
 
+test('a line nobody named prints with a blank name, not an invented one', () => {
+  // "Line 2" is a position, not a name. Printing it puts a word in the reader's hands that
+  // nobody chose and that says nothing about what the row totals.
+  const app = appWith(line({ amt: { fn: 'sum' } }, { id: 'l1' }), line({ amt: { fn: 'average' } }, { id: 'l2' }));
+  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  assert.doesNotMatch(html, /Line 1|Line 2/);
+  assert.match(html, /<th scope="row"><\/th>/, 'the cell is there, it is just empty');
+  assert.match(html, />4000</, 'and the totals are unaffected');
+});
+
+test('an unnamed line is blank on screen too, and named only where it was named', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }, { id: 'l1' }), line({ amt: { fn: 'average' } }, { id: 'l2', label: 'Averages' }));
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, false);
+  assert.doesNotMatch(html, /Line 1|Line 2/);
+  assert.match(html, /Averages/);
+});
+
+test('the manager still sees which line is which, as a placeholder', () => {
+  // Greyed-out hint text in the box is not a value: it names the position without printing it.
+  const app = appWith(line({}, { id: 'l1' }), line({}, { id: 'l2' }));
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, true);
+  assert.match(html, /placeholder="Line 1"/);
+  assert.match(html, /placeholder="Line 2"/);
+});
+
 test('each line prints as its own row', () => {
   const app = appWith(
     line({ amt: { fn: 'sum' } }, { id: 'l1', label: 'Totals' }),

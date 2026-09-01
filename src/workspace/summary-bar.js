@@ -126,7 +126,7 @@ export function createSummaryBar(ctx) {
       <th scope="row" class="wb-sum-line-head">
         ${canManage
           ? `<input class="wb-sum-line-name" data-wb-sum-line-name="${h(line.id)}" value="${h(line.label)}" placeholder="Line ${index + 1}" aria-label="What this line is called" spellcheck="false" maxlength="40">`
-          : h(line.label || `Line ${index + 1}`)}
+          : h(line.label)}
         ${canManage && lines.length > 1 ? `<button type="button" class="wb-sum-drop" data-wb-sum-drop="${h(line.id)}" title="Remove this line" aria-label="Remove this line"><i class="ti ti-x"></i></button>` : ''}
       </th>
       ${fields.map((field) => cell(line, field)).join('')}
@@ -164,7 +164,7 @@ export function createSummaryBar(ctx) {
     const scope = scopeRows(rows, ui);
     const hide = !!app.summaryHideLabel;
 
-    const body = lines.map((line, index) => {
+    const body = lines.map((line) => {
       const value = (field) => {
         const config = configIn(line, field.id);
         if (!isSet(config)) return '<td></td>';
@@ -174,7 +174,7 @@ export function createSummaryBar(ctx) {
         const config = configIn(line, field.id);
         return isSet(config) ? `<td class="wb-sum-print-cap">${h(captionOf(config))}</td>` : '<td></td>';
       };
-      const name = h(line.label || `Line ${index + 1}`);
+      const name = h(line.label);
       const values = `<tr class="wb-sum-print-row"><th scope="row">${hide ? '' : name}</th>${cols.map(value).join('')}</tr>`;
       // What each number IS, under it. This is the row the Hide-when-printing tick removes -- a
       // bare "1" under a Name column means nothing without "Count if Roman".
