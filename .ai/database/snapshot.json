@@ -9101,7 +9101,7 @@
    "columns": [
     {
      "name": "id",
-     "default": null,
+     "default": "gen_random_uuid()",
      "nullable": false,
      "position": 1,
      "udt_name": "uuid",
@@ -14914,11 +14914,15 @@
    "version": "20260828191625"
   },
   {
-   "version": "20260829005613",
-   "name": "wb_data_transfers"
+   "name": "wb_data_transfers",
+   "version": "20260829005613"
+  },
+  {
+   "name": "harden_remaining_app_private_search_paths",
+   "version": "20260901200003"
   }
  ],
- "captured_at": "2026-08-29T00:58:00.000000+00:00",
+ "captured_at": "2026-09-01T20:02:47.185039+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",
@@ -16687,7 +16691,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "id",
+   "to_column": "company_id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",
@@ -16696,7 +16700,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "company_id",
+   "to_column": "id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",
@@ -16871,6 +16875,33 @@
    "from_table": "user_role_assignments",
    "delete_rule": "CASCADE",
    "from_column": "role_id",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "wb_data_transfers_company_id_fkey",
+   "to_table": "companies",
+   "to_column": "id",
+   "from_table": "wb_data_transfers",
+   "delete_rule": "CASCADE",
+   "from_column": "company_id",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "wb_data_transfers_created_by_fkey",
+   "to_table": "profiles",
+   "to_column": "id",
+   "from_table": "wb_data_transfers",
+   "delete_rule": "SET NULL",
+   "from_column": "created_by",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "wb_data_transfers_workspace_id_fkey",
+   "to_table": "workspaces",
+   "to_column": "id",
+   "from_table": "wb_data_transfers",
+   "delete_rule": "CASCADE",
+   "from_column": "workspace_id",
    "update_rule": "NO ACTION"
   },
   {

@@ -1,6 +1,6 @@
 # Public schema catalog
 
-Captured through 2026-08-28T19:16:59.435Z from the live Supabase catalog. Nullable columns end in `?`.
+Captured through 2026-09-01T20:02:47.185039Z from the live Supabase catalog. Nullable columns end in `?`.
 
 ## public.accounts
 

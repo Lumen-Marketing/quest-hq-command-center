@@ -1,8 +1,16 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-08-28T19:16:59.435Z.
+The full machine-readable Supabase catalog was refreshed through 2026-09-01T20:02:47.185039Z.
 The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## 2026-09-01 app_private search-path hardening
+
+Migration `20260901200003_harden_remaining_app_private_search_paths.sql` removes the remaining
+mutable schemas from seven SECURITY DEFINER helpers whose references were already fully qualified.
+It changes only each routine's `search_path`; bodies, owners, grants, volatility and trigger
+bindings stay intact. Production verification found 7/7 empty paths, 3/3 trigger bindings and
+successful direct probes for the three callable chat visibility helpers.
 
 ## 2026-08-29 record actor index
 

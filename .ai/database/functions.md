@@ -1,6 +1,6 @@
 # Public functions
 
-Captured through 2026-08-28T19:16:59.435Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured through 2026-09-01T20:02:47.185039Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- | --- |

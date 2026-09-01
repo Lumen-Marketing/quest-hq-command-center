@@ -2,24 +2,6 @@
 
 Only confirmed, actionable items belong here.
 
-## Six app_private helpers still carry pg_temp in their search path
-
-Confirmed 2026-08-28, after `20260828004405_revoke_anon_execute_app_private.sql`.
-
-`chat_attachment_visible`, `chat_left_at`, `chat_message_visible`, `guard_system_role`,
-`guard_wildcard_permission`, `companies_seed_task_taxonomy` and `seed_company_default_roles`
-are SECURITY DEFINER with `search_path = 'public', pg_temp'`. `20260828002845` fixed the same
-inconsistency for `is_company_member` and `has_company_permission`, which were safe to rewrite
-because every reference in them was already schema-qualified and both are exercised by tests.
-
-These were left alone deliberately. Three are trigger functions and three are RLS helpers; none
-has direct test coverage, and rewriting a definer body blind is how a policy quietly starts
-returning the wrong answer. `pg_temp` last in the search path is the defensive position rather
-than the dangerous one, and anon can no longer execute any of them.
-
-Fix by reading each body, schema-qualifying anything that is not already, and moving it to
-`search_path = ''` one function at a time with a live probe between each.
-
 ## Rate limiting is durable on the endpoints that need it
 
 RESOLVED 2026-08-28 by `20260828005040_durable_rate_limits.sql`. The in-memory limiter is still

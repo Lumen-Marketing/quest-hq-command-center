@@ -2,6 +2,11 @@
 
 Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+- Production Supabase migration `20260901200003_harden_remaining_app_private_search_paths` is
+  applied to project `rqundirizvojpzhljtdn`. All seven deferred `app_private` SECURITY DEFINER
+  helpers now have an empty search path. Live verification preserved all owners, grants and three
+  trigger bindings, and the three callable chat helpers passed direct probes.
+
 ## 2026-09-02 QA follow-through release
 
 - The signed-out authentication dialog is now explicitly programmatically focusable. Opening it

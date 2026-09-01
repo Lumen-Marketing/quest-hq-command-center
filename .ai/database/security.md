@@ -1,6 +1,6 @@
 # Database security catalog
 
-Captured through 2026-08-28T19:16:59.435Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
+Captured through 2026-09-01T20:02:47.185039Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
 
 ## RLS coverage
 
