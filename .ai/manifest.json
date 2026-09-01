@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-29T00:58:00.000Z",
-  "generated_from_commit": "08309f5c1087d20d75d5c301e675773a97629d87",
+  "generated_at": "2026-09-01T18:43:21.964Z",
+  "generated_from_commit": "9eb4cfb92052804047d1b1b69e7dc544f4db8943",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "08309f5c1087d20d75d5c301e675773a97629d87",
+    "main_commit_at_capture": "9eb4cfb92052804047d1b1b69e7dc544f4db8943",
     "latest_migration": "20260829005613_wb_data_transfers.sql"
   },
   "live": {
@@ -18,13 +18,13 @@
       "version": "20260829005613",
       "name": "wb_data_transfers"
     },
-    "vercel_verified_at": "2026-08-27T18:52:31.507Z",
+    "vercel_verified_at": "2026-09-01T18:43:21.964Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
-    "vercel_deployment_id": "dpl_GzeyEei6T7jndVA2eakYGSCiFdMT",
+    "vercel_deployment_id": "dpl_AhVL8K3VakBntY5aie7bWX1jCefz",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "204c220485fefd9b16e713dafe6fdb50031f1b92",
-    "github_verified_at": "2026-08-10T18:23:17.639Z",
+    "vercel_deployed_commit": "9eb4cfb92052804047d1b1b69e7dc544f4db8943",
+    "github_verified_at": "2026-09-01T18:43:21.964Z",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
   "refresh_commands": {
