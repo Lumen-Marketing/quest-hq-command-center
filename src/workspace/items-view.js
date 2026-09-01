@@ -7,14 +7,18 @@
 // The body is unchanged from where it lived in main.js; everything it calls arrives as ctx
 // under the original names, so this is a move rather than a rewrite.
 
+import { createSummaryBar } from './summary-bar.js';
+
 export function createItemsView(ctx) {
   const {
     h, can, addRecordLabel, pipelineField, wbItemsUI, wbItemsToolbar, wbEvalFilter,
     wbNavStage, wbItemInNavStage, wbChipField, wbItemsChipBar, wbItemInChip, wbSortItems,
     wbApplyPresetSort, wbNavStageLabel, wbChipOptions, appHref, companyPath,
     wbRenderItemsCards, wbRenderItemsBoard, wbRenderItemsBadges, wbRenderItemsActivity,
-    wbRenderItemsTable, wbViewsRail, WB_VIEW_MODES,
+    wbRenderItemsTable, wbViewsRail, WB_VIEW_MODES, wbPlainVal,
   } = ctx;
+
+  const { summaryBar } = createSummaryBar({ h, wbPlainVal });
 
   function wbViewItems(companyId, workspace, app) {
     const canManage = can('workspaces.manage', companyId);
@@ -85,7 +89,12 @@ export function createItemsView(ctx) {
     // Asked before the rail is called, not after: calling it would fetch the saved-views chunk
     // for a panel nobody is going to see.
     const showRail = !app.hideViews;
+    // Below the list and always last, whichever layout is showing: a total that moves around
+    // is one you have to go looking for. It reads the SELECTED rows when any are ticked, which
+    // is what makes it worth having -- tick four and the total is those four.
+    const summary = summaryBar(companyId, workspace, app, rows, ui, canManage);
     return `<div class="wb-items-layout${showRail ? '' : ' wb-items-solo'}">${showRail ? wbViewsRail(companyId, app, ui) : ''}<div class="wb-items-main">${toolbar}${chipBar}${bulkBar}<div id="wbItemsList">${listBody}</div>
+      ${summary}
       <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span>${navStage
       ? ` at <b>${h(navStageLabel)}</b> of ${app.items.length}` : ''} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} · ${h(viewLabel)} view</div></div></div>`;
   }

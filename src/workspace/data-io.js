@@ -19,6 +19,7 @@ import { adoptFields, buildFieldSet, presentIn, readFieldSet } from './field-por
 // Imported here rather than passed in from main.js: ops-workspace-id.js exists to stay OUT
 // of the entry chunk, and main.js IS the entry chunk. This module is already lazily loaded.
 import { opsWorkspaceId } from './ops-workspace-id.js';
+import { createSummaryBar } from './summary-bar.js';
 
 export function createDataIO(ctx) {
   const {
@@ -63,6 +64,8 @@ export function createDataIO(ctx) {
     }).then(null, () => {});
   }
 
+  const { summaryPrintTable } = createSummaryBar({ h, wbPlainVal });
+
   // Open a print-ready window carrying the app's own stylesheets (so report cards
   // and tables look identical), then auto-invoke the browser print dialog.
   function wbOpenPrintWindow(title, bodyHTML) {
@@ -104,7 +107,11 @@ export function createDataIO(ctx) {
     const thead = `<tr><th>#</th>${cols.map((f) => `<th>${h(f.label)}</th>`).join('')}</tr>`;
     const rows = items.map((it, i) => `<tr><td>${i + 1}</td>${cols.map((f) => `<td>${h(wbPlainVal(companyId, workspace, app, f, it.values[f.id], it.values))}</td>`).join('')}</tr>`).join('');
     const subtitle = onlyIds ? `${items.length} selected record${items.length === 1 ? '' : 's'}` : 'Data';
-    const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
+    // The calculations print as a table of their own, after the data. Paper has no scroll: the
+    // on-screen strip is a row that runs off the side of the page, while one row per calculation
+    // reads down. Its caption is what the Hide-when-printing tick removes.
+    const totals = summaryPrintTable(companyId, workspace, app, items, { sel: onlyIds || new Set() });
+    const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>${totals}`;
     wbOpenPrintWindow(`${app.name} — ${onlyIds ? 'selected' : 'data'}`, body);
     logTransfer(companyId, workspaceId, appId, {
       direction: 'export',

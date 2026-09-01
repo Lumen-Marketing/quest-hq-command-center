@@ -264,6 +264,11 @@ const FACTORY_MODULES = [
   ['src/workspace/app-settings.js', 'createAppSettings'],
   ['src/workspace/recycle-bin.js', 'createRecycleBin'],
   ['src/workspace/transfer-log.js', 'createTransferLog'],
+  // Built by TWO parents -- the items view for the on-screen strip, and data-io for the table it
+  // becomes on paper -- and both are handed h and wbPlainVal by main.js. Checked through the
+  // items view; data-io destructures wbPlainVal for its CSV export already, so the same keys are
+  // present on that path too.
+  ['src/workspace/summary-bar.js', 'createSummaryBar', 'createItemsView'],
   ['src/workspace/items-view.js', 'createItemsView'],
   ['src/form/public-form-page.js', 'createPublicFormPage'],
 ];

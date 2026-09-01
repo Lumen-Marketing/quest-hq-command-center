@@ -6494,7 +6494,7 @@ function loadItemsView() {
         wbNavStage, wbItemInNavStage, wbChipField, wbItemsChipBar, wbItemInChip, wbSortItems,
         wbApplyPresetSort, wbNavStageLabel, wbChipOptions, appHref, companyPath,
         wbRenderItemsCards, wbRenderItemsBoard, wbRenderItemsBadges, wbRenderItemsActivity,
-        wbRenderItemsTable, wbViewsRail, WB_VIEW_MODES,
+        wbRenderItemsTable, wbViewsRail, WB_VIEW_MODES, wbPlainVal,
       });
       return itemsViewModule;
     }).catch((error) => { itemsViewPending = null; throw error; });
@@ -13496,6 +13496,13 @@ function normalizeWorkspaceBuilderDoc(doc) {
         // The Items tab without its saved-views panel, so the list gets the whole width.
         // Absent means shown, which is what every app built before the setting existed wants.
         ...(app.hideViews ? { hideViews: true } : {}),
+        // What the calculation strip under the list is asked, per field: { fn, value }. Named
+        // here because everything this function does not name is dropped on load -- without
+        // these two lines the totals would come back blank on the next reload.
+        ...(app.summary && typeof app.summary === 'object' && !Array.isArray(app.summary)
+          ? { summary: app.summary }
+          : {}),
+        ...(app.summaryHideLabel ? { summaryHideLabel: true } : {}),
         // Deleted records, kept so a misclick is recoverable. Same shape plus when it went.
         trash: Array.isArray(app.trash) ? app.trash.map((item) => ({ ...normalizeWbItem(item), deletedAt: item.deletedAt || new Date().toISOString(), deletedBy: item.deletedBy || '' })) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
@@ -20706,6 +20713,47 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-add-filter]', () => { const { app } = wbFind(companyId, workspaceId, appId); const f0 = app.fields[0]; if (!f0) return; wbItemsUI(appId).filters.push({ fieldId: f0.id, op: wbFilterOps(wbFieldKind(f0))[0][0], value: '' }); render(); });
     bind('[data-wb-del-filter]', (el) => { wbItemsUI(appId).filters.splice(+el.dataset.idx, 1); render(); });
     bind('[data-wb-clear-filters]', () => { wbItemsUI(appId).filters = []; render(); });
+
+    // ---- the calculation strip -------------------------------------------------------------
+    //
+    // The choice is app configuration, not a per-person view setting: a total somebody set up is
+    // the answer the team reads under that list, and one that differed per viewer would be worth
+    // less than no total at all. It rides app.summary, so it saves, syncs and backs up like
+    // everything else the builder holds.
+    const summaryApp = () => {
+      if (!can('workspaces.manage', companyId)) return null;
+      const { app: target } = wbFind(companyId, workspaceId, appId);
+      if (!target) return null;
+      if (!target.summary || typeof target.summary !== 'object') target.summary = {};
+      return target;
+    };
+    bind('[data-wb-sum-fn]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      const fieldId = el.dataset.wbSumFn;
+      const entry = target.summary[fieldId] || (target.summary[fieldId] = { fn: 'none', value: '' });
+      entry.fn = el.value;
+      // Dropping back to something that takes no value clears the value with it, or the next
+      // "count if" silently inherits a word nobody typed for it.
+      if (el.value !== 'countIf') entry.value = '';
+      wbSave(companyId);
+      render();
+    }, 'onchange');
+    bind('[data-wb-sum-val]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      const fieldId = el.dataset.wbSumVal;
+      const entry = target.summary[fieldId] || (target.summary[fieldId] = { fn: 'countIf', value: '' });
+      entry.value = el.value;
+      wbSave(companyId);
+      render();
+    }, 'onchange');
+    bind('[data-wb-sum-hide]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      target.summaryHideLabel = !!el.checked;
+      wbSave(companyId);
+    }, 'onchange');
     bind('[data-wb-filter-field]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const flt = wbItemsUI(appId).filters[+el.dataset.idx]; if (!flt) return; flt.fieldId = el.value; const f = app.fields.find((x) => x.id === el.value); flt.op = wbFilterOps(wbFieldKind(f))[0][0]; flt.value = ''; render(); }, 'onchange');
     bind('[data-wb-filter-op]', (el) => { const flt = wbItemsUI(appId).filters[+el.dataset.idx]; if (flt) { flt.op = el.value; render(); } }, 'onchange');
     bind('[data-wb-filter-val]', (el) => { const flt = wbItemsUI(appId).filters[+el.dataset.idx]; if (flt) { flt.value = el.value; render(); } }, 'onchange');

@@ -1459,3 +1459,42 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
 .wb-tx-dir { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; white-space: nowrap; }
 .wb-tx-dir.out { color: var(--warning, #b45309); }
 .wb-tx-dir.in { color: var(--success, #16a34a); }
+
+/* The calculation strip under a list.
+ *
+ * Below the list and always last, whichever layout is showing: a total that moves around is one
+ * you have to go looking for. A horizontal strip because the columns it describes are
+ * horizontal -- the answer sits under the column it belongs to. */
+.wb-sum {
+  margin-top: 10px; border: 1px solid var(--border, #e2d5bf); border-radius: 12px;
+  background: var(--surface, #fffaf0); padding: 10px 12px 12px;
+}
+.wb-sum-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.wb-sum-title { font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; }
+.wb-sum-scope {
+  display: inline-flex; align-items: center; gap: 5px; font-size: .74rem; font-weight: 700;
+  color: var(--muted, #7a6a55);
+}
+.wb-sum-hide { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--muted, #7a6a55); }
+.wb-sum-grid { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.wb-sum-cell {
+  flex: 0 0 auto; min-width: 132px; display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 10px; border-radius: 9px; border: 1px solid transparent;
+}
+/* Only a column that was asked something is drawn as an answer. The rest are just the picker,
+   so a strip of fifteen fields does not read as fifteen results. */
+.wb-sum-cell.on { border-color: var(--border, #e2d5bf); background: var(--surface-2, #f6efe2); }
+.wb-sum-field { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted, #7a6a55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-sum-value { font-size: 1.06rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.wb-sum-cell:not(.on) .wb-sum-value { color: var(--muted, #7a6a55); font-weight: 400; }
+.wb-sum-fn, .wb-sum-val {
+  font: inherit; font-size: .74rem; padding: 3px 6px; border-radius: 6px;
+  border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0); max-width: 156px;
+}
+.wb-sum-static { font-size: .72rem; font-weight: 700; color: var(--muted, #7a6a55); }
+
+/* On paper the strip becomes a table, and the caption is what the tick hides. */
+.wb-sum-print { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: .86rem; }
+.wb-sum-print caption { text-align: left; font-weight: 800; padding-bottom: 6px; }
+.wb-sum-print th, .wb-sum-print td { border: 1px solid #999; padding: 5px 8px; text-align: left; }
+.wb-sum-print-num { text-align: right; font-variant-numeric: tabular-nums; }
