@@ -4,11 +4,12 @@
 // A factory, because every store, formatter and permission helper belongs to main.js.
 
 import { contactRowsToRecords, parseContactsCsv, toCsv } from '../data/csv.js';
+import { partitionImport } from '../data/dedupe.js';
 
 export function createContactsIo(ctx) {
   const {
     activeCompanyId, companyContacts, contactStageNames, downloadText, filteredContacts,
-    guardUpload, isLiveSupabaseSession, localIsoDate, normalizeContact, partitionImport,
+    guardUpload, isLiveSupabaseSession, localIsoDate, normalizeContact,
     persistContact, render, showToast,
   } = ctx;
 

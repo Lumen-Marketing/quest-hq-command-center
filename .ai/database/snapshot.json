@@ -11040,10 +11040,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "admins manage company memberships",
+   "name": "admins manage company memberships delete",
    "roles": "{authenticated}",
    "table": "company_memberships",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage company memberships insert",
+   "roles": "{authenticated}",
+   "table": "company_memberships",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage company memberships update",
+   "roles": "{authenticated}",
+   "table": "company_memberships",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -11054,10 +11068,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "admins manage company plugins",
+   "name": "admins manage company plugins delete",
    "roles": "{authenticated}",
    "table": "company_plugins",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage company plugins insert",
+   "roles": "{authenticated}",
+   "table": "company_plugins",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage company plugins update",
+   "roles": "{authenticated}",
+   "table": "company_plugins",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -11271,10 +11299,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "admins manage field permissions",
+   "name": "admins manage field permissions delete",
    "roles": "{authenticated}",
    "table": "field_permissions",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage field permissions insert",
+   "roles": "{authenticated}",
+   "table": "field_permissions",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage field permissions update",
+   "roles": "{authenticated}",
+   "table": "field_permissions",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -11845,34 +11887,6 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "role users can delete notifications",
-   "roles": "{authenticated}",
-   "table": "notifications",
-   "command": "DELETE",
-   "permissive": "PERMISSIVE"
-  },
-  {
-   "name": "role users can insert notifications",
-   "roles": "{authenticated}",
-   "table": "notifications",
-   "command": "INSERT",
-   "permissive": "PERMISSIVE"
-  },
-  {
-   "name": "role users can read notifications",
-   "roles": "{authenticated}",
-   "table": "notifications",
-   "command": "SELECT",
-   "permissive": "PERMISSIVE"
-  },
-  {
-   "name": "role users can update notifications",
-   "roles": "{authenticated}",
-   "table": "notifications",
-   "command": "UPDATE",
-   "permissive": "PERMISSIVE"
-  },
-  {
    "name": "pipeline_stages workspace delete",
    "roles": "{authenticated}",
    "table": "pipeline_stages",
@@ -11992,13 +12006,6 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "managers update profiles",
-   "roles": "{authenticated}",
-   "table": "profiles",
-   "command": "UPDATE",
-   "permissive": "PERMISSIVE"
-  },
-  {
    "name": "profiles readable to self, company peers and platform",
    "roles": "{authenticated}",
    "table": "profiles",
@@ -12006,7 +12013,7 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "users update own profile name",
+   "name": "profiles update own or managed",
    "roles": "{authenticated}",
    "table": "profiles",
    "command": "UPDATE",
@@ -12083,10 +12090,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "admins manage resource acl",
+   "name": "admins manage resource acl delete",
    "roles": "{authenticated}",
    "table": "resource_acl",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage resource acl insert",
+   "roles": "{authenticated}",
+   "table": "resource_acl",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage resource acl update",
+   "roles": "{authenticated}",
+   "table": "resource_acl",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -12139,10 +12160,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "role managers manage role permissions",
+   "name": "role managers manage role permissions delete",
    "roles": "{authenticated}",
    "table": "role_permissions",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "role managers manage role permissions insert",
+   "roles": "{authenticated}",
+   "table": "role_permissions",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "role managers manage role permissions update",
+   "roles": "{authenticated}",
+   "table": "role_permissions",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -12153,10 +12188,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "role managers manage roles",
+   "name": "role managers manage roles delete",
    "roles": "{authenticated}",
    "table": "roles",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "role managers manage roles insert",
+   "roles": "{authenticated}",
+   "table": "roles",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "role managers manage roles update",
+   "roles": "{authenticated}",
+   "table": "roles",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -12405,10 +12454,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "admins manage role assignments",
+   "name": "admins manage role assignments delete",
    "roles": "{authenticated}",
    "table": "user_role_assignments",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage role assignments insert",
+   "roles": "{authenticated}",
+   "table": "user_role_assignments",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "admins manage role assignments update",
+   "roles": "{authenticated}",
+   "table": "user_role_assignments",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -12440,10 +12503,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "managers write intake links",
+   "name": "managers write intake links delete",
    "roles": "{authenticated}",
    "table": "wb_intake_links",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "managers write intake links insert",
+   "roles": "{authenticated}",
+   "table": "wb_intake_links",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "managers write intake links update",
+   "roles": "{authenticated}",
+   "table": "wb_intake_links",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -12468,10 +12545,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "managers write record events",
+   "name": "managers write record events delete",
    "roles": "{authenticated}",
    "table": "wb_record_events",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "managers write record events insert",
+   "roles": "{authenticated}",
+   "table": "wb_record_events",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "managers write record events update",
+   "roles": "{authenticated}",
+   "table": "wb_record_events",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -12517,10 +12608,24 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "platform admins manage backup copies",
+   "name": "platform admins manage backup copies delete",
    "roles": "{authenticated}",
    "table": "workspace_backup_copies",
-   "command": "ALL",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "platform admins manage backup copies insert",
+   "roles": "{authenticated}",
+   "table": "workspace_backup_copies",
+   "command": "INSERT",
+   "permissive": "PERMISSIVE"
+  },
+  {
+   "name": "platform admins manage backup copies update",
+   "roles": "{authenticated}",
+   "table": "workspace_backup_copies",
+   "command": "UPDATE",
    "permissive": "PERMISSIVE"
   },
   {
@@ -14920,9 +15025,21 @@
   {
    "name": "harden_remaining_app_private_search_paths",
    "version": "20260901200003"
+  },
+  {
+   "name": "add_wb_data_transfers_created_by_index",
+   "version": "20260902193014"
+  },
+  {
+   "name": "consolidate_permissive_policies",
+   "version": "20260902193856"
+  },
+  {
+   "name": "split_manage_policies_by_command",
+   "version": "20260902194132"
   }
  ],
- "captured_at": "2026-09-01T20:02:47.185039+00:00",
+ "captured_at": "2026-09-02T19:43:05.883839+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",

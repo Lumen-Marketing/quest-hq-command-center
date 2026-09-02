@@ -45,8 +45,6 @@ import { addRecordLabel, newRecordLabel, singularize } from './workspace/naming.
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
 import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
-import { findDuplicateGroups, mergeContactFields, partitionImport } from './data/dedupe.js';
-import { parseCsvRows } from './data/csv.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 import { safeHexColor, sanitizeColorConfig } from './security/color.js';
 import {
@@ -77,6 +75,7 @@ import { applyReadOnlyControlState } from './ui/read-only-controls.js';
 import { renderContentSkeleton, renderWorkspaceSkeleton } from './ui/workspace-loading.js';
 import { workspaceBuilderStyles } from './workspace/builder-style-loader.js';
 import { activeCompanyContactFields } from './data/company-contact-field-lifecycle.js';
+import { embeddedTaskFrameMarkup, retainEmbeddedTaskFrame } from './tasks/embedded-frame.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -4202,7 +4201,15 @@ function render() {
   // Cheap: sets a timer if one is not already pending. The snapshot comparison that decides
   // whether anything actually changed happens once, when it fires.
   scheduleUiPrefsSync();
-  app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock() + renderLayoutDiagnostic();
+  // Keep the embedded Tasks document alive across host-only renders (clock ticks,
+  // notifications, preference updates). Recreating the iframe signs the task app back in,
+  // reloads its data and drops transient UI such as an open task or half-written search.
+  // The renderer emits a zero-load placeholder only when the existing frame has the exact
+  // same workspace/job URL; route changes still create a fresh frame as they should.
+  const shell = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock() + renderLayoutDiagnostic();
+  const restoreEmbeddedTaskFrame = retainEmbeddedTaskFrame(app);
+  app.innerHTML = shell;
+  restoreEmbeddedTaskFrame();
   applyReadOnlyControlState(app, { readOnly: isReadOnlyDemo(), isMutableAction, isMutableFormSubmit });
   mountLayoutDiagnosticIfRequested();
   queueMicrotask(restoreSidebarScroll);
@@ -7879,6 +7886,7 @@ async function importPricebookRows(form) {
   if (!text) return showToast('Paste CSV rows or choose a CSV file.', 'local', 'Price Book');
   // One parser for every delimiter: it sniffs comma, semicolon or tab off the header row, so
   // quoted multi-line and embedded-separator cells survive whichever one Excel wrote.
+  const { parseCsvRows } = await import('./data/csv.js');
   const rows = parseCsvRows(text)
     .filter((cells) => cells.some((cell) => String(cell || '').trim()));
   if (rows[0]) {
@@ -9878,6 +9886,7 @@ async function mergeContacts(survivorId, duplicateIds) {
   if (!survivor || !dups.length) return;
 
   // 1. Fill blank survivor fields from the duplicates.
+  const { mergeContactFields } = await import('./data/dedupe.js');
   const merged = normalizeContact(mergeContactFields(survivor, dups, CONTACT_MERGE_FIELDS));
   await persistContact(merged);
 
@@ -10110,7 +10119,7 @@ function loadContactsIo() {
     contactsIoPending = import('./crm/contacts-io.js').then((mod) => {
       contactsIoModule = mod.createContactsIo({
         activeCompanyId, companyContacts, contactStageNames, downloadText, filteredContacts,
-        guardUpload, isLiveSupabaseSession, localIsoDate, normalizeContact, partitionImport,
+        guardUpload, isLiveSupabaseSession, localIsoDate, normalizeContact,
         persistContact, render, showToast,
       });
       return contactsIoModule;
@@ -12561,7 +12570,7 @@ function renderEmbeddedTasksPage(route, companyId) {
   return `
     <section class="task-layout task-layout-flat taskapp-shell">
       <article class="panel task-main taskapp-panel">
-        <iframe class="taskapp-frame" src="${h(src)}" title="Task management"></iframe>
+        ${embeddedTaskFrameMarkup(app, src, h)}
       </article>
     </section>
   `;
@@ -21906,7 +21915,7 @@ async function cpResolveBase(doc, page) {
     const response = await cpWithTimeout(fetch(url), 15000, 'Document download');
     if (!response.ok) throw new Error('Document unavailable.');
     const data = new Uint8Array(await cpWithTimeout(response.arrayBuffer(), 15000, 'Document download'));
-    const pdf = await cpWithTimeout(pdfjsLib.getDocument({ data, disableWorker: true, isEvalSupported: false }).promise, 15000, 'PDF parser');
+    const pdf = await cpWithTimeout(pdfjsLib.getDocument({ data, disableWorker: true, isEvalSupported: false, useWasm: false }).promise, 15000, 'PDF parser');
     const pageObj = await pdf.getPage(Math.min(page + 1, pdf.numPages));
     const unit = pageObj.getViewport({ scale: 1 });
     const scale = Math.min(4, Math.max(1.5, 2400 / unit.width));
@@ -25206,7 +25215,7 @@ function loadBulkModals() {
   if (!bulkModalsPending) {
     bulkModalsPending = import('./crm/bulk-modals.js').then((mod) => {
       bulkModalsModule = mod.createBulkModals({
-        activeCompanyId, companyContacts, emptyState, findDuplicateGroups, h, isLiveSupabaseSession,
+        activeCompanyId, companyContacts, emptyState, h, isLiveSupabaseSession,
         jobById, money, reauthPasswordField, renderModalShell, selectedJobRows, state,
       });
       return bulkModalsModule;
@@ -46188,7 +46197,7 @@ async function ensurePdfThumbnail(file) {
     const response = await fetch(file.signed_url);
     if (!response.ok) return;
     const data = new Uint8Array(await response.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data, disableWorker: true, isEvalSupported: false }).promise;
+    const pdf = await pdfjsLib.getDocument({ data, disableWorker: true, isEvalSupported: false, useWasm: false }).promise;
     const page = await pdf.getPage(1);
     const unit = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: Math.min(2, 260 / unit.width) });

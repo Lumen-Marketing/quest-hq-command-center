@@ -1,8 +1,20 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-09-01T20:02:47.185039Z.
+The full machine-readable Supabase catalog was refreshed through 2026-09-02T19:43:05.883839Z.
 The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## 2026-09-03 foreign-key and policy advisor cleanup
+
+Migration `20260902192917_add_wb_data_transfers_created_by_index.sql` adds the missing
+`wb_data_transfers_created_by_idx` index. The live performance advisor no longer reports an
+unindexed foreign key.
+
+Migrations `20260902193803_consolidate_permissive_policies.sql` and
+`20260902194048_split_manage_policies_by_command.sql` preserve every existing authorization path
+while replacing overlapping permissive policies with one policy per role/action. The live
+performance advisor now reports 0 warnings (down from 15); its remaining 252 notices are unused
+index observations, not release blockers. No tenant predicate was broadened or removed.
 
 ## 2026-09-01 app_private search-path hardening
 
@@ -48,14 +60,14 @@ reconciliation.
 
 ## Catalog summary
 
-- Public tables/views: 89
-- Foreign-key column relationships: 229
-- RLS policies: 271
-- Public functions: 79
-- Triggers: 103
+- Public tables/views: 99
+- Foreign-key column relationships: 252
+- RLS policies: 313
+- Public functions: 82
+- Triggers: 105
 - Storage buckets: 6
-- Applied migration ledger entries: 129
-- Latest live ledger entry: `20260826195939_company_contact_permission_reconcile`
+- Applied migration ledger entries: 174
+- Latest live ledger entry: `20260902194132_split_manage_policies_by_command`
 
 ## Operational-workspace identity
 

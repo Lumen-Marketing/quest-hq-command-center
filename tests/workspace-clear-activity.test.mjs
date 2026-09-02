@@ -168,7 +168,7 @@ test('the palette closes rather than lingering behind a dialog', () => {
   // paths set state.modal; the render path catches all of them.
   assert.match(main, /if \(state\.commandPalette\.open && \(state\.modal \|\| state\.builderModal\)\) resetCommandPalette\(\);/);
   const at = main.indexOf('resetCommandPalette();');
-  assert.ok(at < main.indexOf('app.innerHTML = shellTemplate('), 'reconcile before painting');
+  assert.ok(at < main.indexOf('const shell = shellTemplate('), 'reconcile before painting');
 });
 
 test('a dialog owns the keyboard, not the palette', () => {

@@ -1,6 +1,24 @@
 # Current state
 
-Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-09-03T03:43:05.883839+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+
+## 2026-09-03 completion pass
+
+- Added and live-verified the missing `wb_data_transfers(created_by)` foreign-key index.
+- Consolidated the live multiple-permissive-policy findings without removing legacy/current
+  authorization paths. Performance-advisor warnings fell from 15 to 0.
+- Embedded Tasks now retains the exact same iframe through full host renders, preserving its
+  session, open surface, scroll and unfinished UI state when Questbase updates around it.
+- Contact dedupe and CSV parsing load only when their controls are used. The entry bundle fell
+  from 363.21 KiB to 362.93 KiB gzip and remains under the enforced budget.
+- The enforced CSP now blocks JavaScript eval and runtime WebAssembly compilation. Both PDF
+  rendering paths explicitly disable PDF.js eval/Wasm; Tasks remains allowed as a same-origin
+  frame and violation reporting stays live.
+- SMS has a documented product decision: remain unavailable. The legacy send/inbound endpoints
+  now return 501 before touching authentication, tenant data or a provider, so credentials cannot
+  accidentally revive company-only routing.
+- The catalog snapshot and branch/known-issue inventory were refreshed. No remote branch was
+  deleted; three lines with unique commits remain for owner review.
 
 - Production Supabase migration `20260901200003_harden_remaining_app_private_search_paths` is
   applied to project `rqundirizvojpzhljtdn`. All seven deferred `app_private` SECURITY DEFINER

@@ -35,15 +35,16 @@ test('Permissions-Policy disables camera/mic but KEEPS geolocation for the map',
   assert.match(pp, /geolocation=\(self\)/);
 });
 
-test('CSP keeps strict monitoring and enforces a compatible baseline', () => {
+test('CSP enforces the strict no-eval script policy', () => {
   const headers = headerMap();
   assert.ok(headers.has('Content-Security-Policy-Report-Only'), 'expected a Report-Only CSP');
   assert.ok(headers.has('Content-Security-Policy'), 'expected an enforcing CSP baseline');
 
   const enforced = headers.get('Content-Security-Policy') || '';
   assert.match(enforced, /frame-ancestors 'self'/, 'same-origin Tasks iframe must remain usable');
-  assert.match(enforced, /script-src 'self'[^;]*'wasm-unsafe-eval'/);
-  assert.match(enforced, /script-src 'self'[^;]*'unsafe-eval'/);
+  assert.match(enforced, /script-src 'self'(;|\s)/);
+  assert.ok(!/unsafe-eval/.test(enforced), 'dynamic JavaScript evaluation stays blocked');
+  assert.ok(!/wasm-unsafe-eval/.test(enforced), 'runtime WebAssembly compilation stays blocked');
   assert.ok(!/script-src[^;]*unsafe-inline/.test(enforced), 'inline scripts stay blocked');
 });
 
@@ -56,11 +57,11 @@ test('CSP violations are reported to a real endpoint, not just the console', () 
   assert.match(report, /csp-report/);
 });
 
-test('the strict report-only canary still reports wasm/eval use', () => {
+test('the report-only policy mirrors strict framing and script execution', () => {
   const monitored = headerMap().get('Content-Security-Policy-Report-Only') || '';
   assert.match(monitored, /script-src 'self'(;|\s)/);
   assert.ok(!/unsafe-eval/.test(monitored), 'the canary stays stricter than enforcement');
-  assert.match(monitored, /frame-ancestors 'none'/);
+  assert.match(monitored, /frame-ancestors 'self'/);
 });
 
 test('both CSP layers allow every origin the app actually uses', () => {

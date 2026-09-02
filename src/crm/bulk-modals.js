@@ -3,9 +3,11 @@
 // Fetched on demand. Neither paints before somebody asks for it, and between them they carry
 // enough markup to be worth the split.
 
+import { findDuplicateGroups } from '../data/dedupe.js';
+
 export function createBulkModals(ctx) {
   const {
-    activeCompanyId, companyContacts, emptyState, findDuplicateGroups, h, isLiveSupabaseSession,
+    activeCompanyId, companyContacts, emptyState, h, isLiveSupabaseSession,
     jobById, money, reauthPasswordField, renderModalShell, selectedJobRows, state,
   } = ctx;
 
