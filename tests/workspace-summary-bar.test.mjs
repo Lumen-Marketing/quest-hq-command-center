@@ -169,7 +169,7 @@ test('the totals print as a table of their own, aligned but not merged', () => {
 test('a printed row has one cell per column, blank where nothing was asked', () => {
   const app = appWith(line({ amt: { fn: 'sum' } }));
   const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
-  const row = /<tr class="wb-sum-print-row">([\s\S]*?)<\/tr>/.exec(html)[1];
+  const row = /<tr class="wb-sum-print-row[^"]*">([\s\S]*?)<\/tr>/.exec(html)[1];
   const cells = row.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/g);
   assert.equal(cells.length, FIELDS.length + 1, 'the row label plus every column');
   assert.match(cells[1], />4000</, 'the answer under its own column');
@@ -230,7 +230,7 @@ test('hiding the labels removes the words and keeps the numbers', () => {
   const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
   assert.doesNotMatch(html, /Totals/);
   assert.doesNotMatch(html, /wb-sum-print-labels/);
-  assert.doesNotMatch(html, /<caption>|<thead>/, 'a title and a heading are labels too');
+  assert.doesNotMatch(html, /<thead>/, 'a column heading is a label');
   assert.match(html, />4000</);
 });
 
@@ -336,4 +336,39 @@ test('the columns are given explicit shares that add up', () => {
 test('one field, and no fields, still produce a usable colgroup', () => {
   assert.match(printColgroup(1), /^<colgroup><col style="width:6%"><col style="width:94\.0000%"><\/colgroup>$/);
   assert.doesNotMatch(printColgroup(0), /NaN|Infinity/);
+});
+
+// ---- what the hide-labels tick does and does not reach -------------------------------------------
+
+test('the table keeps its name when the labels are hidden', () => {
+  // Hiding the name left a block of numbers under no heading at all, which is a puzzle rather
+  // than a tidier table. A name identifies the table; it does not label anything in it.
+  const app = { ...appWith(line({ amt: { fn: 'sum' } })), summaryTitle: 'Total', summaryHideLabel: true };
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(html, /<caption>Total<\/caption>/);
+  assert.doesNotMatch(html, /wb-sum-print-labels/, 'the labels themselves still go');
+});
+
+test('the default name prints too, so the table is never unheaded', () => {
+  const app = { ...appWith(line({ amt: { fn: 'sum' } })), summaryHideLabel: true };
+  assert.match(bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL), /<caption>Calculations<\/caption>/);
+});
+
+test('a row gives up its bottom border only when a caption row closes it', () => {
+  // The rule that joins a value to its caption was stripping the bottom edge off every row.
+  // With the captions hidden there was nothing underneath to close the table, so the last line
+  // had no border and the whole thing read as unfinished.
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const shown = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(shown, /class="wb-sum-print-row wb-sum-paired"/);
+
+  const hidden = bar.summaryPrintTable('co', {}, { ...app, summaryHideLabel: true }, FIELDS, ROWS, ALL);
+  assert.doesNotMatch(hidden, /wb-sum-paired/, 'nothing to pair with, so it keeps its own edge');
+});
+
+test('the print stylesheet only strips the border from a paired row', () => {
+  assert.ok(io.includes('.wb-sum-paired td, .wb-sum-paired th { border-bottom:none !important; }'));
+  assert.ok(!io.includes('.wb-sum-print-row td, .wb-sum-print-row th { border-bottom:none'),
+    'the unscoped rule is gone, not merely overridden');
+  assert.ok(io.includes('.wb-sum-print-table caption'), 'and the name is styled for paper');
 });

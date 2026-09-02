@@ -193,17 +193,21 @@ export function createSummaryBar(ctx) {
         return isSet(config) ? `<td class="wb-sum-print-cap">${h(captionOf(config))}</td>` : '<td></td>';
       };
       // An unnamed line prints blank. "Line 2" is a position, not a name.
-      const values = `<tr class="wb-sum-print-row"><th scope="row">${hide ? '' : h(line.label)}</th>${cols.map(value).join('')}</tr>`;
+      // `wb-sum-paired` is what drops the rule between a value and its caption. Without the
+      // caption there is nothing to join, so the row keeps its own border -- otherwise the last
+      // line of the table has no bottom edge and it reads as unfinished.
+      const values = `<tr class="wb-sum-print-row${hide ? '' : ' wb-sum-paired'}"><th scope="row">${hide ? '' : h(line.label)}</th>${cols.map(value).join('')}</tr>`;
       // What each number IS, under it. This is the row the Hide-when-printing tick removes -- a
       // bare "1" under a Name column means nothing without "Count if Roman".
       return hide ? values : `${values}<tr class="wb-sum-print-labels"><td></td>${cols.map(caption).join('')}</tr>`;
     }).join('');
 
-    // A table standing on its own needs to say what it is and what its columns are; merged into
-    // the data it could borrow both. `summaryHideLabel` is "hide the labels when printing", and a
-    // title and a column heading are labels, so they go with the captions.
-    const head = hide ? '' : `<caption>${h(summaryTitleOf(app))}</caption><thead><tr><th></th>${
-      cols.map((field) => `<th>${h(summaryColName(app, field))}</th>`).join('')}</tr></thead>`;
+    // The table's NAME always prints. It identifies the table rather than labelling anything in
+    // it, and a block of numbers under no heading at all is a puzzle -- which is what hiding it
+    // produced. The tick is "hide the labels when printing", and it does exactly that: the column
+    // headings, the per-calculation captions and the line names, which are the labels.
+    const head = `<caption>${h(summaryTitleOf(app))}</caption>${hide ? '' : `<thead><tr><th></th>${
+      cols.map((field) => `<th>${h(summaryColName(app, field))}</th>`).join('')}</tr></thead>`}`;
     return `<table class="wb-print-table wb-sum-print-table">${printColgroup(cols.length)}${head}<tbody>${body}</tbody></table>`;
   }
 

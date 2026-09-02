@@ -29,8 +29,13 @@ Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational s
   so they line up without being the same table. There is no merged cell in either: nothing spans
   anything. A column nobody asked anything of prints as an empty cell, not a placeholder.
 - **The printed table carries its own caption and column headings**, because a table standing on
-  its own cannot borrow the data table's. Both are labels, so both go when "Hide the labels when
-  printing" is ticked, along with the per-calculation captions.
+  its own cannot borrow the data table's. The NAME always prints: it identifies the table rather
+  than labelling anything in it, and hiding it left a block of numbers under no heading at all.
+  "Hide the labels when printing" reaches the labels only -- column headings, per-calculation
+  captions, line names.
+- **A value row gives up its bottom border only when a caption row is there to close it**
+  (`wb-sum-paired`). The unscoped rule stripped the bottom edge off every row, so with captions
+  hidden the last line of the table had no border and the whole thing read as unfinished.
 - **Every part of it is named, and every name is overridable.** The table heading defaults to
   "Calculations", each calculation to its field's name, and each COLUMN heading to its field's
   name via `app.summaryCols` -- the calculation table asks a different question from the list
