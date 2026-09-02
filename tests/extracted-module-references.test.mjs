@@ -376,3 +376,40 @@ test('lazily-loaded module holders are reached through a getter, not captured', 
   assert.ok(!/eodPageModule/.test(eod), 'eod-page must not reach across');
   assert.ok(!/wbReportsModule/.test(io), 'data-io must not reach across');
 });
+
+test('no module calls another module export it never imported', () => {
+  // The checks above both run through main.js, so they are blind to module-to-module calls.
+  // data-io.js started calling summary-bar.js's printColgroup without importing it: the build
+  // was happy, every test passed -- including the wiring test for that very line, which read
+  // the SOURCE TEXT and so could not tell a resolved name from an undefined one -- and Print
+  // threw "printColgroup is not defined" the first time anyone used it.
+  //
+  // Only exported names, and only where they are CALLED. A module that happens to define its
+  // own `format` is not reaching for somebody else's.
+  const exportedBy = new Map();
+  for (const file of moduleFiles) {
+    const code = stripComments(readFileSync(file, 'utf8'));
+    const rel = file.slice(srcDir.length).replace(/\\/g, '/');
+    for (const m of code.matchAll(/^export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) {
+      if (!exportedBy.has(m[1])) exportedBy.set(m[1], rel);
+    }
+    for (const m of code.matchAll(/^export\s+const\s+([A-Za-z_$][\w$]*)\s*=/gm)) {
+      if (!exportedBy.has(m[1])) exportedBy.set(m[1], rel);
+    }
+  }
+
+  const orphans = [];
+  for (const file of moduleFiles) {
+    const text = readFileSync(file, 'utf8');
+    const rel = file.slice(srcDir.length).replace(/\\/g, '/');
+    const code = stripComments(text);
+    const own = new Set([...declaredIn(text), ...importedInto(text)]);
+    const called = new Set([...code.matchAll(/(?:^|[^\w$.])([a-zA-Z_$][\w$]*)\s*\(/g)].map((m) => m[1]));
+    for (const name of called) {
+      const from = exportedBy.get(name);
+      if (!from || from === rel || own.has(name)) continue;
+      orphans.push(`${rel} calls ${name}(), exported by ${from}, without importing it`);
+    }
+  }
+  assert.deepEqual(orphans, [], orphans.join('\n'));
+});

@@ -19,7 +19,7 @@ import { adoptFields, buildFieldSet, presentIn, readFieldSet } from './field-por
 // Imported here rather than passed in from main.js: ops-workspace-id.js exists to stay OUT
 // of the entry chunk, and main.js IS the entry chunk. This module is already lazily loaded.
 import { opsWorkspaceId } from './ops-workspace-id.js';
-import { createSummaryBar } from './summary-bar.js';
+import { createSummaryBar, printColgroup } from './summary-bar.js';
 
 export function createDataIO(ctx) {
   const {

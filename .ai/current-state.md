@@ -47,6 +47,12 @@ Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational s
   first edit migrates it into `summaryRows` and deletes it rather than keeping both. All five keys
   (`summaryRows`, `summary`, `summaryTitle`, `summaryHideLabel`, `summaryCols`) are named in
   `normalizeWorkspaceBuilderDoc` -- anything it does not name is dropped on save.
+- **`tests/extracted-module-references.test.mjs` now also checks module-to-module calls.** Its two
+  older checks both run through `main.js` and were blind to a module calling another module's
+  export without importing it -- which is how `data-io.js` shipped a Print that threw
+  `printColgroup is not defined`. The build was happy, the whole suite passed, and the wiring test
+  covering that very line read the SOURCE TEXT, so it could not tell a resolved name from an
+  undefined one. A source-text assertion is not a substitute for resolving the binding.
 - Only `workspaces.manage` may change any of it. A reader is shown finished lines and never a
   control, and never a bare number without the words for what it counted.
 - **Spreadsheet formulas can be built by pointing** (`src/sheet/formula-assist.js`, pure). While a
