@@ -21,21 +21,31 @@ Captured through 2026-09-02T00:00:00.000Z. This is a point-in-time operational s
   same money mutually exclusive, and printed a Field/Calculation/Value list the reader had to
   match back against the data by name. Lines are added and removed from the table itself; the
   last one cannot be removed, because an empty line is where the next calculation gets made.
-- **On paper the totals are `tfoot` rows of the data table, not a table beside it**
-  (`summaryPrintRows`). Two tables size their columns independently and a total drifts out from
-  under its own heading; sharing the data table's `tfoot` is the only shape that cannot drift. A
-  column nobody asked anything of prints as an empty cell rather than a placeholder.
-- **Every part of it is named.** The heading defaults to "Calculations", each line to "Line N" and
-  each calculation to its field's name -- all three overridable, because a Sum of a column called
-  Number reads better as "Total contract value". A per-app tick hides the label rows on print
-  while keeping the numbers.
+- **On paper it is a table of its own, set apart from the data and still aligned**
+  (`summaryPrintTable`). Both halves were asked for and each naive shape fails one: `tfoot` rows
+  inside the data table aligned but read as more data, while a table of its own read as separate
+  but drifted, because two tables size their columns to their own contents. `printColgroup` is
+  what settles it -- both tables are handed the same percentage widths under `table-layout:fixed`,
+  so they line up without being the same table. There is no merged cell in either: nothing spans
+  anything. A column nobody asked anything of prints as an empty cell, not a placeholder.
+- **The printed table carries its own caption and column headings**, because a table standing on
+  its own cannot borrow the data table's. Both are labels, so both go when "Hide the labels when
+  printing" is ticked, along with the per-calculation captions.
+- **Every part of it is named, and every name is overridable.** The table heading defaults to
+  "Calculations", each calculation to its field's name, and each COLUMN heading to its field's
+  name via `app.summaryCols` -- the calculation table asks a different question from the list
+  above it, so a column the list calls "Allowance" may be "Paid this month" once it is being
+  totalled. Renaming a heading there never touches the field or the list's own column.
+- **A line nobody named prints blank.** "Line N" survives only as the greyed placeholder in the
+  manager's box, where it names the position without putting it on the page: printing it would
+  hand the reader a word nobody chose that says nothing about what the row totals.
 - **A selection is the scope.** Tick four records and every line totals those four. A selection
   that survives no filter falls back to the whole list, since a table of dashes is a worse answer
   than the one the reader can see.
 - **Storage is `app.summaryRows`**, an array of `{id, label, calc}`. Documents written before
   lines existed carried one unnamed line as `app.summary`; `summaryLines` still reads it, and the
-  first edit migrates it into `summaryRows` and deletes it rather than keeping both. All four keys
-  (`summaryRows`, `summary`, `summaryTitle`, `summaryHideLabel`) are named in
+  first edit migrates it into `summaryRows` and deletes it rather than keeping both. All five keys
+  (`summaryRows`, `summary`, `summaryTitle`, `summaryHideLabel`, `summaryCols`) are named in
   `normalizeWorkspaceBuilderDoc` -- anything it does not name is dropped on save.
 - Only `workspaces.manage` may change any of it. A reader is shown finished lines and never a
   control, and never a bare number without the words for what it counted.

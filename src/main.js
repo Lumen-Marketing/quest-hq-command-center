@@ -13507,6 +13507,9 @@ function normalizeWorkspaceBuilderDoc(doc) {
           ? { summary: app.summary }
           : {}),
         ...(app.summaryHideLabel ? { summaryHideLabel: true } : {}),
+        ...(app.summaryCols && typeof app.summaryCols === 'object' && !Array.isArray(app.summaryCols)
+          ? { summaryCols: app.summaryCols }
+          : {}),
         ...(typeof app.summaryTitle === 'string' && app.summaryTitle.trim()
           ? { summaryTitle: app.summaryTitle.trim().slice(0, 60) }
           : {}),
@@ -20806,6 +20809,18 @@ function mountWorkspaceBuilder() {
       target.summaryRows = lines.filter((line) => String(line.id) !== String(el.dataset.wbSumDrop));
       saveSummary();
     });
+    bind('[data-wb-sum-col]', (el) => {
+      const target = summaryApp();
+      if (!target) return;
+      if (!target.summaryCols || typeof target.summaryCols !== 'object') target.summaryCols = {};
+      // Blank clears the override and summaryColName falls back to the field's own name, so a
+      // heading is never empty and the field name is never copied into storage to sit there.
+      const name = String(el.value || '').trim().slice(0, 60);
+      if (name) target.summaryCols[el.dataset.wbSumCol] = name;
+      else delete target.summaryCols[el.dataset.wbSumCol];
+      if (!Object.keys(target.summaryCols).length) delete target.summaryCols;
+      saveSummary();
+    }, 'onchange');
     bind('[data-wb-sum-title]', (el) => {
       const target = summaryApp();
       if (!target) return;

@@ -214,6 +214,19 @@ export function calcName(field, config) {
   return given || String(field?.label ?? '').trim() || 'Field';
 }
 
+/**
+ * What a COLUMN of the calculation table is called.
+ *
+ * Defaults to the field's name, and is overridable per app, because the calculation table asks a
+ * different question from the list above it: a column the list calls "Allowance" may be "Paid
+ * this month" once it is being totalled. Stored on the app as `summaryCols`, keyed by field id,
+ * so renaming a heading here never touches the field itself or the list's own column.
+ */
+export function summaryColName(app, field) {
+  const given = String(app?.summaryCols?.[field?.id] ?? '').trim();
+  return given || String(field?.label ?? '').trim() || 'Field';
+}
+
 /** The label under the number: "Sum", or "Count if Male" so the answer says what it counted. */
 export function summaryLabel(config) {
   const fn = SUMMARY_FUNCTIONS.find((item) => item.id === String(config?.fn || 'none'));

@@ -1514,21 +1514,24 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
   color: inherit; background: none; border: 1px solid transparent; border-radius: 6px;
   padding: 2px 6px; margin-left: -6px; min-width: 8ch; max-width: 26ch; width: 14ch;
 }
-.wb-sum-line-name, .wb-sum-field-edit {
+.wb-sum-line-name, .wb-sum-field-edit, .wb-sum-col-name {
   font: inherit; font-size: .74rem; font-weight: 700; color: inherit; background: none;
   border: 1px solid transparent; border-radius: 5px; padding: 1px 4px; width: 100%; min-width: 0;
 }
 .wb-sum-field-edit { font-size: .7rem; font-weight: 400; color: var(--muted, #7a6a55); margin-top: 3px; }
-.wb-sum-title-edit:hover, .wb-sum-line-name:hover, .wb-sum-field-edit:hover { border-color: var(--border, #e2d5bf); }
-.wb-sum-title-edit:focus, .wb-sum-line-name:focus, .wb-sum-field-edit:focus {
+.wb-sum-col-name { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; min-width: 7ch; }
+.wb-sum-title-edit:hover, .wb-sum-line-name:hover, .wb-sum-field-edit:hover,
+.wb-sum-col-name:hover { border-color: var(--border, #e2d5bf); }
+.wb-sum-title-edit:focus, .wb-sum-line-name:focus, .wb-sum-field-edit:focus,
+.wb-sum-col-name:focus {
   border-color: var(--orange, #e0552d); background: var(--surface, #fffaf0);
   color: var(--text, #2b2118); outline: none;
 }
 .wb-sum-title-edit:focus { width: 26ch; }
 
-/* On paper the totals are rows of the data table itself, so they line up under the columns they
-   describe. Two separate tables would size their columns independently and a total would drift
-   out from under its own heading. */
+/* On paper the totals are a table of their own, set apart from the data rather than merged into
+   it -- and still aligned, because both tables are given the same fixed column widths by
+   printColgroup. Nothing spans anything: there is not a merged cell in either table. */
 .wb-sum-print-gap td { border: 0; height: 10px; padding: 0; }
 .wb-sum-print-row th, .wb-sum-print-row td { font-weight: 800; }
 .wb-sum-print-num { text-align: right; font-variant-numeric: tabular-nums; }

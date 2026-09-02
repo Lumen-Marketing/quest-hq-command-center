@@ -64,7 +64,7 @@ export function createDataIO(ctx) {
     }).then(null, () => {});
   }
 
-  const { summaryPrintRows } = createSummaryBar({ h, wbPlainVal });
+  const { summaryPrintTable } = createSummaryBar({ h, wbPlainVal });
 
   // Open a print-ready window carrying the app's own stylesheets (so report cards
   // and tables look identical), then auto-invoke the browser print dialog.
@@ -81,10 +81,16 @@ export function createDataIO(ctx) {
       .wb-print-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; border-bottom:2px solid #333; padding-bottom:12px; }
       .wb-print-head h1 { font-size:20px; margin:0 0 4px; }
       .wb-print-meta { color:#666; font-size:12px; }
-      .wb-print-table { width:100%; border-collapse:collapse; font-size:12px; }
+      .wb-print-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+      .wb-print-table th, .wb-print-table td { overflow-wrap:anywhere; }
       .wb-print-table th, .wb-print-table td { border:1px solid #ccc; padding:6px 9px; text-align:left; vertical-align:top; }
       .wb-print-table thead th { background:#f1f1f1; font-weight:700; white-space:nowrap; }
       .wb-print-table tbody tr:nth-child(even) { background:#fafafa; }
+      .wb-sum-print-table { margin-top:18px; }
+      .wb-sum-print-table tbody tr:nth-child(even) { background:none; }
+      .wb-sum-print-row th, .wb-sum-print-num { font-weight:700; }
+      .wb-sum-print-cap { color:#666; border-top:none !important; }
+      .wb-sum-print-row td, .wb-sum-print-row th { border-bottom:none !important; }
       @media print { .wb-report-grid { display:block; } .wb-chart-card { break-inside:avoid; page-break-inside:avoid; margin-bottom:14px; } }
     </style></head><body>${bodyHTML}<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};<\/script></body></html>`);
     win.document.close();
@@ -111,8 +117,8 @@ export function createDataIO(ctx) {
     // to sit under the columns they describe: two separate tables size their columns
     // independently, so the total would drift out from under its own heading. A blank row above
     // them is the gap that keeps them reading as separate from the data.
-    const totals = summaryPrintRows(companyId, workspace, app, cols, items, { sel: onlyIds || new Set() });
-    const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody>${totals}</table>`;
+    const totals = summaryPrintTable(companyId, workspace, app, cols, items, { sel: onlyIds || new Set() });
+    const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table">${printColgroup(cols.length)}<thead>${thead}</thead><tbody>${rows}</tbody></table>${totals}`;
     wbOpenPrintWindow(`${app.name} — ${onlyIds ? 'selected' : 'data'}`, body);
     logTransfer(companyId, workspaceId, appId, {
       direction: 'export',

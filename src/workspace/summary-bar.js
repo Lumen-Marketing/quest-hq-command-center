@@ -13,7 +13,7 @@
 
 import {
   OPTION_FIELD_TYPES, calcName, computeSummary, formatSummary, functionsForType,
-  isNumericType, lineIsEmpty, summaryLabel, summaryLines, summaryLinesForEdit,
+  isNumericType, lineIsEmpty, summaryColName, summaryLabel, summaryLines, summaryLinesForEdit,
 } from './summary.js';
 
 /**
@@ -26,6 +26,21 @@ import {
 export function summaryTitleOf(app) {
   const given = String(app?.summaryTitle ?? '').trim();
   return given || 'Calculations';
+}
+
+/**
+ * The column widths the printed data table and the printed calculation table BOTH use.
+ *
+ * Two tables only line up if they are told the same widths; left to themselves each sizes its
+ * columns to its own contents, and a total ends up under the wrong heading. Percentages rather
+ * than pixels so it holds at any paper size, and a narrow first column because it carries a row
+ * number or a line name, never a value.
+ */
+export function printColgroup(fieldCount) {
+  const rest = Math.max(fieldCount, 1);
+  const width = ((100 - 6) / rest).toFixed(4);
+  const body = Array.from({ length: rest }, () => `<col style="width:${width}%">`).join('');
+  return `<colgroup><col style="width:6%">${body}</colgroup>`;
 }
 
 export function createSummaryBar(ctx) {
@@ -143,7 +158,9 @@ export function createSummaryBar(ctx) {
         ${canManage ? `<label class="wb-sum-hide"><input type="checkbox" data-wb-sum-hide${app.summaryHideLabel ? ' checked' : ''}> Hide the labels when printing</label>` : ''}
       </div>
       <div class="wb-sum-scroll"><table class="wb-sum-table">
-        <thead><tr><th class="wb-sum-corner"></th>${fields.map((field) => `<th title="${h(field.label)}">${h(field.label)}</th>`).join('')}</tr></thead>
+        <thead><tr><th class="wb-sum-corner"></th>${fields.map((field) => `<th title="${h(field.label)}">${canManage
+          ? `<input class="wb-sum-col-name" data-wb-sum-col="${h(field.id)}" value="${h(summaryColName(app, field))}" aria-label="What this column is called here" spellcheck="false" maxlength="60">`
+          : h(summaryColName(app, field))}</th>`).join('')}</tr></thead>
         <tbody>${lines.map(lineRow).join('')}</tbody>
       </table></div>
       ${canManage ? '<button type="button" class="btn btn-sm wb-sum-add" data-wb-sum-add><i class="ti ti-plus"></i>Add line</button>' : ''}
@@ -151,14 +168,15 @@ export function createSummaryBar(ctx) {
   }
 
   /**
-   * The same table, as rows under the printed data.
+   * The same table, printed as a table of its own.
    *
-   * `tfoot` rows rather than a table of its own, because that is the only way they are
-   * guaranteed to sit under the columns they describe: two tables size their columns
-   * independently and a total drifts out from under its own heading. The blank row above is the
-   * gap that keeps them reading as separate from the data.
+   * It has to be BOTH separate and aligned. Rows in the data table's `tfoot` aligned but read as
+   * more data; a table of its own read as separate but drifted, because two tables size their
+   * columns to their own contents and a total slides out from under its heading. `printColgroup`
+   * is what settles it: both tables are given the same fixed column widths, so they line up
+   * without being the same table. Nothing is merged -- no cell spans another.
    */
-  function summaryPrintRows(companyId, workspace, app, cols, rows, ui) {
+  function summaryPrintTable(companyId, workspace, app, cols, rows, ui) {
     const lines = summaryLines(app).filter((line) => !lineIsEmpty(line));
     if (!lines.length) return '';
     const scope = scopeRows(rows, ui);
@@ -174,15 +192,20 @@ export function createSummaryBar(ctx) {
         const config = configIn(line, field.id);
         return isSet(config) ? `<td class="wb-sum-print-cap">${h(captionOf(config))}</td>` : '<td></td>';
       };
-      const name = h(line.label);
-      const values = `<tr class="wb-sum-print-row"><th scope="row">${hide ? '' : name}</th>${cols.map(value).join('')}</tr>`;
+      // An unnamed line prints blank. "Line 2" is a position, not a name.
+      const values = `<tr class="wb-sum-print-row"><th scope="row">${hide ? '' : h(line.label)}</th>${cols.map(value).join('')}</tr>`;
       // What each number IS, under it. This is the row the Hide-when-printing tick removes -- a
       // bare "1" under a Name column means nothing without "Count if Roman".
       return hide ? values : `${values}<tr class="wb-sum-print-labels"><td></td>${cols.map(caption).join('')}</tr>`;
     }).join('');
 
-    return `<tfoot><tr class="wb-sum-print-gap"><td colspan="${cols.length + 1}"></td></tr>${body}</tfoot>`;
+    // A table standing on its own needs to say what it is and what its columns are; merged into
+    // the data it could borrow both. `summaryHideLabel` is "hide the labels when printing", and a
+    // title and a column heading are labels, so they go with the captions.
+    const head = hide ? '' : `<caption>${h(summaryTitleOf(app))}</caption><thead><tr><th></th>${
+      cols.map((field) => `<th>${h(summaryColName(app, field))}</th>`).join('')}</tr></thead>`;
+    return `<table class="wb-print-table wb-sum-print-table">${printColgroup(cols.length)}${head}<tbody>${body}</tbody></table>`;
   }
 
-  return { summaryBar, summaryPrintRows, scopeRows, readerValue };
+  return { summaryBar, summaryPrintTable, scopeRows, readerValue };
 }

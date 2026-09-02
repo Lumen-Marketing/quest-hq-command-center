@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { createSummaryBar, summaryTitleOf } from '../src/workspace/summary-bar.js';
-import { calcName, lineIsEmpty, summaryLines, summaryLinesForEdit } from '../src/workspace/summary.js';
+import { createSummaryBar, printColgroup, summaryTitleOf } from '../src/workspace/summary-bar.js';
+import {
+  calcName, lineIsEmpty, summaryColName, summaryLines, summaryLinesForEdit,
+} from '../src/workspace/summary.js';
 
 // The arithmetic is covered in workspace-summary.test.mjs. This is the part that decides what a
 // column's values ARE (an option id is not what the reader sees), what a selection does, and the
@@ -152,19 +154,21 @@ test('an empty line is one nobody has asked anything of', () => {
 
 // ---- printing ----------------------------------------------------------------------------------
 
-test('the totals print as rows of the data table, so they line up', () => {
-  // Two separate tables size their columns independently and the total drifts out from under
-  // its own heading. A tfoot shares the data table's widths.
+test('the totals print as a table of their own, aligned but not merged', () => {
+  // Both halves matter. Merged into the data it aligned but read as more data; separate and
+  // left alone it read as separate but drifted, because each table sizes columns to its own
+  // contents. The same colgroup on both is what buys separation without drift.
   const app = appWith(line({ amt: { fn: 'sum' }, who: { fn: 'countIf', value: 'Roman' } }, { label: 'Totals' }));
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
-  assert.match(html, /^<tfoot>/);
-  assert.match(html, /wb-sum-print-gap/, 'a blank row separates them from the data');
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(html, /^<table class="wb-print-table wb-sum-print-table">/, 'its own table');
+  assert.doesNotMatch(html, /colspan|rowspan/, 'and not one merged cell in it');
+  assert.match(html, /<colgroup>/, 'the shared widths are what keep it aligned');
   assert.match(html, /<th scope="row">Totals<\/th>/);
 });
 
 test('a printed row has one cell per column, blank where nothing was asked', () => {
   const app = appWith(line({ amt: { fn: 'sum' } }));
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
   const row = /<tr class="wb-sum-print-row">([\s\S]*?)<\/tr>/.exec(html)[1];
   const cells = row.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/g);
   assert.equal(cells.length, FIELDS.length + 1, 'the row label plus every column');
@@ -176,7 +180,7 @@ test('a line nobody named prints with a blank name, not an invented one', () => 
   // "Line 2" is a position, not a name. Printing it puts a word in the reader's hands that
   // nobody chose and that says nothing about what the row totals.
   const app = appWith(line({ amt: { fn: 'sum' } }, { id: 'l1' }), line({ amt: { fn: 'average' } }, { id: 'l2' }));
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
   assert.doesNotMatch(html, /Line 1|Line 2/);
   assert.match(html, /<th scope="row"><\/th>/, 'the cell is there, it is just empty');
   assert.match(html, />4000</, 'and the totals are unaffected');
@@ -202,7 +206,7 @@ test('each line prints as its own row', () => {
     line({ amt: { fn: 'sum' } }, { id: 'l1', label: 'Totals' }),
     line({ amt: { fn: 'average' } }, { id: 'l2', label: 'Averages' }),
   );
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
   assert.equal((html.match(/wb-sum-print-row/g) || []).length, 2);
   assert.match(html, /Totals/);
   assert.match(html, /Averages/);
@@ -210,33 +214,34 @@ test('each line prints as its own row', () => {
 
 test('what each number is prints under it', () => {
   const app = appWith(line({ who: { fn: 'countIf', value: 'Roman' } }));
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
   assert.match(html, /Count if Roman/, 'a bare 1 under Name would mean nothing');
 });
 
 test('a renamed calculation prints under its own name', () => {
   const app = appWith(line({ amt: { fn: 'sum', label: 'Total paid' } }));
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
   assert.match(html, /Total paid/);
   assert.doesNotMatch(html, />Sum</);
 });
 
 test('hiding the labels removes the words and keeps the numbers', () => {
   const app = { ...appWith(line({ amt: { fn: 'sum' } }, { label: 'Totals' })), summaryHideLabel: true };
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, ALL);
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
   assert.doesNotMatch(html, /Totals/);
   assert.doesNotMatch(html, /wb-sum-print-labels/);
+  assert.doesNotMatch(html, /<caption>|<thead>/, 'a title and a heading are labels too');
   assert.match(html, />4000</);
 });
 
 test('nothing configured prints nothing', () => {
-  assert.equal(bar.summaryPrintRows('co', {}, appWith(), FIELDS, ROWS, ALL), '');
-  assert.equal(bar.summaryPrintRows('co', {}, appWith(line({ amt: { fn: 'none' } })), FIELDS, ROWS, ALL), '');
+  assert.equal(bar.summaryPrintTable('co', {}, appWith(), FIELDS, ROWS, ALL), '');
+  assert.equal(bar.summaryPrintTable('co', {}, appWith(line({ amt: { fn: 'none' } })), FIELDS, ROWS, ALL), '');
 });
 
 test('a selected print totals the selection', () => {
   const app = appWith(line({ amt: { fn: 'sum' } }));
-  const html = bar.summaryPrintRows('co', {}, app, FIELDS, ROWS, { sel: new Set(['r1']) });
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, { sel: new Set(['r1']) });
   assert.match(html, />3000</);
 });
 
@@ -246,9 +251,13 @@ test('the table renders below the list and above the footer', () => {
   assert.match(items, /<div id="wbItemsList">\$\{listBody\}<\/div>\s*\n\s*\$\{summary\}/);
 });
 
-test('the totals go inside the printed data table, not beside it', () => {
-  assert.match(io, /<tbody>\$\{rows\}<\/tbody>\$\{totals\}<\/table>/);
-  assert.match(io, /summaryPrintRows\(companyId, workspace, app, cols, items, \{ sel: onlyIds \|\| new Set\(\) \}\)/);
+test('the printed data table and the totals table are told the same widths', () => {
+  // A shared colgroup is the whole mechanism. Without it on BOTH tables they drift apart, which
+  // is why the totals could not simply be lifted out of the data table on their own.
+  assert.ok(io.includes('<table class="wb-print-table">${printColgroup(cols.length)}'));
+  assert.ok(io.includes('</tbody></table>${totals}'), 'the totals follow the data table, outside it');
+  assert.ok(io.includes('table-layout:fixed'), 'fixed layout is what makes the widths bind');
+  assert.ok(!io.includes('summaryPrintRows'), 'the tfoot builder is gone, not merely unused');
 });
 
 test('the lines survive a reload', () => {
@@ -272,4 +281,59 @@ test('the last line cannot be removed', () => {
 test('only a manager may change any of it', () => {
   const block = main.slice(main.indexOf('const summaryApp = ()'));
   assert.match(block.slice(0, 400), /if \(!can\('workspaces\.manage', companyId\)\) return null;/);
+});
+
+// ---- the column headings -----------------------------------------------------------------------
+
+test('a column heading defaults to the field, and can be called something else here', () => {
+  // The calculation table asks a different question from the list above it: a column the list
+  // calls "Allowance" may be "Paid this month" once it is being totalled.
+  assert.equal(summaryColName({}, FIELDS[0]), 'Allowance');
+  assert.equal(summaryColName({ summaryCols: { amt: 'Paid this month' } }, FIELDS[0]), 'Paid this month');
+  assert.equal(summaryColName({ summaryCols: { amt: '   ' } }, FIELDS[0]), 'Allowance', 'blank falls back');
+});
+
+test('renaming a heading changes the calculation table and nothing else', () => {
+  const app = { ...appWith(line({ amt: { fn: 'sum' } })), summaryCols: { amt: 'Paid this month' } };
+  assert.match(bar.summaryBar('co', {}, app, ROWS, ALL, false), /Paid this month/);
+  assert.equal(app.fields[0].label, 'Allowance', 'the field itself is untouched');
+});
+
+test('a manager edits the heading in place; a reader just reads it', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  assert.match(bar.summaryBar('co', {}, app, ROWS, ALL, true), /data-wb-sum-col="amt"/);
+  assert.doesNotMatch(bar.summaryBar('co', {}, app, ROWS, ALL, false), /data-wb-sum-col/);
+});
+
+test('the printed table says what it is and what its columns are', () => {
+  // Merged into the data it could borrow both; standing on its own it cannot.
+  const app = { ...appWith(line({ amt: { fn: 'sum' } })), summaryTitle: 'Job costs', summaryCols: { amt: 'Paid' } };
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(html, /<caption>Job costs<\/caption>/);
+  assert.match(html, /<th>Paid<\/th>/);
+});
+
+test('the heading rename survives a reload', () => {
+  assert.ok(main.includes('{ summaryCols: app.summaryCols }'), 'the normalizer drops what it does not name');
+});
+
+test('clearing a heading removes the override rather than storing the field name', () => {
+  const block = main.slice(main.indexOf("bind('[data-wb-sum-col]'"));
+  assert.match(block.slice(0, 800), /else delete target\.summaryCols\[el\.dataset\.wbSumCol\];/);
+  assert.match(block.slice(0, 800), /if \(!Object\.keys\(target\.summaryCols\)\.length\) delete target\.summaryCols;/);
+});
+
+// ---- what keeps the two printed tables aligned --------------------------------------------------
+
+test('the columns are given explicit shares that add up', () => {
+  const group = printColgroup(3);
+  const widths = [...group.matchAll(/width:([\d.]+)%/g)].map((m) => Number(m[1]));
+  assert.equal(widths.length, 4, 'the row-label column plus every field');
+  assert.equal(Math.round(widths.reduce((total, w) => total + w, 0)), 100);
+  assert.equal(widths[1], widths[2], 'and the field columns share equally');
+});
+
+test('one field, and no fields, still produce a usable colgroup', () => {
+  assert.match(printColgroup(1), /^<colgroup><col style="width:6%"><col style="width:94\.0000%"><\/colgroup>$/);
+  assert.doesNotMatch(printColgroup(0), /NaN|Infinity/);
 });
