@@ -18,7 +18,7 @@ const env = (key) => process.env[key] || '';
 const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
 const serviceKey = () => env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
 
-const ADMIN_ROLES = new Set(['owner', 'admin', 'developer', 'construction_supervisor']);
+const ADMIN_ROLES = new Set(['owner', 'admin', 'developer']);
 
 function bearerToken(request) {
   const header = String(request?.headers?.authorization || '');

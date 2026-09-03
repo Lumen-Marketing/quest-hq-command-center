@@ -7408,18 +7408,21 @@ async function saveAutomation(form) {
     created_at: existing?.created_at,
     updated_at: new Date().toISOString(),
   });
-  upsertAutomation(rule);
-  state.automationUi = { creating: false, editingId: null };
-  render();
   try {
+    let savedRule = rule;
     if (isLiveSupabaseSession()) {
       const client = createSupabaseClient();
       const result = await client.from('automations').upsert(automationPayload(rule), { onConflict: 'id' }).select().single();
       if (result.error) throw new Error(result.error.message || 'Automation save failed.');
-      upsertAutomation(normalizeAutomation(result.data));
-      render();
+      if (!result.data) throw new Error('Automation save returned no record.');
+      savedRule = normalizeAutomation(result.data);
     }
-    showToast(`Automation "${rule.name}" saved.`, isLiveSupabaseSession() ? 'live' : 'local', 'Automations');
+    // Commit local UI state only after the live write succeeds. A rejected save
+    // therefore cannot leave a rule that appears active and fires only in this tab.
+    upsertAutomation(savedRule);
+    state.automationUi = { creating: false, editingId: null };
+    render();
+    showToast(`Automation "${savedRule.name}" saved.`, isLiveSupabaseSession() ? 'live' : 'local', 'Automations');
   } catch (error) {
     showToast(error.message || 'Could not save the automation to the server.', 'error', 'Automations');
   }
@@ -7446,15 +7449,22 @@ async function deleteAutomation(id) {
   if (!rule) return;
   const companyId = rule.company_id;
   if (!requirePermission('settings.manage', companyId, 'Your role cannot delete automations.', 'Automations')) return;
-  state.automations = state.automations.filter((a) => a.id !== id);
-  if (state.automationUi.editingId === id) state.automationUi = { creating: false, editingId: null };
-  render();
-  if (isLiveSupabaseSession()) {
-    const client = createSupabaseClient();
-    const result = await client.from('automations').delete().eq('id', id).eq('company_id', companyId);
-    if (result.error) { showToast(result.error.message || 'Delete failed on the server.', 'error', 'Automations'); return; }
+  try {
+    if (isLiveSupabaseSession()) {
+      const client = createSupabaseClient();
+      // Selecting the deleted id makes an RLS-denied zero-row delete observable;
+      // without it Supabase can report a successful request that deleted nothing.
+      const result = await client.from('automations').delete().eq('id', id).eq('company_id', companyId).select('id').single();
+      if (result.error) throw new Error(result.error.message || 'Automation delete failed.');
+      if (String(result.data?.id || '') !== String(id)) throw new Error('Automation delete returned no matching record.');
+    }
+    state.automations = state.automations.filter((a) => a.id !== id);
+    if (state.automationUi.editingId === id) state.automationUi = { creating: false, editingId: null };
+    render();
+    showToast('Automation deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Automations');
+  } catch (error) {
+    showToast(error.message || 'Could not delete the automation from the server.', 'error', 'Automations');
   }
-  showToast('Automation deleted.', 'local', 'Automations');
 }
 
 function renderKnowledgeArticleForm(companyId, article) {

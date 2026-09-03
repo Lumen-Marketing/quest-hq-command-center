@@ -5,20 +5,23 @@ Ported from the standalone task app in Phase 4 of the task-app absorption.
 
 ## Changes from upstream
 
-Upstream authorized the caller by **global role** and read the **entire**
-`team_members` table with the service-role client, which bypasses RLS. In a
-multi-tenant deployment that let a manager of one workspace email another
-workspace's staff.
+The original port authorized the caller by the legacy global `profiles.role`
+and then pooled recipients from every company the caller belonged to. That did
+not match Questbase's company-scoped role and permission model.
 
 This port adds tenant scoping in two places:
 
-1. **Sender** — the caller's active `company_memberships` are loaded; a caller
-   with no active membership is rejected (403).
-2. **Recipients** — the allowlist query is `.overlaps("company_ids", callerCompanyIds)`,
-   so only members of the caller's own companies can ever receive mail.
+1. **Explicit company** — every request must name exactly one `company_id`.
+2. **Sender** — the caller needs an active membership plus `tasks.manage` in
+   that company; Owner, Admin, and Developer retain their normal elevated-role
+   behavior.
+3. **Recipients** — the allowlist contains only members of that same company.
+4. **Shared rate limit** — the existing service-role-only
+   `consume_rate_limit` RPC caps each sender/company pair at 20 sends per hour,
+   across cold starts and all Edge Function instances.
 
-Everything else (payload size caps, HTML sanitizer, rate limits, CORS, error
-shapes) is unchanged from upstream.
+Payload size caps, HTML sanitizing, CORS, and provider error handling remain in
+place.
 
 ## Secrets to set before deploying
 

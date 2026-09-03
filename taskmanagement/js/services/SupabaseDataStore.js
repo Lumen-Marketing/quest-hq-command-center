@@ -16,6 +16,10 @@ App.SupabaseDataStore = class SupabaseDataStore {
     // Last-seen updated_at per task id — used as an optimistic-concurrency guard
     // so a save can't silently clobber an edit made elsewhere.
     this._taskVersions = {};
+    // The mapped task at the same revision as _taskVersions. Conflict recovery
+    // compares the current local task with this ancestor, so only fields the
+    // current user actually changed are re-applied over a newer server row.
+    this._taskBases = {};
     // PostgREST caps a single response at its max-rows setting (~1000 by
     // default) and SILENTLY truncates — no error. Any unbounded list read
     // (tasks, time_entries, team_members, notifications) must page through with
@@ -210,9 +214,12 @@ App.SupabaseDataStore = class SupabaseDataStore {
     this._throwIfError(taxLabelsRes, 'task labels');
 
     this._taskVersions = {};
+    this._taskBases = {};
     const tasks = taskRows.map(row => {
+      const task = this._mapTaskRow(row);
       this._taskVersions[row.id] = row.updated_at;
-      return this._mapTaskRow(row);
+      this._rememberTaskBase(task);
+      return task;
     });
     const workspaceTaskIds = new Set(taskRows.map(row => row.id));
 
@@ -291,10 +298,12 @@ App.SupabaseDataStore = class SupabaseDataStore {
       'tasks',
     );
     return rows.map(row => {
+      const task = this._mapTaskRow(row);
       if (!skipVersionIds || !skipVersionIds.has(row.id)) {
         this._taskVersions[row.id] = row.updated_at;
+        this._rememberTaskBase(task);
       }
-      return this._mapTaskRow(row);
+      return task;
     });
   }
 
@@ -318,7 +327,11 @@ App.SupabaseDataStore = class SupabaseDataStore {
   async _saveTasks(tasks) {
     const conflicts = [];
     for (const task of tasks) {
-      const row = this._taskRow(task);
+      // Keep the exact values this request is attempting to persist. TaskModel
+      // mutates task objects in place, so the live `task` may receive another
+      // edit while this request is awaiting the network.
+      const attemptedTask = this._cloneTaskValue(task);
+      const row = this._taskRow(attemptedTask);
       const known = this._taskVersions[task.id];
       if (known) {
         // Optimistic lock: only update if the row hasn't changed since we read it.
@@ -344,8 +357,11 @@ App.SupabaseDataStore = class SupabaseDataStore {
           // it can't loop on the same stale-version conflict.
           const fresh = await this._refetchTask(task.id);
           if (fresh) {
-            this._taskVersions[fresh.row.id] = fresh.updatedAt;
             const mergedTask = this._mergeConflict(fresh.task, task);
+            this._taskVersions[fresh.row.id] = fresh.updatedAt;
+            // The retry locks against `fresh.updatedAt`, so its merge ancestor
+            // must be the same freshly fetched row.
+            this._rememberTaskBase(fresh.task);
             // Flag so app.js re-marks it dirty (instead of clearing it) and lets
             // the coalescing save retry write the merged result.
             mergedTask._conflictMerged = true;
@@ -353,6 +369,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
           }
         } else {
           this._taskVersions[task.id] = res.data.updated_at;
+          this._rememberTaskBase(attemptedTask);
         }
       } else {
         const res = await this.supabase
@@ -362,6 +379,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
           .single();
         this._throwIfError(res, 'creating task');
         this._taskVersions[task.id] = res.data.updated_at;
+        this._rememberTaskBase(attemptedTask);
       }
     }
     return conflicts;
@@ -378,28 +396,60 @@ App.SupabaseDataStore = class SupabaseDataStore {
     return { updatedAt: res.data.updated_at, row: res.data, task: this._mapTaskRow(res.data) };
   }
 
-  /* Field-merge for an optimistic-lock conflict (fix #4).
+  _cloneTaskValue(value) {
+    if (value === null || value === undefined) return value;
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  _taskValuesEqual(left, right) {
+    if (Object.is(left, right)) return true;
+    if (Array.isArray(left) || Array.isArray(right)) {
+      return Array.isArray(left)
+        && Array.isArray(right)
+        && left.length === right.length
+        && left.every((value, index) => this._taskValuesEqual(value, right[index]));
+    }
+    if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return leftKeys.length === rightKeys.length
+      && leftKeys.every((key, index) => key === rightKeys[index]
+        && this._taskValuesEqual(left[key], right[key]));
+  }
+
+  _rememberTaskBase(task) {
+    if (!task || !task.id) return;
+    this._taskBases[task.id] = this._cloneTaskValue(task);
+  }
+
+  /* Three-way field merge for an optimistic-lock conflict (fix #4).
      `serverTask` is the freshly-refetched authoritative row (mapped to camel);
      `localTask` is the in-memory copy whose save just lost the lock — i.e. the
-     user's intended edits. We have only whole-task dirty tracking, so every
-     editable field on localTask is treated as locally-dirty and re-applied on
-     top of the server base. Server-owned metadata that the client never edits
-     (id, createdAt) is taken from the server row. The result is the local edits
-     preserved while inheriting any server-only fields the local copy lacks.
+     user's intended edits; `_taskBases[id]` is the row both edits started from.
+     A local field is re-applied only when it differs from that ancestor. This
+     preserves unrelated server edits. If both users changed the same field,
+     the current user's local value wins, preserving the edit that triggered the
+     save. Server-owned metadata that the client never edits comes from server.
      Returns a NEW object so the caller can decide how to splice it in. */
   _mergeConflict(serverTask, localTask) {
     // List of fields the UI can edit and the save writes back (see _taskRow).
-    // These are re-applied from the local copy so the conflicting save isn't
-    // silently dropped. Everything else (id, createdAt, …) comes from the server.
+    // Only fields changed from the common ancestor are re-applied. Without that
+    // comparison, a stale local copy overwrites unrelated remote edits.
     const EDITABLE = [
       'title', 'description', 'type', 'label', 'company', 'creator',
       'assignee', 'assigneeIds', 'project', 'due', 'dueTime', 'reminderAt', 'reminderOffset',
       'priority', 'status', 'watchers', 'subtasks', 'activity', 'stuck',
       'clearedAt', 'completedAt', 'focusSeq', 'woNumber',
     ];
-    const merged = { ...serverTask };
+    const baseTask = this._taskBases[localTask.id] || null;
+    const merged = this._cloneTaskValue(serverTask) || {};
     for (const f of EDITABLE) {
-      if (Object.prototype.hasOwnProperty.call(localTask, f)) merged[f] = localTask[f];
+      if (!Object.prototype.hasOwnProperty.call(localTask, f)) continue;
+      // A missing base is possible only for legacy/incomplete state. Preserve
+      // the previous local-wins behavior rather than silently losing an edit.
+      if (!baseTask || !this._taskValuesEqual(localTask[f], baseTask[f])) {
+        merged[f] = this._cloneTaskValue(localTask[f]);
+      }
     }
     // activity is an append-only log, so local-wins would silently drop entries
     // another device appended — union both sides instead (dedup by who|what|at,
@@ -605,6 +655,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
     const res = await this.supabase.from('tasks').delete().eq('workspace_id', this.workspaceId).eq('id', id);
     this._throwIfError(res, 'deleting task');
     delete this._taskVersions[id];
+    delete this._taskBases[id];
   }
 
   /* Hard-delete tasks whose cleared_at is older than the grace window.
@@ -722,12 +773,13 @@ App.SupabaseDataStore = class SupabaseDataStore {
   /* Best-effort email via the `notify-email` Edge Function. Returns
      { ok, skipped?, error? } and never throws, so a missing/undeployed function
      degrades gracefully to in-app only. */
-  async sendEmail({ to, subject, html }) {
+  async sendEmail({ companyId, to, subject, html }) {
     const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean);
-    if (!recipients.length) return { ok: false, skipped: true };
+    const company = String(companyId || '').trim();
+    if (!recipients.length || !company) return { ok: false, skipped: true };
     try {
       const { data, error } = await this.supabase.functions.invoke('notify-email', {
-        body: { to: recipients, subject, html },
+        body: { company_id: company, to: recipients, subject, html },
       });
       if (error) return { ok: false, error: (error && error.message) || String(error) };
       return { ok: true, data };

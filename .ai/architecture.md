@@ -24,6 +24,9 @@ The app uses:
 - Workspace Builder styling is a route-loaded chunk. The shared shell loads it through a retryable singleton before rendering Builder markup, so other routes do not parse Builder-only CSS.
 - The authenticated startup query plan lives in `src/data/initial-data-queries.js`: independent reads start together, including Automations, and each read plus the pre-shell profile lookup has a 15-second ceiling so one stalled request cannot hold the workspace loader indefinitely.
 - The embedded Tasks runtime retries its same-origin Supabase SDK once when the original deferred script request fails, then presents its existing terminal auth error if recovery also fails.
+- Task email notifications name exactly one company, authorize the sender through that company's
+  membership and task permission, restrict recipients to its roster, and consume a shared durable
+  rate-limit bucket before contacting the mail provider.
 
 ## Request and data flow
 
@@ -36,6 +39,11 @@ The tenancy hierarchy is `profile -> company membership -> company -> operationa
 Company-owner onboarding follows `company creation -> guaranteed blank default Main workspace -> required Setup modal for Main -> answers or blueprint -> editable review -> apply_workspace_setup`. Every later operational-workspace creation opens the same required modal for that new workspace. The required version has no Cancel, close control, backdrop exit, or Escape exit; applying a plan or using Start from scratch is its valid completion path. Setup > Workspaces is a launcher for the same modal in a cancellable mode. Its work-type question searches a broad catalog that maps back to the existing bounded server plan families. Drafts, applied plans, reset history, and an optimistic mutation revision are keyed by `workspace_id`; apply changes only the selected workspace and a retry reuses the server-recorded role ids. Reset clears that workspace's questions and draft only, deliberately preserving its applied configuration, every tenant/business record, and every sibling workspace.
 
 Public flows such as client portals, public forms, and proposals go through token-aware API handlers. Server handlers use deployment-only credentials and must validate method, input, tenant scope, and authorization before accessing Supabase.
+
+Task saves use optimistic revisions plus a per-task base snapshot. On a conflict, a three-way
+merge preserves server changes to fields the current editor did not touch and reapplies only the
+editor's actual changes. Automation UI state is committed only after the corresponding live write
+returns the affected row.
 
 Worker onboarding follows one bounded path: a company manager selects a non-elevated role and one or more operational workspaces, the browser inserts a pending `company_invites` row, and the `send-company-invite` Supabase Edge Function derives and sends the recipient-specific message. Acceptance runs through `accept_company_invite`, which verifies the signed-in email and invite state, creates the company membership, clears stale custom-role assignments, inserts only a verified non-elevated role, and creates the selected `workspace_memberships`. Legacy invites without workspace selections fall back to the company default workspace.
 

@@ -88,6 +88,15 @@ test('rejects a member without billing permission', async () => {
   assert.equal(stripe.calls.length, 0, 'Stripe must not be called without permission');
 });
 
+test('rejects a construction supervisor without billing permission', async () => {
+  baseEnv();
+  const stripe = stripeOk();
+  const r = res();
+  await handler(req(VALID), r, { db: makeDb('construction_supervisor'), getUser, stripeFetch: stripe.fetch });
+  assert.equal(r.statusCode, 403);
+  assert.equal(stripe.calls.length, 0, 'Stripe must not be called for a construction supervisor');
+});
+
 test('rejects a non-member', async () => {
   baseEnv();
   const r = res();

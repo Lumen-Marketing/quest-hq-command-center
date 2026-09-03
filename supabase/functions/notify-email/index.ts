@@ -21,6 +21,13 @@
 // -----------------------------------------------------------------------------
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  canSendCompanyNotificationEmail,
+  NOTIFICATION_EMAIL_PERMISSION,
+  NOTIFICATION_EMAIL_RATE_LIMIT,
+  NOTIFICATION_EMAIL_RATE_WINDOW_SECONDS,
+  notificationEmailRateLimitBucket,
+} from "./authorization.mjs";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const MAX_RECIPIENTS = 25;
@@ -54,10 +61,15 @@ function corsHeadersFor(req: Request): Record<string, string> {
   return headers;
 }
 
-function json(req: Request, body: unknown, status = 200): Response {
+function json(
+  req: Request,
+  body: unknown,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
+    headers: { ...corsHeadersFor(req), ...extraHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -73,6 +85,7 @@ function sanitizeHtml(html: string): string {
 }
 
 interface EmailPayload {
+  company_id?: unknown;
   to?: unknown;
   subject?: unknown;
   html?: unknown;
@@ -116,53 +129,10 @@ Deno.serve(async (req: Request) => {
     }
     const { data: callerProfile, error: profileErr } = await adminProbe
       .from("profiles")
-      .select("approved, role")
+      .select("approved")
       .eq("id", callerUser.user.id)
       .single();
-    if (profileErr || !callerProfile) {
-      return json(req, { error: "Not authorized." }, 403);
-    }
-    // Authorize the caller to send notification emails: approved === true AND a
-    // MANAGEMENT role. This is a fail-CLOSED allowlist on purpose. The send is a
-    // privileged capability — it emits arbitrary (sanitized) HTML from the
-    // official Quest HQ address to any teammate on the roster — so the lowest-
-    // privilege role (worker) must not have it, or a single approved/compromised
-    // worker account becomes an internal phishing/spam vector. A "any approved
-    // role" gate fails OPEN (every future role can send by default); an explicit
-    // allowlist fails SAFE (a new role is denied until added here), which is the
-    // correct direction for a security gate. Enforced by
-    // tests/role-gate.spec.js ("worker invoking notify-email gets a 403").
-    // Retired role construction_supervisor is kept inert for parity with the SQL
-    // RLS role lists. Approval is still required; RLS enforces row-level access.
-    // NOTE: 'sales' is intentionally NOT here. It is a worker by another name
-    // (migration 048 resolves sales -> worker), and workers must not send mail —
-    // so sales is denied exactly like a worker.
-    const SEND_ROLES = new Set([
-      "admin", "construction_supervisor", "supervisor", "developer",
-    ]);
-    const callerRole = typeof callerProfile.role === "string" ? callerProfile.role.trim() : "";
-    if (!callerProfile.approved || !SEND_ROLES.has(callerRole)) {
-      return json(req, { error: "Not authorized." }, 403);
-    }
-
-    // TENANT SCOPING (Command Center port): the role check above is GLOBAL, so on
-    // its own it lets a manager of one workspace act against every workspace. The
-    // caller's active company memberships bound what they can do — a caller with
-    // no active membership cannot send at all, and the recipient allowlist below
-    // is intersected with these ids.
-    const { data: callerCompanies, error: callerCompaniesErr } = await adminProbe
-      .from("company_memberships")
-      .select("company_id")
-      .eq("profile_id", callerUser.user.id)
-      .eq("status", "active");
-    if (callerCompaniesErr) {
-      console.error("[notify-email] company_memberships lookup failed", callerCompaniesErr);
-      return json(req, { error: "Could not verify sender." }, 500);
-    }
-    const callerCompanyIds = (callerCompanies ?? [])
-      .map((r: { company_id: string | null }) => (r.company_id ?? "").trim())
-      .filter(Boolean);
-    if (callerCompanyIds.length === 0) {
+    if (profileErr || !callerProfile?.approved) {
       return json(req, { error: "Not authorized." }, 403);
     }
 
@@ -184,6 +154,63 @@ Deno.serve(async (req: Request) => {
     }
     if (!payload || typeof payload !== "object") {
       return json(req, { error: "Invalid request body." }, 400);
+    }
+
+    const companyId = typeof payload.company_id === "string" ? payload.company_id.trim() : "";
+    if (!companyId || companyId.length > 160) {
+      return json(req, { error: "company_id is required." }, 400);
+    }
+
+    // One request belongs to one company. The caller must hold an active
+    // membership there and the same tasks.manage permission that enabled the
+    // task action in the client. Legacy profiles.role is intentionally ignored:
+    // it is not a tenant-scoped authorization source.
+    const { data: membership, error: membershipErr } = await adminProbe
+      .from("company_memberships")
+      .select("role")
+      .eq("company_id", companyId)
+      .eq("profile_id", callerUser.user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (membershipErr) {
+      console.error("[notify-email] company_memberships lookup failed", membershipErr);
+      return json(req, { error: "Could not verify sender." }, 500);
+    }
+    if (!membership) return json(req, { error: "Not authorized." }, 403);
+
+    let permissionRows: Array<{ permission_key: string | null; effect: string | null }> = [];
+    if (!canSendCompanyNotificationEmail({ membershipRole: membership.role })) {
+      const { data: assignments, error: assignmentErr } = await adminProbe
+        .from("user_role_assignments")
+        .select("role_id")
+        .eq("company_id", companyId)
+        .eq("profile_id", callerUser.user.id);
+      if (assignmentErr) {
+        console.error("[notify-email] role assignment lookup failed", assignmentErr);
+        return json(req, { error: "Could not verify sender." }, 500);
+      }
+
+      const roleIds = [...new Set((assignments ?? [])
+        .map((row: { role_id: string | null }) => row.role_id)
+        .filter((id: string | null): id is string => Boolean(id)))];
+      if (roleIds.length > 0) {
+        const { data: permissions, error: permissionErr } = await adminProbe
+          .from("role_permissions")
+          .select("permission_key,effect")
+          .in("role_id", roleIds)
+          .in("permission_key", ["*", NOTIFICATION_EMAIL_PERMISSION]);
+        if (permissionErr) {
+          console.error("[notify-email] role permission lookup failed", permissionErr);
+          return json(req, { error: "Could not verify sender." }, 500);
+        }
+        permissionRows = permissions ?? [];
+      }
+    }
+    if (!canSendCompanyNotificationEmail({
+      membershipRole: membership.role,
+      permissionRows,
+    })) {
+      return json(req, { error: "Not authorized." }, 403);
     }
 
     // ---- input validation -----------------------------------------------
@@ -216,14 +243,13 @@ Deno.serve(async (req: Request) => {
     // ---- allowlist intersection -----------------------------------------
     // Reuse the admin client created for the caller-role check above.
     //
-    // TENANT SCOPING (Command Center port): upstream read the FULL team_members
-    // table with the service-role client, which bypasses RLS — so a manager of
-    // one workspace could email another workspace's staff. The recipient pool is
-    // now restricted to members of the caller's own active companies.
+    // The service-role client bypasses RLS, so repeat the exact company boundary
+    // from the authorization check rather than reading every company the caller
+    // happens to belong to.
     const { data: members, error: memberErr } = await adminProbe
       .from("team_members")
       .select("email, company_ids")
-      .overlaps("company_ids", callerCompanyIds);
+      .contains("company_ids", [companyId]);
     if (memberErr) {
       // Don't leak the underlying Postgres error to the public — log instead.
       console.error("[notify-email] team_members lookup failed", memberErr);
@@ -237,6 +263,30 @@ Deno.serve(async (req: Request) => {
     const to = [...new Set(requested.filter((e) => allowed.has(e)))].slice(0, MAX_RECIPIENTS);
     if (to.length === 0) {
       return json(req, { error: "No recipients are on the team allowlist." }, 422);
+    }
+
+    // Shared Postgres counter: unlike a module-scope Map, this limit survives
+    // Edge Function cold starts and applies across every running instance. A
+    // failure fails closed because sending mail is a side effect, not a public
+    // read that should remain available during a database incident.
+    const bucket = await notificationEmailRateLimitBucket(callerUser.user.id, companyId);
+    const { data: limitResult, error: limitErr } = await adminProbe.rpc("consume_rate_limit", {
+      p_bucket: bucket,
+      p_limit: NOTIFICATION_EMAIL_RATE_LIMIT,
+      p_window_seconds: NOTIFICATION_EMAIL_RATE_WINDOW_SECONDS,
+    });
+    if (limitErr || typeof limitResult?.allowed !== "boolean") {
+      console.error("[notify-email] durable rate limit failed", limitErr);
+      return json(req, { error: "Email service is temporarily unavailable." }, 503);
+    }
+    if (!limitResult.allowed) {
+      const retryAfter = Math.max(1, Number(limitResult.retry_after_seconds) || 1);
+      return json(
+        req,
+        { error: "Too many email notifications. Please try again later." },
+        429,
+        { "Retry-After": String(retryAfter) },
+      );
     }
 
     // ---- send -----------------------------------------------------------

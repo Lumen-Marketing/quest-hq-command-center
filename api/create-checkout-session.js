@@ -5,7 +5,7 @@ import { getUserFromBearer } from './_lib/user-auth.js';
 
 const env = (key) => process.env[key] || '';
 
-const BILLING_ROLES = ['owner', 'admin', 'developer', 'construction_supervisor'];
+const BILLING_ROLES = ['owner', 'admin', 'developer'];
 
 export function checkoutIdempotencyKey({ companyId, userId, priceId, requestId }) {
   return crypto.createHash('sha256').update(`${companyId}:${userId}:${priceId}:${requestId}`).digest('hex');

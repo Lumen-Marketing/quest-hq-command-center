@@ -1,8 +1,18 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-09-02T19:43:05.883839Z.
+The full machine-readable Supabase catalog was refreshed through 2026-09-03T18:03:13.925881Z.
 The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## 2026-09-04 profile and notification boundary hardening
+
+Migration `20260903175607_tighten_profile_and_notification_boundaries.sql` is live. Company
+access remains in `company_memberships` and company-scoped RPCs: authenticated users may update
+only their own profile and cannot change its legacy access fields, delete profiles, or truncate
+the table. Notification inserts retain modern company/profile rows and the vendored Tasks legacy
+shape, but every cross-recipient task notification is now tied to its creator, task company, and
+an active recipient in that company. Legacy self-notifications cannot be redirected into another
+profile's inbox through UPDATE.
 
 ## 2026-09-03 foreign-key and policy advisor cleanup
 
@@ -62,12 +72,12 @@ reconciliation.
 
 - Public tables/views: 99
 - Foreign-key column relationships: 252
-- RLS policies: 313
+- RLS policies: 312
 - Public functions: 82
 - Triggers: 105
 - Storage buckets: 6
-- Applied migration ledger entries: 174
-- Latest live ledger entry: `20260902194132_split_manage_policies_by_command`
+- Applied migration ledger entries: 175
+- Latest live ledger entry: `20260903180057_tighten_profile_and_notification_boundaries`
 
 ## Operational-workspace identity
 

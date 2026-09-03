@@ -59,8 +59,8 @@ test('an active member is resolved with a lowercased email and isAdmin false', a
   assert.deepEqual(result, { profileId: 'profile-1', email: 'rep@quest.com', isAdmin: false });
 });
 
-test('an owner, admin, developer, or construction supervisor is an admin', async () => {
-  for (const role of ['owner', 'admin', 'developer', 'construction_supervisor']) {
+test('only owner, admin, or developer membership is an admin', async () => {
+  for (const role of ['owner', 'admin', 'developer']) {
     const fetchImpl = async (url) => {
       if (String(url).includes('/auth/v1/user')) return jsonResponse({ id: 'profile-1', email: 'boss@quest.com' });
       return jsonResponse([{ role, status: 'active' }]);
@@ -68,6 +68,15 @@ test('an owner, admin, developer, or construction supervisor is an admin', async
     const result = await resolveCompanyAdmin(requestWithToken('good'), { ...SUPABASE, companyId: 'quest', fetchImpl });
     assert.equal(result.isAdmin, true, `${role} should be an admin`);
   }
+});
+
+test('construction supervisor membership does not grant presence admin access', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes('/auth/v1/user')) return jsonResponse({ id: 'profile-1', email: 'foreman@quest.com' });
+    return jsonResponse([{ role: 'construction_supervisor', status: 'active' }]);
+  };
+  const result = await resolveCompanyAdmin(requestWithToken('good'), { ...SUPABASE, companyId: 'quest', fetchImpl });
+  assert.equal(result.isAdmin, false);
 });
 
 test('a disabled membership does not authorize the caller', async () => {

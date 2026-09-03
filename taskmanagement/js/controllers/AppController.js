@@ -1771,7 +1771,7 @@ App.AppController = class AppController {
           html: `<strong>${App.utils.escapeHtml(creatorName)}</strong> reassigned <em>${titleEsc}</em> to you`,
         }],
         person.email ? [person.email] : [],
-        { subject: `Quest HQ — ${task.title}`, html: this._emailBody(`<strong>${App.utils.escapeHtml(creatorName)}</strong> reassigned <strong>${titleEsc}</strong> to you.`, task) }
+        { companyId: task.company, subject: `Quest HQ — ${task.title}`, html: this._emailBody(`<strong>${App.utils.escapeHtml(creatorName)}</strong> reassigned <strong>${titleEsc}</strong> to you.`, task) }
       );
       this.toastView.show({
         title: `Reassigned to ${person.name}`,
@@ -1841,6 +1841,7 @@ App.AppController = class AppController {
     const saved = this.saveNow ? await this.saveNow() : true;
     if (saved && added.length) {
       this._deliver(inapp, emails, {
+        companyId: task.company,
         subject: `Quest HQ — ${task.title}`,
         html: this._emailBody(`<strong>${App.utils.escapeHtml(creatorName)}</strong> assigned <strong>${titleEsc}</strong> to ${App.utils.escapeHtml(names)}.`, task),
       });
@@ -1894,7 +1895,7 @@ App.AppController = class AppController {
           html: `<strong>${App.utils.escapeHtml(fromName)}</strong> is stuck on <em>${titleEsc}</em> — waiting on you: “${App.utils.escapeHtml(cleanReason)}”`,
         }],
         person.email ? [person.email] : [],
-        { subject: `Quest HQ — you're blocking ${task.title}`, html: this._emailBody(`<strong>${App.utils.escapeHtml(fromName)}</strong> flagged <strong>${titleEsc}</strong> as stuck, blocked on you:<br/>“${App.utils.escapeHtml(cleanReason)}”`, task) }
+        { companyId: task.company, subject: `Quest HQ — you're blocking ${task.title}`, html: this._emailBody(`<strong>${App.utils.escapeHtml(fromName)}</strong> flagged <strong>${titleEsc}</strong> as stuck, blocked on you:<br/>“${App.utils.escapeHtml(cleanReason)}”`, task) }
       );
     }
     if (this.toastView) {
@@ -1965,6 +1966,7 @@ App.AppController = class AppController {
     const saved = this.saveNow ? await this.saveNow() : true;
     if (saved) {
       this._deliver(inapp, emails, {
+        companyId: task.company,
         subject: `Quest HQ — reminder: ${task.title}`,
         html: this._emailBody(`<strong>${App.utils.escapeHtml(fromName)}</strong> sent a reminder about <strong>${titleEsc}</strong>.`, task),
       });
@@ -2012,7 +2014,7 @@ App.AppController = class AppController {
           html: `<strong>${App.utils.escapeHtml(fromName)}</strong> asked for your help on <em>${titleEsc}</em>`,
         }],
         person.email ? [person.email] : [],
-        { subject: `Quest HQ — help requested: ${task.title}`, html: this._emailBody(`<strong>${App.utils.escapeHtml(fromName)}</strong> requested your help on <strong>${titleEsc}</strong>.`, task) }
+        { companyId: task.company, subject: `Quest HQ — help requested: ${task.title}`, html: this._emailBody(`<strong>${App.utils.escapeHtml(fromName)}</strong> requested your help on <strong>${titleEsc}</strong>.`, task) }
       );
     }
     if (this.toastView) {
@@ -2048,7 +2050,7 @@ App.AppController = class AppController {
       // (expected, silent); a real failure tells the user the in-app notice
       // still went through so they know the assignee was reached.
       try {
-        const res = await this.dataStore.sendEmail({ to: unique, subject: emailContent.subject, html: emailContent.html });
+        const res = await this.dataStore.sendEmail({ companyId: emailContent.companyId, to: unique, subject: emailContent.subject, html: emailContent.html });
         if (res && res.ok === false && !res.skipped) {
           console.warn('[notify] email delivery failed:', res.error);
           if (this.toastView) {
@@ -2221,6 +2223,7 @@ App.AppController = class AppController {
 
     if (saved) {
       this._deliver(inapp, emails, {
+        companyId: task.company,
         subject: `Quest HQ — ${task.title}`,
         html: this._emailBody(`<strong>${App.utils.escapeHtml(creatorName)}</strong> created the task <strong>${titleEsc}</strong> (assigned to ${App.utils.escapeHtml(assigneeNames)}).`, task),
       });

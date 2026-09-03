@@ -11999,13 +11999,6 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "managers delete profiles",
-   "roles": "{authenticated}",
-   "table": "profiles",
-   "command": "DELETE",
-   "permissive": "PERMISSIVE"
-  },
-  {
    "name": "profiles readable to self, company peers and platform",
    "roles": "{authenticated}",
    "table": "profiles",
@@ -12013,7 +12006,7 @@
    "permissive": "PERMISSIVE"
   },
   {
-   "name": "profiles update own or managed",
+   "name": "profiles update own",
    "roles": "{authenticated}",
    "table": "profiles",
    "command": "UPDATE",
@@ -15037,9 +15030,13 @@
   {
    "name": "split_manage_policies_by_command",
    "version": "20260902194132"
+  },
+  {
+   "name": "tighten_profile_and_notification_boundaries",
+   "version": "20260903180057"
   }
  ],
- "captured_at": "2026-09-02T19:43:05.883839+00:00",
+ "captured_at": "2026-09-03T18:03:13.925881+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",

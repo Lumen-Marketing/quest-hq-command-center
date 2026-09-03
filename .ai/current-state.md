@@ -1,6 +1,20 @@
 # Current state
 
-Captured through 2026-09-03T03:43:05.883839+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+
+## 2026-09-04 focused security and reliability pass
+
+- Production migration `20260903175607_tighten_profile_and_notification_boundaries.sql` makes
+  profile updates self-only, keeps legacy access fields immutable, removes browser profile
+  deletion/truncation, and replaces the notification role bypasses with company/member checks.
+- Task notification email now carries one explicit company, checks that company's active
+  membership and `tasks.manage` permission, restricts recipients to that company, and uses the
+  shared Postgres rate limiter. The legacy account-wide profile role is no longer an email gate.
+- `construction_supervisor` no longer inherits billing or RingCentral presence administration.
+- Task conflict recovery now reapplies only fields changed locally, preserving unrelated changes
+  saved by another user. When both users change the same field, the current editor's value wins.
+- Automation save/delete state changes only after Supabase confirms the write, so a refused write
+  cannot leave a rule that appears saved or deleted only in the current browser tab.
 
 ## 2026-09-03 completion pass
 
