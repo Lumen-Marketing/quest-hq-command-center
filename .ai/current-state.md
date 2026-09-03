@@ -25,6 +25,61 @@ Captured through 2026-09-03T03:43:05.883839+08:00. This is a point-in-time opera
   helpers now have an empty search path. Live verification preserved all owners, grants and three
   trigger bindings, and the three callable chat helpers passed direct probes.
 
+## 2026-09-03 Shift and ctrl while pointing at cells, as Excel has them
+
+- **Pointing at cells to build a formula now takes the two modifiers.** Plain click replaces the
+  reference just written (which is what stops `=A1B2`), **shift** stretches it into a range from
+  where it started, and **ctrl / cmd** leaves it alone and starts another beside it -- `=SUM(A1,C3)`.
+  Dragging already made a range; there was no way to make one without dragging, and no way to
+  name two separate cells at all.
+- **`separateReference(text, caret)`** in `src/sheet/formula-assist.js` is the whole new idea, and
+  it is pure like the rest of that module: it puts the argument separator in after a reference the
+  caret is sitting on, and refuses everywhere else. A comma with nothing before it is a broken
+  formula, so ctrl-clicking on open ground falls back to being the ordinary click it otherwise is.
+- **The anchor had to outlive the drag.** `picking` is nulled on mouseup, so shift and ctrl -- which
+  arrive on a later, separate click -- had nothing to extend from. A second piece of state,
+  `picked`, holds the last reference written and is given up when the person types, because typing
+  moves the caret off it. Our own writes set `.value` directly and do not fire `input`.
+- **The highlight became a list** (`pickBoxes`). One box could only ever light the last reference,
+  and after a ctrl-click the formula names two -- showing one would misreport what is about to be
+  committed.
+- **`=LOG10` is column LOG, row 10, and that is not a bug.** It reads as a reference until a `(`
+  says otherwise, which is the call `referenceSlotAt` was already making; a test now says so out
+  loud, because it looks exactly like the function name and the next person to read it will wonder.
+
+## 2026-09-03 A GAF Calculator app, beside the tile one
+
+- **`docs/apps/GAF Calculator.questapp.json`** -- 103 fields, 39 calculations, 23 priced lines. An
+  asphalt-shingle takeoff: the GAF report measurements in at the top, and labor, materials with
+  tax, price to client, profit and margin out at the bottom.
+- **A sister to `Underwriting Calculator`, not a replacement.** That one prices tile, and the note
+  written when it shipped still holds -- the tile sheet prices nothing like a shingle tear-off. The
+  two read the same GAF report, so the eight shared measurements are named identically and a test
+  pins that they stay that way.
+- **It asks for Hips, which the tile sheet never had to.** Cap shingle is bought by the linear foot
+  of ridges AND hips; priced off ridges alone every hip roof is short of cap. Predominant pitch is
+  carried too -- it is the reason the waste number is what it is, and a takeoff that cannot say
+  which roof it priced is hard to check a year later.
+- **The material lines are the GAF system by name** -- Timberline HDZ, Seal-A-Ridge, Pro-Start,
+  FeltBuster, WeatherWatch, Cobra, Deck-Armor -- because that is what goes on the order, and a line
+  called "shingles" does not tell a supplier anything.
+- **No prices ship with it.** Every line is a quantity, a price and a total, all editable; these
+  are the lines a re-roof usually has, not the prices any company charges.
+- **Quantities are typed, not derived**, and that is a property of the format rather than a
+  shortcut. A calculation's answer is never written to `values`, so it cannot feed a stored number
+  -- there is no way for "Total SQ + waste" to fill a qty box. Each qty field carries the
+  arithmetic in its `placeholder` instead (`{Total SQ + waste} x 3 bundles per square`), which is
+  the same convention the tile calculator settled on.
+- **Every roll-up is flattened for the same reason.** "Labor total" re-expands all seven
+  `qty * price` pairs rather than adding the seven line totals, because a formula referencing
+  another calculation silently reads 0. The roll-ups were expanded mechanically rather than typed
+  out: unrolling 23 lines by hand is how a dropped term ships looking correct, and the worked
+  example below is what stops one surviving.
+- **Tested as a whole job, not as formula text.** `tests/app-bundles.test.mjs` prices a 30-square
+  re-roof at 10% waste and 7% tax and pins labor 6,410, material 6,786.25, with tax 7,261.29, cost
+  13,671.29, client 25,160, profit 11,488.71, margin 45.66% -- a dropped or doubled line in a
+  roll-up is invisible in the JSON and changes exactly these numbers.
+
 ## 2026-09-02 Calculations under a list, and formulas by pointing
 
 - **A calculation table sits under every App Builder record list** (`src/workspace/summary.js`,
@@ -59,6 +114,36 @@ Captured through 2026-09-03T03:43:05.883839+08:00. This is a point-in-time opera
   name via `app.summaryCols` -- the calculation table asks a different question from the list
   above it, so a column the list calls "Allowance" may be "Paid this month" once it is being
   totalled. Renaming a heading there never touches the field or the list's own column.
+- **The card is shut until it is asked for (`ui.sumShown`, default false).** The calculations are
+  a footnote to the list, not the reason anybody opened it, and a card of pickers and totals
+  sitting open under every list is a permanent interruption between the records and the bottom of
+  the page. Collapsed it keeps its heading and record count -- a collapsed card with no name is a
+  mystery drawer -- and the whole heading row is the button. Deliberately not remembered across a
+  refresh: a card that remembers being open is a card that quietly stops being hidden. Shutting it
+  clears `ui.sumOpen` too, so reopening never finds a half-finished cell editor waiting.
+  **Printing is unaffected**: collapsing is a screen decision, and a total left off a printout
+  because a card was folded away would be a number that quietly went missing.
+- **A column asked nothing shows nothing, and is set up in a row that spans the card.** An unset
+  cell collapses to a full-width click target, invisible until the cell is pointed at: fifteen
+  columns meant fifteen dropdowns, which read as fifteen unanswered questions and made a row of
+  answers look like a form to fill in. Clicking (or tabbing to) it opens `wb-sum-editor`, a
+  `colspan` row under the line holding the picker, the value box and the name box, named for the
+  column it edits -- a picker squeezed into a 132px column is a control you have to aim at, and
+  what it asks is a sentence. The open cell goes quiet while its editor is up, so one thing is
+  never changeable in two places at once. A reader gets neither.
+- **Which cell is open is view state (`ui.sumOpen`), not a class on a node.** Choosing a function
+  saves and re-renders, so a DOM toggle would be wiped by the very action the editor exists to
+  carry out, closing itself before the value or the name could be typed. It is deliberately not
+  in `wbRememberItemsUI`: a question being asked is not an answer given, and it should not
+  survive a refresh.
+- **A cell can hold typed words instead of an answer.** "Custom text…" is offered on every
+  column, takes a word rather than reading the rows, and prints those words where the answer
+  would go -- so a totals line can say "TOTAL DUE" under NAME, in the column the reader is
+  already looking at, beside the figures it belongs to. It carries no caption (the words are
+  their own caption) and no name box (naming them would ask for the same thing twice), reads
+  from the left rather than the right, and blank shows nothing rather than a dash. Changing any
+  choice clears the word typed for the previous one: two choices take a word now, and a count-if
+  value inherited into a label reads as deliberate.
 - **A line nobody named prints blank.** "Line N" survives only as the greyed placeholder in the
   manager's box, where it names the position without putting it on the page: printing it would
   hand the reader a word nobody chose that says nothing about what the row totals.
