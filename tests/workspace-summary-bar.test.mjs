@@ -35,7 +35,9 @@ const ROWS = [
 const line = (calc, over = {}) => ({ id: 'line-1', label: '', calc, ...over });
 const appWith = (...lines) => ({ name: 'calc', fields: FIELDS, summaryRows: lines });
 
-const ALL = { sel: new Set() };
+// The card is shut until asked for, so every test about what is INSIDE it opens it first.
+// Collapsing is covered on its own below.
+const ALL = { sel: new Set(), sumShown: true };
 
 // ---- what a column's values mean ---------------------------------------------------------------
 
@@ -70,7 +72,7 @@ test('a column asked nothing is an empty cell', () => {
 
 test('ticking records narrows every line to those records', () => {
   const app = appWith(line({ amt: { fn: 'sum' } }));
-  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set(['r1']) }, false);
+  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set(['r1']), sumShown: true }, false);
   assert.match(html, />3000</, 'only the ticked allowance');
   assert.match(html, /1 selected record</);
 });
@@ -97,7 +99,7 @@ test('more than one line, so a column can be asked two things', () => {
 
 test('a manager always gets a line to start in; a reader is shown only finished ones', () => {
   const empty = appWith();
-  assert.match(bar.summaryBar('co', {}, empty, ROWS, ALL, true), /data-wb-sum-fn/, 'a line to choose in');
+  assert.match(bar.summaryBar('co', {}, empty, ROWS, ALL, true), /data-wb-sum-open/, 'a line to choose in');
   assert.equal(bar.summaryBar('co', {}, empty, ROWS, ALL, false), '', 'and nothing published until it says something');
 });
 
@@ -371,4 +373,198 @@ test('the print stylesheet only strips the border from a paired row', () => {
   assert.ok(!io.includes('.wb-sum-print-row td, .wb-sum-print-row th { border-bottom:none'),
     'the unscoped rule is gone, not merely overridden');
   assert.ok(io.includes('.wb-sum-print-table caption'), 'and the name is styled for paper');
+});
+
+// ---- words in a cell instead of an answer ------------------------------------------------------
+
+test('a custom-text cell takes typed words and does not ask for a name as well', () => {
+  const app = appWith(line({ who: { fn: 'text', value: 'TOTAL DUE' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, true);
+  assert.match(html, /placeholder="Text to show"/, 'a box to type the words in');
+  assert.match(html, />TOTAL DUE</, 'and the words are what the cell shows');
+  // The name box names the caption under a number. Typed words ARE the cell, so naming them
+  // would be asking for the same thing twice.
+  assert.doesNotMatch(html, /wb-sum-field-edit/);
+  assert.match(html, /wb-sum-value-text/, 'and they are not set as a figure');
+});
+
+test('custom text is typed even in a column that has its own options', () => {
+  // "Count if" is asked in the column's own words, so a category offers its options. The words a
+  // label wants -- TOTAL DUE -- are nothing the column has ever contained.
+  const counting = bar.summaryBar('co', {}, appWith(line({ sex: { fn: 'countIf' } })), ROWS, ALL, true);
+  assert.match(counting, /<option value="Male"/, 'count if offers the options');
+  const labelling = bar.summaryBar('co', {}, appWith(line({ sex: { fn: 'text' } })), ROWS, ALL, true);
+  assert.doesNotMatch(labelling, /<option value="Male"/);
+  assert.match(labelling, /placeholder="Text to show"/);
+});
+
+test('custom text that was never typed shows nothing, not a dash', () => {
+  // A dash means the rows had no answer to give. Words nobody typed were never asked of them.
+  const html = bar.summaryBar('co', {}, appWith(line({ who: { fn: 'text', value: '' } })), ROWS, ALL, false);
+  assert.doesNotMatch(html, /—/);
+});
+
+test('a line that only says words still counts as a line worth printing', () => {
+  assert.equal(lineIsEmpty({ calc: { who: { fn: 'text', value: 'TOTAL' } } }), false);
+  const app = appWith(line({ who: { fn: 'text', value: 'TOTAL DUE' }, amt: { fn: 'sum' } }));
+  const html = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL);
+  assert.match(html, /<td class="wb-sum-print-text">TOTAL DUE<\/td>/, 'words read from the left');
+  assert.match(html, /<td class="wb-sum-print-num">4000<\/td>/, 'figures still to the right');
+});
+
+test('typed words are escaped wherever they are shown', () => {
+  // They are the one thing in this table a person types that ends up rendered as-is.
+  const real = createSummaryBar({
+    h: (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+    wbPlainVal: plain,
+  });
+  const app = appWith(line({ who: { fn: 'text', value: '<img src=x onerror=alert(1)>' } }));
+  for (const html of [
+    real.summaryBar('co', {}, app, ROWS, ALL, false),
+    real.summaryBar('co', {}, app, ROWS, ALL, true),
+    real.summaryPrintTable('co', {}, app, FIELDS, ROWS, ALL),
+  ]) assert.doesNotMatch(html, /<img/);
+});
+
+test('changing the choice clears the word typed for the old one', () => {
+  // Two choices take a word now, so "Male" typed for a count-if must not survive into a label.
+  const block = main.slice(main.indexOf("bind('[data-wb-sum-fn]'"));
+  assert.match(block.slice(0, 600), /entry\.value = '';/);
+  assert.doesNotMatch(block.slice(0, 600), /!== 'countIf'/);
+});
+
+// ---- an unasked column keeps quiet ------------------------------------------------------------
+
+test('a column asked nothing is a way in, and nothing else', () => {
+  // Fifteen columns meant fifteen dropdowns, which read as fifteen unanswered questions. The
+  // picker is not hidden in the cell, it is not in the cell: it belongs to the editor now.
+  const html = bar.summaryBar('co', {}, appWith(line({ amt: { fn: 'sum' } })), ROWS, ALL, true);
+  const cells = html.split('<td class="wb-sum-cell');
+
+  const asked = cells.find((cell) => cell.startsWith(' on"'));
+  assert.ok(asked, 'the summed column is marked as answered');
+  assert.doesNotMatch(asked, /wb-sum-open/, 'an answered cell needs no way in -- it kept its controls');
+  assert.match(asked, /data-wb-sum-fn/);
+
+  const unasked = cells.filter((cell) => cell.startsWith('">'));
+  assert.equal(unasked.length, 2, 'the other two columns were asked nothing');
+  for (const cell of unasked) {
+    assert.doesNotMatch(cell, /<select/, 'no picker to squeeze into the column');
+    // Reachable without a mouse, and it says what it opens rather than "button".
+    assert.match(cell, /aria-label="Add a calculation for /);
+    assert.match(cell, /data-wb-sum-open="line-1::/, 'and it names the cell it opens');
+  }
+});
+
+test('a reader gets neither the picker nor the way in', () => {
+  const html = bar.summaryBar('co', {}, appWith(line({ amt: { fn: 'sum' } })), ROWS, ALL, false);
+  assert.doesNotMatch(html, /wb-sum-open/);
+  assert.doesNotMatch(html, /wb-sum-fn/);
+});
+
+test('opening an editor is view state, not a class on a node', () => {
+  // Choosing a function saves and re-renders. A DOM toggle would be wiped by the very action the
+  // editor exists to carry out, closing itself before the value or the name could be typed.
+  const block = main.slice(main.indexOf('const openSummaryEditor'));
+  const handler = block.slice(0, block.indexOf("bind('[data-wb-sum-val]"));
+  assert.match(handler, /ui\.sumOpen = key;/);
+  assert.match(handler, /render\(\);/);
+  assert.match(handler, /\.wb-sum-editor \.wb-sum-fn'\)\?\.focus\(\)/, 'the cursor starts in it');
+  assert.match(handler, /data-wb-sum-close\]', \(\) => openSummaryEditor\(''\)/, 'and Done closes it');
+  // Not carried across a refresh: it is a question being asked, not an answer given.
+  assert.doesNotMatch(main.slice(main.indexOf('function wbRememberItemsUI'), main.indexOf('function wbRememberItemsUI') + 400), /sumOpen/);
+});
+
+// ---- the editor that spans the card ------------------------------------------------------------
+
+const openAt = (key) => ({ sel: new Set(), sumShown: true, sumOpen: key });
+
+test('the open cell hands its controls to a row spanning every column', () => {
+  const html = bar.summaryBar('co', {}, appWith(line({})), ROWS, openAt('line-1::who'), true);
+  // One cell per field plus the line-name head: the editor has to reach across all of them.
+  assert.match(html, /<td class="wb-sum-editor" colspan="4">/);
+  assert.match(html, /wb-sum-editor-for">Name</, 'and it says which column it is for');
+  assert.match(html, /data-wb-sum-fn="who"/, 'the picker moved into it');
+  assert.match(html, /data-wb-sum-close/, 'with a way out');
+  // Not in both places at once: two ways to change one thing, side by side.
+  assert.equal((html.match(/data-wb-sum-fn="who"/g) || []).length, 1);
+  assert.match(html, /<td class="wb-sum-cell wb-sum-cell-editing">/, 'and the cell itself went quiet');
+});
+
+test('the editor keeps up as the calculation is filled in', () => {
+  // The point of surviving the re-render: pick Custom text and the box to type it in is there,
+  // on the same line, rather than back in the 132px column.
+  const app = appWith(line({ who: { fn: 'text', value: 'TOTAL DUE' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, openAt('line-1::who'), true);
+  const editor = html.slice(html.indexOf('wb-sum-editor"'));
+  assert.match(editor, /placeholder="Text to show"/);
+  assert.match(editor, /value="TOTAL DUE"/);
+  assert.doesNotMatch(editor, /wb-sum-field-edit/, 'and typed words still ask for no name');
+});
+
+test('one editor at a time, and never on a cell that is not there', () => {
+  const app = appWith(line({}), line({}, { id: 'line-2' }));
+  const html = bar.summaryBar('co', {}, app, ROWS, openAt('line-2::amt'), true);
+  assert.equal((html.match(/wb-sum-editor"/g) || []).length, 1, 'only the line that was opened');
+  assert.match(html, /wb-sum-editor-for">Allowance</);
+  // A key naming a field that has since been deleted opens nothing rather than throwing.
+  const stale = bar.summaryBar('co', {}, app, ROWS, openAt('line-1::gone'), true);
+  assert.doesNotMatch(stale, /wb-sum-editor"/);
+});
+
+test('a reader never gets an editor, whatever the view state says', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, openAt('line-1::amt'), false);
+  assert.doesNotMatch(html, /wb-sum-editor/);
+  assert.match(html, />4000</, 'just the answer');
+});
+
+// ---- shut until asked for ----------------------------------------------------------------------
+
+test('the card is shut on arrival, and says what is behind it', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, true);
+  assert.match(html, /wb-sum-shut/);
+  assert.match(html, /aria-expanded="false"/);
+  // A collapsed card with no name is a mystery drawer, and the count is the reason to open it.
+  assert.match(html, /Calculations/, 'the heading stays');
+  assert.match(html, /2 records/);
+  // Nothing of the table itself, for a manager or a reader.
+  assert.doesNotMatch(html, /wb-sum-table/);
+  assert.doesNotMatch(html, /data-wb-sum-add/);
+  assert.doesNotMatch(html, />4000</);
+  assert.doesNotMatch(bar.summaryBar('co', {}, app, ROWS, { sel: new Set() }, false), /wb-sum-table/);
+});
+
+test('opening it gives the table back, with a way to shut it again', () => {
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const html = bar.summaryBar('co', {}, app, ROWS, ALL, true);
+  assert.doesNotMatch(html, /wb-sum-shut/);
+  assert.match(html, /wb-sum-table/);
+  assert.match(html, />4000</);
+  assert.match(html, /data-wb-sum-toggle[^>]*aria-expanded="true"/);
+  // The name is still editable once open; collapsed it was only a label.
+  assert.match(html, /data-wb-sum-title/);
+});
+
+test('a shut card still prints, because printing is not looking at the screen', () => {
+  // The tick that hides labels is a print decision. Collapsing is a screen one, and a total left
+  // off a printout because a card was folded away would be a number that quietly went missing.
+  const app = appWith(line({ amt: { fn: 'sum' } }));
+  const printed = bar.summaryPrintTable('co', {}, app, FIELDS, ROWS, { sel: new Set() });
+  assert.match(printed, /4000/);
+});
+
+test('shutting the card puts away the cell editor with it', () => {
+  const block = main.slice(main.indexOf("bind('[data-wb-sum-toggle]'"));
+  const handler = block.slice(0, block.indexOf("bind('", 1));
+  assert.match(handler, /ui\.sumShown = !ui\.sumShown;/);
+  assert.match(handler, /if \(!ui\.sumShown\) ui\.sumOpen = '';/);
+});
+
+test('being open is not remembered across a refresh', () => {
+  // A card that remembers being open is a card that quietly stops being hidden.
+  const remember = main.slice(main.indexOf('function wbRememberItemsUI'));
+  assert.doesNotMatch(remember.slice(0, 400), /sumShown/);
+  assert.match(main, /sumShown: false,/, 'and it starts shut');
 });

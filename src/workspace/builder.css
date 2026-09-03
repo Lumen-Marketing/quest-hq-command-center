@@ -1493,13 +1493,72 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
    not look like fifteen results. */
 .wb-sum-cell.on { background: color-mix(in srgb, var(--orange, #e0552d) 6%, transparent); }
 .wb-sum-value { display: block; font-size: 1.02rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+/* Typed words are not a figure: no tabular figures to line them up by, and they wrap inside the
+   cell rather than widening a column the data table above has to match. */
+.wb-sum-value-text { font-size: .92rem; font-variant-numeric: normal; overflow-wrap: anywhere; }
 .wb-sum-fn, .wb-sum-val {
   font: inherit; font-size: .74rem; padding: 3px 6px; border-radius: 6px; margin-top: 4px;
   border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0);
   width: 100%; max-width: 168px;
 }
 .wb-sum-static { display: block; font-size: .72rem; font-weight: 700; color: var(--muted, #7a6a55); }
+/* A column asked nothing collapses to a click target. Invisible until the cell is pointed at or
+   the button is tabbed to, so the table reads as the answers it has rather than the questions it
+   has not been asked -- but a full-width one, so finding it is not a game of hunt the pixel. */
+.wb-sum-open {
+  width: 100%; min-height: 26px; padding: 2px; line-height: 1; cursor: pointer;
+  border: 1px dashed transparent; border-radius: 6px; background: none; color: transparent;
+}
+.wb-sum-cell:hover .wb-sum-open { border-color: var(--border, #e2d5bf); color: var(--muted, #7a6a55); }
+.wb-sum-open:focus {
+  border-style: solid; border-color: var(--orange, #e0552d);
+  color: var(--muted, #7a6a55); outline: none;
+}
+/* Open, the way in is the way back out: the plus takes a quarter turn into a cross and stops
+   hiding, because a control being used should not need hovering to be seen. */
+.wb-sum-open[aria-expanded="true"] {
+  color: var(--orange, #e0552d); border-style: solid; border-color: var(--orange, #e0552d);
+}
+.wb-sum-open[aria-expanded="true"] i { display: inline-block; transform: rotate(45deg); }
+
+/* The editor for one cell, spanning the card. A picker squeezed into a 132px column is a control
+   you have to aim at, and what it asks -- which calculation, counting what, called what -- is a
+   sentence. A sentence wants a line, so it gets the whole width and says which column it is for,
+   because spanning the card costs it the one thing a cell had for free: position. */
+.wb-sum-cell-editing { background: color-mix(in srgb, var(--orange, #e0552d) 10%, transparent); }
+.wb-sum-editor { padding: 0 !important; }
+.wb-sum-editor-in {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px;
+  background: color-mix(in srgb, var(--orange, #e0552d) 6%, transparent);
+}
+.wb-sum-editor-for {
+  font-size: .72rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted, #7a6a55);
+}
+.wb-sum-editor-in .wb-sum-fn, .wb-sum-editor-in .wb-sum-val, .wb-sum-editor-in .wb-sum-field-edit {
+  margin-top: 0; width: auto; min-width: 156px; max-width: 240px;
+}
+/* The name box reads as a label in a cell, where the number above it says what it belongs to.
+   On a line of its own it needs an edge, or it looks like text nobody can type in. */
+.wb-sum-editor-in .wb-sum-field-edit { border-color: var(--border, #e2d5bf); }
+.wb-sum-editor-done { margin-left: auto; }
 .wb-sum-add { margin-top: 10px; }
+
+/* Shut until asked for: a card of pickers and totals sitting open under every list is a
+   permanent interruption between the records and the bottom of the page. Collapsed, the whole
+   heading is the button -- there is nothing else on the row to click, and a chevron alone is a
+   small target for something this easy to want. */
+.wb-sum-shut { padding: 0; }
+.wb-sum-toggle {
+  font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
+  display: flex; align-items: center; gap: 8px; border-radius: 10px;
+}
+.wb-sum-shut .wb-sum-toggle { width: 100%; padding: 12px 14px; text-align: left; }
+.wb-sum-shut .wb-sum-toggle:hover { background: color-mix(in srgb, var(--orange, #e0552d) 5%, transparent); }
+.wb-sum-toggle:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
+.wb-sum-toggle i { color: var(--muted, #7a6a55); }
+/* Open, it is one control among several on the heading row, so it keeps to its own icon. */
+.wb-sum-toggle-open { padding: 2px; margin-left: -2px; }
 .wb-sum-drop {
   margin-left: auto; border: 0; background: none; cursor: pointer; padding: 2px;
   color: var(--muted, #7a6a55); border-radius: 5px; line-height: 1;
@@ -1535,6 +1594,8 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
 .wb-sum-print-gap td { border: 0; height: 10px; padding: 0; }
 .wb-sum-print-row th, .wb-sum-print-row td { font-weight: 800; }
 .wb-sum-print-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Words read from the left edge; only the figures are pulled to the right one. */
+.wb-sum-print-text { text-align: left; }
 /* What each number is, under it. These are the rows the Hide-when-printing tick removes. */
 .wb-sum-print-labels td {
   font-size: .74rem; color: #555; border-top: 0; padding-top: 0; text-align: right; font-weight: 400;

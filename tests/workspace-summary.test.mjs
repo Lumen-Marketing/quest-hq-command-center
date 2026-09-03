@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  activeSummaries, computeSummary, formatSummary, functionsForType, isNumericType,
-  summaryLabel,
+  activeSummaries, calcNeedsValue, computeSummary, formatSummary, functionsForType, isNumericType,
+  isTextCalc, summaryLabel,
 } from '../src/workspace/summary.js';
 
 // A list answers "which ones". It did not answer "how many, how much, how big on average", so
@@ -124,4 +124,42 @@ test('only the columns actually asked a question appear', () => {
   assert.deepEqual(activeSummaries(fields, summary).map((one) => one.field.id), ['a']);
   assert.deepEqual(activeSummaries(fields, null), [], 'and none at all is fine');
   assert.deepEqual(activeSummaries(fields, {}), []);
+});
+
+// ---- words in a cell instead of an answer ------------------------------------------------------
+
+test('custom text says what was typed, and nothing when nothing was', () => {
+  // It never consults the rows: the answer was typed, so the same words come back from an empty
+  // list as from a full one.
+  assert.equal(computeSummary({ fn: 'text', value: 'TOTAL DUE' }, []), 'TOTAL DUE');
+  assert.equal(computeSummary({ fn: 'text', value: 'TOTAL DUE' }, [1, 2, 3]), 'TOTAL DUE');
+  assert.equal(computeSummary({ fn: 'text', value: '  Paid  ' }, []), 'Paid', 'trimmed');
+  assert.equal(computeSummary({ fn: 'text', value: '   ' }, []), null, 'blank is nothing');
+  assert.equal(computeSummary({ fn: 'text' }, []), null);
+});
+
+test('custom text is offered on every column, including ones that can be summed', () => {
+  for (const type of ['text', 'number', 'category']) {
+    assert.ok(functionsForType(type).some((fn) => fn.id === 'text'), `${type} can carry a label`);
+  }
+});
+
+test('typed words are their own caption', () => {
+  // "Custom text" printed under the words would be a label labelling a label.
+  assert.equal(summaryLabel({ fn: 'text', value: 'TOTAL DUE' }), '');
+  assert.equal(summaryLabel({ fn: 'text', value: '' }), '');
+});
+
+test('the two choices that need a word typed for them say so', () => {
+  assert.equal(calcNeedsValue({ fn: 'countIf' }), true);
+  assert.equal(calcNeedsValue({ fn: 'text' }), true);
+  assert.equal(calcNeedsValue({ fn: 'sum' }), false);
+  assert.equal(calcNeedsValue({ fn: 'none' }), false);
+  assert.equal(calcNeedsValue(undefined), false);
+});
+
+test('only custom text is text', () => {
+  assert.equal(isTextCalc({ fn: 'text' }), true);
+  assert.equal(isTextCalc({ fn: 'countIf' }), false);
+  assert.equal(isTextCalc(undefined), false);
 });

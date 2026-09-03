@@ -16908,7 +16908,9 @@ function wbItemsUI(appId) {
   const saved = wbSavedItemsUI()[appId] || {};
   return (state.wbUI[appId] = {
     q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc',
-    expanded: new Set(), cardConfigOpen: false, boardFieldId: '', boardSumId: '',
+    expanded: new Set(), cardConfigOpen: false, boardFieldId: '', boardSumId: '', sumOpen: '',
+    // Shut on arrival. The calculations are a footnote to the list, not the reason it was opened.
+    sumShown: false,
     // Restored across refreshes. The search box and the row selection deliberately are not:
     // a search you cannot see the text of, or a selection you cannot see the ticks of, would
     // silently hide records.
@@ -20773,11 +20775,40 @@ function mountWorkspaceBuilder() {
       if (!target) return;
       const entry = calcIn(lineById(target, el.dataset.wbSumLine), el.dataset.wbSumFn);
       entry.fn = el.value;
-      // Dropping back to something that takes no value clears the value with it, or the next
-      // "count if" silently inherits a word nobody typed for it.
-      if (el.value !== 'countIf') entry.value = '';
+      // Changing the choice clears the word that was typed for the old one. Two choices take a
+      // word now, and "Male" typed for a count-if is not the label a custom text wants -- an
+      // inherited word nobody typed there reads as deliberate.
+      entry.value = '';
       saveSummary();
     }, 'onchange');
+    // Which cell is being edited lives in the view state, not the DOM. Choosing a function saves
+    // and re-renders, so a class toggled on a node would be wiped by the very action the editor
+    // exists to carry out -- it would close itself mid-sentence, before the value or the name
+    // could be typed. In `ui` rather than saved: it is a question being asked, not an answer
+    // given, and `wbRememberItemsUI` deliberately does not carry it across a refresh.
+    const openSummaryEditor = (key) => {
+      const ui = wbItemsUI(appId);
+      ui.sumOpen = key;
+      render();
+      // After the render, and after syncModalFocus has had its microtask: the point of opening
+      // is to answer the question, so the cursor starts in it rather than one click away.
+      if (key) queueMicrotask(() => document.querySelector('.wb-sum-editor .wb-sum-fn')?.focus());
+    };
+    bind('[data-wb-sum-toggle]', () => {
+      const ui = wbItemsUI(appId);
+      ui.sumShown = !ui.sumShown;
+      // Putting the card away puts away whatever cell was being edited in it. Reopening later to
+      // find a half-finished editor still waiting is a surprise, not a convenience.
+      if (!ui.sumShown) ui.sumOpen = '';
+      render();
+    });
+    bind('[data-wb-sum-open]', (el) => {
+      // The same button both ways: clicking the cell you are already editing puts it away, and
+      // clicking a different one moves the editor rather than stacking a second.
+      const key = el.dataset.wbSumOpen || '';
+      openSummaryEditor(wbItemsUI(appId).sumOpen === key ? '' : key);
+    });
+    bind('[data-wb-sum-close]', () => openSummaryEditor(''));
     bind('[data-wb-sum-val]', (el) => {
       const target = summaryApp();
       if (!target) return;

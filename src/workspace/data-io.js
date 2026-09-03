@@ -88,7 +88,7 @@ export function createDataIO(ctx) {
       .wb-print-table tbody tr:nth-child(even) { background:#fafafa; }
       .wb-sum-print-table { margin-top:18px; }
       .wb-sum-print-table tbody tr:nth-child(even) { background:none; }
-      .wb-sum-print-row th, .wb-sum-print-num { font-weight:700; }
+      .wb-sum-print-row th, .wb-sum-print-num, .wb-sum-print-text { font-weight:700; }
       .wb-sum-print-cap { color:#666; border-top:none !important; }
       .wb-sum-paired td, .wb-sum-paired th { border-bottom:none !important; }
       .wb-sum-print-table caption { text-align:left; font-weight:700; font-size:13px; padding:0 0 6px; }

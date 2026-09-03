@@ -25,6 +25,10 @@ export const SUMMARY_FUNCTIONS = [
   { id: 'empty', label: 'Empty', kind: 'any' },
   { id: 'unique', label: 'Unique values', kind: 'any' },
   { id: 'countIf', label: 'Count if…', kind: 'any', needsValue: true },
+  // Not a calculation at all: words typed once, which then sit in the cell. A totals line
+  // usually wants to say what it IS -- "TOTAL DUE" -- in the column the reader is already
+  // looking at, and every other choice here can only answer with a number.
+  { id: 'text', label: 'Custom text…', kind: 'any', needsValue: true },
   { id: 'sum', label: 'Sum', kind: 'numeric' },
   { id: 'average', label: 'Average', kind: 'numeric' },
   { id: 'median', label: 'Median', kind: 'numeric' },
@@ -50,6 +54,20 @@ export function functionsForType(type) {
 
 export function isNumericType(type) {
   return NUMERIC_FIELD_TYPES.has(type);
+}
+
+/** True for the choice that shows typed words instead of an answer worked out from the rows. */
+export const isTextCalc = (config) => String(config?.fn || '') === 'text';
+
+/**
+ * True when the choice needs a word typed beside it before it can say anything.
+ *
+ * Asked rather than compared against a list of ids, because there are now two such choices and
+ * the next one should not need every caller to remember it.
+ */
+export function calcNeedsValue(config) {
+  const fn = SUMMARY_FUNCTIONS.find((item) => item.id === String(config?.fn || 'none'));
+  return !!(fn && fn.needsValue);
 }
 
 const isBlank = (value) => value === null || value === undefined || value === ''
@@ -104,6 +122,9 @@ export function computeSummary(config, values, options = {}) {
   const fn = String(config?.fn || 'none');
   const rows = Array.isArray(values) ? values : [];
   if (fn === 'none') return null;
+  // Independent of the rows entirely: the answer was typed, not counted. Blank is null like
+  // every other nothing here, so an unfinished cell is not published as an empty string.
+  if (fn === 'text') return String(config?.value ?? '').trim() || null;
   if (fn === 'count') return rows.length;
 
   const filled = rows.filter((value) => !isBlank(value));
@@ -231,6 +252,9 @@ export function summaryColName(app, field) {
 export function summaryLabel(config) {
   const fn = SUMMARY_FUNCTIONS.find((item) => item.id === String(config?.fn || 'none'));
   if (!fn || fn.id === 'none') return '';
+  // Custom text is its own caption. The words in the cell already say what the cell says, and
+  // "Custom text" printed under them would be a label labelling a label.
+  if (fn.id === 'text') return '';
   if (fn.needsValue) {
     const value = String(config?.value ?? '').trim();
     return value ? `Count if ${value}` : 'Count if…';
