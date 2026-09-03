@@ -459,3 +459,67 @@ test('the Jobs money adds up the way a PM would check it', () => {
   assert.equal(read('Outstanding'), 13000, 'invoiced but not collected');
   assert.equal(read('Left to invoice'), 26000);
 });
+
+test('the GAF takeoff prices a 30-square re-roof the way the estimator would', () => {
+  // The roll-ups are flattened by hand-unrollable necessity -- a calculation cannot read another
+  // calculation, so "Labor total" re-expands every qty * price. A dropped or doubled line there
+  // looks completely correct in the file and quietly misprices every roof, which is why this
+  // works one whole job rather than checking the formula text.
+  const [, bundle] = bundles.find(([name]) => name.startsWith('GAF Calculator'));
+  const app = bundle.app;
+  const values = {};
+  const id = (label) => app.fields.find((f) => f.label === label).id;
+  const set = (label, value) => { values[id(label)] = value; };
+  const read = (label) => wbCalcRaw(app, app.fields.find((f) => f.label === label), values);
+  const line = (label, qty, price) => { set(`${label} qty`, qty); set(`${label} price`, price); };
+
+  set('Waste %', 10); set('Tax %', 7);
+  set('Total SQ', 30); set('Ridges', 45); set('Low slope', 2); set('Leak barrier', 9);
+  line('Tear-off per square', 33, 55);
+  line('GAF shingle install per square', 33, 95);
+  line('Low slope install per square', 2, 120);
+  line('Plywood re-deck labor per sheet', 6, 45);
+  line('Dump & gas', 2, 475);
+  line('GAF Timberline HDZ shingles', 99, 38);
+  line('GAF Seal-A-Ridge hip & ridge cap', 5, 62);
+  line('GAF Pro-Start starter strip', 4, 58);
+  line('GAF FeltBuster synthetic underlayment', 4, 105);
+  line('GAF WeatherWatch leak barrier', 5, 118);
+  line('GAF Cobra ridge vent', 45, 3.85);
+  line('GAF Deck-Armor low slope membrane', 1, 145);
+  line('Drip edge 2x2 10ft', 22, 12.5);
+  line('Valley metal', 6, 18);
+  line('Pipe jacks & boots', 5, 22);
+  line('Roofing nails', 4, 58);
+  line('Sealant & roof cement', 6, 9.5);
+  line('Plywood sheets', 6, 62);
+  line('Whole roof GAF shingle replacement (Client)', 1, 24500);
+  line('Whole roof plywood replacement (Client)', 6, 110);
+
+  // 30 squares at 10% waste is 33, which is what every per-square line is billed on.
+  assert.equal(read('Total SQ + waste'), 33);
+  assert.equal(read('Ridges + waste'), 49.5);
+  assert.equal(read('GAF Timberline HDZ shingles total'), 3762, 'one line, on its own');
+  assert.equal(read('Labor total'), 6410);
+  assert.equal(read('Material total'), 6786.25);
+  assert.equal(read('Material with tax'), 7261.29, 'tax lands on materials, never on labor');
+  assert.equal(read('Total labor & material'), 13671.29);
+  assert.equal(read('Total for client'), 25160);
+  assert.equal(read('Profit'), 11488.71);
+  assert.equal(read('Margin %'), 45.66);
+});
+
+test('the GAF takeoff asks for hips, which the tile sheet never had to', () => {
+  // A shingle roof caps hips as well as ridges, and Seal-A-Ridge is bought by the linear foot of
+  // both. Priced off ridges alone, every hip roof is short of cap.
+  const [, gaf] = bundles.find(([name]) => name.startsWith('GAF Calculator'));
+  const [, tile] = bundles.find(([name]) => name.startsWith('Underwriting Calculator'));
+  const labels = (b) => b.app.fields.map((f) => f.label);
+  assert.ok(labels(gaf).includes('Hips'));
+  assert.ok(!labels(tile).includes('Hips'), 'and the tile sheet still does not');
+  // Both read the same GAF report, so the measurements they share are named identically.
+  for (const shared of ['Total SQ', 'Rakes', 'Valleys', 'Drip edge', 'Eaves', 'Ridges', 'Low slope', 'Leak barrier']) {
+    assert.ok(labels(gaf).includes(shared), `GAF Calculator is missing ${shared}`);
+    assert.ok(labels(tile).includes(shared), `Underwriting Calculator is missing ${shared}`);
+  }
+});

@@ -1,0 +1,1138 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-03T00:00:00.000Z",
+  "app": {
+    "name": "GAF Calculator",
+    "recordName": "Takeoff",
+    "type": "Underwriting",
+    "icon": "ti-home-2",
+    "color": "#D4541F",
+    "description": "A GAF asphalt-shingle takeoff, priced. The measurements a GAF report gives go in at the top, each carrying the job’s waste allowance; the system comes out the bottom as labor, materials with tax, the price to the client, profit and margin.\n\nEvery line is a quantity, a price and a total, and every one of them is editable. These are the lines a re-roof usually has — they are not the prices any company charges. Put your own prices in once, on a takeoff you keep.\n\nQuantities are typed, not derived. A calculation’s answer is never stored, so it cannot feed another box: each quantity field says in its placeholder which measurement it comes off (\"{Total SQ + waste} x 3 bundles per square\"), and the waste rows above are there to be read off while filling them in.\n\nSister app to Underwriting Calculator, which prices tile. The measurements are the same eight plus Hips — a shingle roof caps hips as well as ridges.",
+    "fields": [
+      {
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "300-12444 — GAF re-roof"
+        },
+        "id": "f-job",
+        "label": "Job",
+        "type": "text"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "f-priced",
+        "label": "Priced on",
+        "type": "date"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "s-hdz",
+              "label": "Timberline HDZ",
+              "color": "#e0552d"
+            },
+            {
+              "id": "s-uhdz",
+              "label": "Timberline UHDZ",
+              "color": "#b91c1c"
+            },
+            {
+              "id": "s-as2",
+              "label": "Timberline AS II",
+              "color": "#0891b2"
+            },
+            {
+              "id": "s-seq",
+              "label": "Grand Sequoia",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "s-cam",
+              "label": "Camelot II",
+              "color": "#a16207"
+            },
+            {
+              "id": "s-3tab",
+              "label": "Royal Sovereign (3-tab)",
+              "color": "#64748b"
+            }
+          ]
+        },
+        "id": "f-system",
+        "label": "GAF shingle",
+        "type": "category"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%",
+          "placeholder": "10"
+        },
+        "id": "f-waste",
+        "label": "Waste %",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%",
+          "placeholder": "7"
+        },
+        "id": "f-tax",
+        "label": "Tax %",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ"
+        },
+        "id": "m-0",
+        "label": "Total SQ",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "LF"
+        },
+        "id": "m-1",
+        "label": "Rakes",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "LF"
+        },
+        "id": "m-2",
+        "label": "Valleys",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "LF"
+        },
+        "id": "m-3",
+        "label": "Drip edge",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "LF"
+        },
+        "id": "m-4",
+        "label": "Eaves",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "LF"
+        },
+        "id": "m-5",
+        "label": "Ridges",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "LF"
+        },
+        "id": "m-6",
+        "label": "Hips",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ"
+        },
+        "id": "m-7",
+        "label": "Low slope",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ"
+        },
+        "id": "m-8",
+        "label": "Leak barrier",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "/12",
+          "placeholder": "6"
+        },
+        "id": "m-9",
+        "label": "Predominant pitch",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Total SQ} + ({Total SQ} * {Waste %} / 100)"
+        },
+        "id": "mw-0",
+        "label": "Total SQ + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Rakes} + ({Rakes} * {Waste %} / 100)"
+        },
+        "id": "mw-1",
+        "label": "Rakes + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Valleys} + ({Valleys} * {Waste %} / 100)"
+        },
+        "id": "mw-2",
+        "label": "Valleys + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Drip edge} + ({Drip edge} * {Waste %} / 100)"
+        },
+        "id": "mw-3",
+        "label": "Drip edge + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Eaves} + ({Eaves} * {Waste %} / 100)"
+        },
+        "id": "mw-4",
+        "label": "Eaves + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Ridges} + ({Ridges} * {Waste %} / 100)"
+        },
+        "id": "mw-5",
+        "label": "Ridges + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Hips} + ({Hips} * {Waste %} / 100)"
+        },
+        "id": "mw-6",
+        "label": "Hips + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Low slope} + ({Low slope} * {Waste %} / 100)"
+        },
+        "id": "mw-7",
+        "label": "Low slope + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Leak barrier} + ({Leak barrier} * {Waste %} / 100)"
+        },
+        "id": "mw-8",
+        "label": "Leak barrier + waste",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ",
+          "placeholder": "{Total SQ + waste}"
+        },
+        "id": "q-0",
+        "label": "Tear-off per square qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-0",
+        "label": "Tear-off per square price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tear-off per square qty} * {Tear-off per square price}"
+        },
+        "id": "t-0",
+        "label": "Tear-off per square total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ",
+          "placeholder": "{Total SQ + waste}"
+        },
+        "id": "q-1",
+        "label": "GAF shingle install per square qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-1",
+        "label": "GAF shingle install per square price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF shingle install per square qty} * {GAF shingle install per square price}"
+        },
+        "id": "t-1",
+        "label": "GAF shingle install per square total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ",
+          "placeholder": "Squares over 6/12 or on the second storey"
+        },
+        "id": "q-2",
+        "label": "Steep / two-story charge per square qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-2",
+        "label": "Steep / two-story charge per square price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Steep / two-story charge per square qty} * {Steep / two-story charge per square price}"
+        },
+        "id": "t-2",
+        "label": "Steep / two-story charge per square total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ",
+          "placeholder": "{Low slope + waste}"
+        },
+        "id": "q-3",
+        "label": "Low slope install per square qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-3",
+        "label": "Low slope install per square price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Low slope install per square qty} * {Low slope install per square price}"
+        },
+        "id": "t-3",
+        "label": "Low slope install per square total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Sheets being replaced"
+        },
+        "id": "q-4",
+        "label": "Plywood re-deck labor per sheet qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-4",
+        "label": "Plywood re-deck labor per sheet price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Plywood re-deck labor per sheet qty} * {Plywood re-deck labor per sheet price}"
+        },
+        "id": "t-4",
+        "label": "Plywood re-deck labor per sheet total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Loads"
+        },
+        "id": "q-5",
+        "label": "Dump & gas qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-5",
+        "label": "Dump & gas price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Dump & gas qty} * {Dump & gas price}"
+        },
+        "id": "t-5",
+        "label": "Dump & gas total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Panels"
+        },
+        "id": "q-6",
+        "label": "Solar panels un-install & re-install (Labor) qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-6",
+        "label": "Solar panels un-install & re-install (Labor) price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price}"
+        },
+        "id": "t-6",
+        "label": "Solar panels un-install & re-install (Labor) total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "BD",
+          "placeholder": "{Total SQ + waste} x 3 bundles per square"
+        },
+        "id": "q-7",
+        "label": "GAF Timberline HDZ shingles qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-7",
+        "label": "GAF Timberline HDZ shingles price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price}"
+        },
+        "id": "t-7",
+        "label": "GAF Timberline HDZ shingles total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "BD",
+          "placeholder": "({Ridges + waste} + {Hips + waste}) / 25 LF per bundle"
+        },
+        "id": "q-8",
+        "label": "GAF Seal-A-Ridge hip & ridge cap qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-8",
+        "label": "GAF Seal-A-Ridge hip & ridge cap price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price}"
+        },
+        "id": "t-8",
+        "label": "GAF Seal-A-Ridge hip & ridge cap total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "BD",
+          "placeholder": "({Eaves + waste} + {Rakes + waste}) / 120 LF per bundle"
+        },
+        "id": "q-9",
+        "label": "GAF Pro-Start starter strip qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-9",
+        "label": "GAF Pro-Start starter strip price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price}"
+        },
+        "id": "t-9",
+        "label": "GAF Pro-Start starter strip total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "RL",
+          "placeholder": "{Total SQ + waste} / 10 SQ per roll"
+        },
+        "id": "q-10",
+        "label": "GAF FeltBuster synthetic underlayment qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-10",
+        "label": "GAF FeltBuster synthetic underlayment price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price}"
+        },
+        "id": "t-10",
+        "label": "GAF FeltBuster synthetic underlayment total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "RL",
+          "placeholder": "{Leak barrier + waste} / 2 SQ per roll"
+        },
+        "id": "q-11",
+        "label": "GAF WeatherWatch leak barrier qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-11",
+        "label": "GAF WeatherWatch leak barrier price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price}"
+        },
+        "id": "t-11",
+        "label": "GAF WeatherWatch leak barrier total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "LF",
+          "placeholder": "{Ridges + waste}"
+        },
+        "id": "q-12",
+        "label": "GAF Cobra ridge vent qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-12",
+        "label": "GAF Cobra ridge vent price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price}"
+        },
+        "id": "t-12",
+        "label": "GAF Cobra ridge vent total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "RL",
+          "placeholder": "{Low slope + waste}"
+        },
+        "id": "q-13",
+        "label": "GAF Deck-Armor low slope membrane qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-13",
+        "label": "GAF Deck-Armor low slope membrane price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price}"
+        },
+        "id": "t-13",
+        "label": "GAF Deck-Armor low slope membrane total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "{Drip edge + waste} / 10 LF per stick"
+        },
+        "id": "q-14",
+        "label": "Drip edge 2x2 10ft qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-14",
+        "label": "Drip edge 2x2 10ft price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price}"
+        },
+        "id": "t-14",
+        "label": "Drip edge 2x2 10ft total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "{Valleys + waste} / 10 LF per stick"
+        },
+        "id": "q-15",
+        "label": "Valley metal qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-15",
+        "label": "Valley metal price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Valley metal qty} * {Valley metal price}"
+        },
+        "id": "t-15",
+        "label": "Valley metal total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Penetrations"
+        },
+        "id": "q-16",
+        "label": "Pipe jacks & boots qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-16",
+        "label": "Pipe jacks & boots price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Pipe jacks & boots qty} * {Pipe jacks & boots price}"
+        },
+        "id": "t-16",
+        "label": "Pipe jacks & boots total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "BX",
+          "placeholder": "Boxes"
+        },
+        "id": "q-17",
+        "label": "Roofing nails qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-17",
+        "label": "Roofing nails price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Roofing nails qty} * {Roofing nails price}"
+        },
+        "id": "t-17",
+        "label": "Roofing nails total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Tubes"
+        },
+        "id": "q-18",
+        "label": "Sealant & roof cement qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-18",
+        "label": "Sealant & roof cement price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Sealant & roof cement qty} * {Sealant & roof cement price}"
+        },
+        "id": "t-18",
+        "label": "Sealant & roof cement total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Sheets being replaced"
+        },
+        "id": "q-19",
+        "label": "Plywood sheets qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-19",
+        "label": "Plywood sheets price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Plywood sheets qty} * {Plywood sheets price}"
+        },
+        "id": "t-19",
+        "label": "Plywood sheets total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "The roof, priced to the client"
+        },
+        "id": "q-20",
+        "label": "Whole roof GAF shingle replacement (Client) qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-20",
+        "label": "Whole roof GAF shingle replacement (Client) price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Whole roof GAF shingle replacement (Client) qty} * {Whole roof GAF shingle replacement (Client) price}"
+        },
+        "id": "t-20",
+        "label": "Whole roof GAF shingle replacement (Client) total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Sheets, priced to the client"
+        },
+        "id": "q-21",
+        "label": "Whole roof plywood replacement (Client) qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-21",
+        "label": "Whole roof plywood replacement (Client) price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Whole roof plywood replacement (Client) qty} * {Whole roof plywood replacement (Client) price}"
+        },
+        "id": "t-21",
+        "label": "Whole roof plywood replacement (Client) total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "EA",
+          "placeholder": "Panels, priced to the client"
+        },
+        "id": "q-22",
+        "label": "Solar panels un-install & re-install (Client) qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-22",
+        "label": "Solar panels un-install & re-install (Client) price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}"
+        },
+        "id": "t-22",
+        "label": "Solar panels un-install & re-install (Client) total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tear-off per square qty} * {Tear-off per square price} + {GAF shingle install per square qty} * {GAF shingle install per square price} + {Steep / two-story charge per square qty} * {Steep / two-story charge per square price} + {Low slope install per square qty} * {Low slope install per square price} + {Plywood re-deck labor per sheet qty} * {Plywood re-deck labor per sheet price} + {Dump & gas qty} * {Dump & gas price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price}"
+        },
+        "id": "f-labor",
+        "label": "Labor total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}"
+        },
+        "id": "f-material",
+        "label": "Material total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) + (({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) * {Tax %} / 100)"
+        },
+        "id": "f-material-tax",
+        "label": "Material with tax",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Tear-off per square qty} * {Tear-off per square price} + {GAF shingle install per square qty} * {GAF shingle install per square price} + {Steep / two-story charge per square qty} * {Steep / two-story charge per square price} + {Low slope install per square qty} * {Low slope install per square price} + {Plywood re-deck labor per sheet qty} * {Plywood re-deck labor per sheet price} + {Dump & gas qty} * {Dump & gas price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price}) + (({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) + (({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) * {Tax %} / 100))"
+        },
+        "id": "f-cost",
+        "label": "Total labor & material",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Whole roof GAF shingle replacement (Client) qty} * {Whole roof GAF shingle replacement (Client) price} + {Whole roof plywood replacement (Client) qty} * {Whole roof plywood replacement (Client) price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}"
+        },
+        "id": "f-client",
+        "label": "Total for client",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Whole roof GAF shingle replacement (Client) qty} * {Whole roof GAF shingle replacement (Client) price} + {Whole roof plywood replacement (Client) qty} * {Whole roof plywood replacement (Client) price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}) - (({Tear-off per square qty} * {Tear-off per square price} + {GAF shingle install per square qty} * {GAF shingle install per square price} + {Steep / two-story charge per square qty} * {Steep / two-story charge per square price} + {Low slope install per square qty} * {Low slope install per square price} + {Plywood re-deck labor per sheet qty} * {Plywood re-deck labor per sheet price} + {Dump & gas qty} * {Dump & gas price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price}) + (({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) + (({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) * {Tax %} / 100)))"
+        },
+        "id": "f-profit",
+        "label": "Profit",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "(({Whole roof GAF shingle replacement (Client) qty} * {Whole roof GAF shingle replacement (Client) price} + {Whole roof plywood replacement (Client) qty} * {Whole roof plywood replacement (Client) price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}) - (({Tear-off per square qty} * {Tear-off per square price} + {GAF shingle install per square qty} * {GAF shingle install per square price} + {Steep / two-story charge per square qty} * {Steep / two-story charge per square price} + {Low slope install per square qty} * {Low slope install per square price} + {Plywood re-deck labor per sheet qty} * {Plywood re-deck labor per sheet price} + {Dump & gas qty} * {Dump & gas price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price}) + (({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) + (({GAF Timberline HDZ shingles qty} * {GAF Timberline HDZ shingles price} + {GAF Seal-A-Ridge hip & ridge cap qty} * {GAF Seal-A-Ridge hip & ridge cap price} + {GAF Pro-Start starter strip qty} * {GAF Pro-Start starter strip price} + {GAF FeltBuster synthetic underlayment qty} * {GAF FeltBuster synthetic underlayment price} + {GAF WeatherWatch leak barrier qty} * {GAF WeatherWatch leak barrier price} + {GAF Cobra ridge vent qty} * {GAF Cobra ridge vent price} + {GAF Deck-Armor low slope membrane qty} * {GAF Deck-Armor low slope membrane price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Valley metal qty} * {Valley metal price} + {Pipe jacks & boots qty} * {Pipe jacks & boots price} + {Roofing nails qty} * {Roofing nails price} + {Sealant & roof cement qty} * {Sealant & roof cement price} + {Plywood sheets qty} * {Plywood sheets price}) * {Tax %} / 100)))) / ({Whole roof GAF shingle replacement (Client) qty} * {Whole roof GAF shingle replacement (Client) price} + {Whole roof plywood replacement (Client) qty} * {Whole roof plywood replacement (Client) price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}) * 100"
+        },
+        "id": "f-margin",
+        "label": "Margin %",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time"
+      }
+    ],
+    "collections": [],
+    "cardFields": [
+      "f-job",
+      "m-0",
+      "f-cost",
+      "f-client",
+      "f-margin"
+    ],
+    "items": [],
+    "automations": [],
+    "views": [
+      {
+        "id": "v-system",
+        "title": "By shingle",
+        "fieldId": "f-system",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 5
+        }
+      }
+    ]
+  }
+}
