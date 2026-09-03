@@ -116,6 +116,27 @@ export function applyFunction(text, caret, name) {
   return { text: next, caret: start + insert.length, changed: true };
 }
 
+/**
+ * Where a SECOND reference goes, after the one the caret is sitting on: Excel's ctrl-click.
+ *
+ * Pointing at another cell normally REPLACES the reference just written -- that is what stops a
+ * second click leaving you with `=A1B2`. Holding ctrl means "and this one as well", which is a
+ * different edit: the reference stays put, an argument separator goes in after it, and the next
+ * reference lands beyond that.
+ *
+ * Refuses anywhere the caret is not already sitting on a reference. A comma with nothing before
+ * it is a broken formula, not the start of a list, and ctrl-clicking into empty space should
+ * behave like the ordinary click it otherwise is.
+ */
+export function separateReference(text, caret) {
+  const value = String(text ?? '');
+  const at = Math.max(0, Math.min(Number(caret) || 0, value.length));
+  const slot = referenceSlotAt(value, at);
+  // An empty slot means the caret is on open ground -- there is no reference to come after.
+  if (!slot || slot.start === slot.end) return { text: value, caret: at, changed: false };
+  return { text: `${value.slice(0, at)},${value.slice(at)}`, caret: at + 1, changed: true };
+}
+
 /** `A1` and `B4` as the range a drag covers, in the order a spreadsheet writes it. */
 export function rangeReference(fromRef, toRef) {
   const a = String(fromRef ?? '').toUpperCase();

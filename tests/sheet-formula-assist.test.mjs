@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   applyFunction, functionQueryAt, insertReference, matchFunctions, rangeReference, referenceSlotAt,
+  separateReference,
 } from '../src/sheet/formula-assist.js';
 import { SHEET_FUNCTIONS } from '../src/sheet/sheet-model.js';
 
@@ -117,4 +118,64 @@ test('every suggested name is one the engine can actually evaluate', () => {
   for (const name of matchFunctions('S', SHEET_FUNCTIONS)) {
     assert.ok(SHEET_FUNCTIONS.includes(name));
   }
+});
+
+// ---- ctrl-click: and this one as well -----------------------------------------------------------
+
+test('a second reference is separated from the first, not written over it', () => {
+  // The whole point of the modifier. A plain click REPLACES what was just written, which is what
+  // stops `=A1B2`; ctrl means keep it and add another, so a separator has to go in between.
+  const out = separateReference('=SUM(A1', 7);
+  assert.equal(out.text, '=SUM(A1,');
+  assert.equal(out.caret, 8, 'and the caret waits past the comma for the next one');
+  assert.equal(out.changed, true);
+});
+
+test('a range can be added to as easily as a cell', () => {
+  const out = separateReference('=SUM(A1:B2', 10);
+  assert.equal(out.text, '=SUM(A1:B2,');
+  assert.equal(out.caret, 11);
+});
+
+test('the reference and the separator make a formula that still parses', () => {
+  // Written end to end the way the editor does it: point, ctrl-point, and the result is what a
+  // person would have typed.
+  let { text, caret } = insertReference('=SUM(', 5, 'A1');
+  ({ text, caret } = separateReference(text, caret));
+  ({ text, caret } = insertReference(text, caret, 'C3'));
+  assert.equal(text, '=SUM(A1,C3');
+  assert.equal(caret, 10);
+});
+
+test('there is nothing to separate from on open ground', () => {
+  // A comma with nothing before it is a broken formula, not the start of a list. Ctrl-clicking
+  // there has to fall back to being the ordinary click it otherwise is.
+  assert.equal(separateReference('=SUM(', 5).changed, false);
+  assert.equal(separateReference('=', 1).changed, false);
+  assert.equal(separateReference('=A1+', 4).changed, false);
+});
+
+test('it refuses anything that is not a formula, and anything mid-name', () => {
+  assert.equal(separateReference('A1', 2).changed, false, 'plain text is not a formula');
+  assert.equal(separateReference('', 0).changed, false);
+  // Letters with no digits after them are a name being typed, not a reference.
+  assert.equal(separateReference('=SUM', 4).changed, false);
+  // And a name a reference is only the TAIL of is left alone: the `A` in front means `LOG10`
+  // here is five letters of something longer, not column LOG row 10.
+  assert.equal(separateReference('=ALOG10', 7).changed, false);
+});
+
+test('LOG10 on its own is a cell, not the function, and that is not a bug', () => {
+  // Column LOG, row 10. It reads as a reference because that is what it is until a `(` says
+  // otherwise -- the same call every spreadsheet makes, and the same one `referenceSlotAt` was
+  // already making before ctrl-click existed.
+  assert.deepEqual(referenceSlotAt('=LOG10', 6), { start: 1, end: 6 });
+  assert.equal(separateReference('=LOG10', 6).text, '=LOG10,');
+});
+
+test('shift builds the range from the anchor, in the order a spreadsheet writes it', () => {
+  // The same call the drag makes: the modifier only decides which anchor is handed in.
+  assert.equal(rangeReference('B2', 'D5'), 'B2:D5');
+  assert.equal(rangeReference('D5', 'B2'), 'D5:B2', 'backwards is still what was pointed at');
+  assert.equal(rangeReference('B2', 'B2'), 'B2', 'and a range of one cell is just the cell');
 });

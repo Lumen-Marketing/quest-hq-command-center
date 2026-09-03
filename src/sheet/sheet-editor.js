@@ -26,6 +26,7 @@ import {
 } from './sheet-model.js';
 import {
   applyFunction, functionQueryAt, insertReference, matchFunctions, rangeReference, referenceSlotAt,
+  separateReference,
 } from './formula-assist.js';
 import {
   BORDER_PRESETS,
@@ -92,7 +93,14 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   let suggestIndex = 0;
   // The cells the half-written reference points at. Its own state rather than fillTo's, which
   // means "where the fill handle would reach" and is painted as such.
-  let pickBox = null;
+  // Every reference the half-written formula points at, newest last. A list rather than one box
+  // because ctrl-click builds `=SUM(A1,C3)` and the sheet has to show both -- the formula names
+  // them both, so lighting only the last one would misreport what is about to be committed.
+  let pickBoxes = [];
+  // The reference most recently pointed at, kept after the mouse comes up. Shift extends it and
+  // ctrl adds another beside it, and both need to know where the last one started -- `picking`
+  // cannot carry that, because it is the drag and the drag is over.
+  let picked = null;
   // Where a fill drag currently reaches, drawn as a preview until the mouse comes up.
   let fillTo = null;
 
@@ -335,8 +343,10 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
       if (corner) corner.insertAdjacentHTML('beforeend', '<span class="sh-fill-handle" data-sh-fill title="Drag to fill"></span>');
     }
     // What the reference being written points at, so the sheet shows what the text says.
-    if (pickBox) refsIn(pickBox).forEach((ref) => {
-      gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('ref-pick');
+    pickBoxes.forEach((box) => {
+      if (box) refsIn(box).forEach((ref) => {
+        gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('ref-pick');
+      });
     });
     if (fillTo) refsIn(fillTo).forEach((ref) => {
       if (!rangeHas(sel, ref)) gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('fill-preview');
@@ -406,7 +416,9 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     writing.setSelectionRange(out.caret, out.caret);
     // The reference the formula now points at, highlighted on the grid, so the sheet shows what
     // the text says while it is being written.
-    pickBox = parseRef(fromRef) && parseRef(toRef) ? rangeOf(fromRef, toRef) : null;
+    const box = parseRef(fromRef) && parseRef(toRef) ? rangeOf(fromRef, toRef) : null;
+    if (!pickBoxes.length) pickBoxes.push(null);
+    pickBoxes[pickBoxes.length - 1] = box;
     paintSelection();
     showSuggestions();
   }
@@ -479,9 +491,15 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     input.addEventListener('blur', () => {
       if (writing === input) writing = null;
       hideSuggestions();
-      if (pickBox) { pickBox = null; paintSelection(); }
+      picked = null;
+      if (pickBoxes.length) { pickBoxes = []; paintSelection(); }
     });
-    input.addEventListener('input', showSuggestions);
+    input.addEventListener('input', () => {
+      // Typing moves the caret off whatever was pointed at, so the anchor shift and ctrl extend
+      // from is gone. Our own writes set `.value` directly and do not fire this.
+      picked = null;
+      showSuggestions();
+    });
     input.addEventListener('click', showSuggestions);
     input.addEventListener('keyup', (event) => {
       if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) showSuggestions();
@@ -707,8 +725,29 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     // means the rest of the time.
     const target = event.target.closest('[data-sh-cell]');
     if (writing && target && referenceSlotAt(writing.value, writing.selectionStart)) {
-      picking = { from: target.dataset.shCell, at: writing.selectionStart };
-      writeReference(picking.from, picking.from);
+      const ref = target.dataset.shCell;
+      // The three gestures every spreadsheet gives you for the same pointing. Plain replaces the
+      // reference just written; shift stretches it into a range from where it started; ctrl
+      // leaves it alone and starts another beside it. Shift and ctrl need a previous reference
+      // to work on, so without one they both fall back to being an ordinary click.
+      if (event.shiftKey && picked) {
+        picking = picked;
+      } else if ((event.ctrlKey || event.metaKey) && picked) {
+        const out = separateReference(writing.value, writing.selectionStart);
+        if (out.changed) {
+          writing.value = out.text;
+          writing.setSelectionRange(out.caret, out.caret);
+          // A slot of its own to light up, so the earlier references stay on the grid.
+          pickBoxes.push(null);
+        }
+        picked = { from: ref, at: writing.selectionStart };
+        picking = picked;
+      } else {
+        picked = { from: ref, at: writing.selectionStart };
+        picking = picked;
+        pickBoxes = [];
+      }
+      writeReference(picking.from, ref);
       dragging = { kind: 'pick' };
       // The editor must keep focus: losing it commits the half-written formula.
       event.preventDefault();

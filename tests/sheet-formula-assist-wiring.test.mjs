@@ -24,7 +24,7 @@ test('dragging widens the reference to a range', () => {
 test('the drag replaces one reference rather than trailing them across the sheet', () => {
   // picking.at is the caret as it was when the drag began, so every mousemove rewrites the
   // same span.
-  assert.match(editor, /picking = \{ from: target\.dataset\.shCell, at: writing\.selectionStart \}/);
+  assert.match(editor, /picked = \{ from: ref, at: writing\.selectionStart \};/);
   assert.match(editor, /insertReference\(writing\.value, picking\.at, ref\)/);
 });
 
@@ -53,8 +53,9 @@ test('clicking a suggestion is taken on mousedown, not click', () => {
 test('the reference highlight is its own thing, not the fill preview', () => {
   // fillTo means "where the fill handle would reach". Reusing it would paint the wrong style
   // and leave it behind after the drag, because the fill path is what clears it.
-  assert.match(editor, /let pickBox = null;/);
-  assert.match(editor, /if \(pickBox\) refsIn\(pickBox\)/);
+  assert.match(editor, /let pickBoxes = \[\];/);
+  assert.match(editor, /pickBoxes\.forEach\(\(box\) => \{/);
+  assert.match(editor, /if \(box\) refsIn\(box\)/);
   assert.match(editor, /classList\.add\('ref-pick'\)/);
   assert.match(styles, /\.sh-grid \.ref-pick \{/);
 });
@@ -64,10 +65,32 @@ test('the marks and the list are cleared when the editor closes', () => {
   const body = bind.slice(0, bind.indexOf('\n  }'));
   assert.match(body, /if \(writing === input\) writing = null;/);
   assert.match(body, /hideSuggestions\(\);/);
-  assert.match(body, /if \(pickBox\) \{ pickBox = null; paintSelection\(\); \}/);
+  assert.match(body, /picked = null;/);
+  assert.match(body, /if \(pickBoxes\.length\) \{ pickBoxes = \[\]; paintSelection\(\); \}/);
 });
 
 test('the list offers the names the evaluator actually has', () => {
   // Not a second hand-kept list: the same SHEET_FUNCTIONS the strip along the bottom prints.
   assert.match(editor, /matchFunctions\(query, SHEET_FUNCTIONS\)/);
+});
+
+test('shift stretches the last reference, ctrl adds another beside it', () => {
+  // Excel's two modifiers, on the same pointing. Shift reuses the anchor the last reference
+  // started from -- `picked`, not `picking`, because the mouse has been up since.
+  const down = editor.slice(editor.indexOf("gridHost.addEventListener('mousedown'"));
+  const block = down.slice(0, down.indexOf('if (editing) return;'));
+  assert.match(block, /if \(event\.shiftKey && picked\) \{\s*picking = picked;/);
+  assert.match(block, /\(event\.ctrlKey \|\| event\.metaKey\) && picked/, 'and cmd on a Mac');
+  assert.match(block, /separateReference\(writing\.value, writing\.selectionStart\)/);
+  // Ctrl keeps the earlier references lit: it opens a new slot rather than replacing the list.
+  assert.match(block, /pickBoxes\.push\(null\);/);
+  assert.match(block, /pickBoxes = \[\];/, 'a plain click still starts over');
+});
+
+test('typing gives up the anchor shift and ctrl extend from', () => {
+  // The caret has moved off whatever was pointed at. Our own writes set .value directly and do
+  // not fire input, so this only ever fires for a person typing.
+  const bind = editor.slice(editor.indexOf('function bindFormulaAssist'));
+  const listener = bind.slice(bind.indexOf("addEventListener('input'"));
+  assert.match(listener.slice(0, 300), /picked = null;/);
 });
