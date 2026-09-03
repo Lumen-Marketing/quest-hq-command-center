@@ -4,6 +4,9 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
 
 ## 2026-09-04 focused security and reliability pass
 
+- Application commit `fef4a36ec33e1e8643d98c4919e46df7e81bb86c` is live on
+  `https://www.questbase.io`; all 36 production routes and four entry assets passed the
+  commit-pinned smoke check. `notify-email` version 7 is active with JWT verification enabled.
 - Production migration `20260903175607_tighten_profile_and_notification_boundaries.sql` makes
   profile updates self-only, keeps legacy access fields immutable, removes browser profile
   deletion/truncation, and replaces the notification role bypasses with company/member checks.

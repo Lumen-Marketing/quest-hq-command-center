@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-03T18:03:13.925881Z",
-  "generated_from_commit": "91ab42c1895e87dcf7db070b5b79d44693643109",
+  "generated_at": "2026-09-03T18:08:26.8014772Z",
+  "generated_from_commit": "fef4a36ec33e1e8643d98c4919e46df7e81bb86c",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "91ab42c1895e87dcf7db070b5b79d44693643109",
+    "main_commit_at_capture": "fef4a36ec33e1e8643d98c4919e46df7e81bb86c",
     "latest_migration": "20260903175607_tighten_profile_and_notification_boundaries.sql"
   },
   "live": {
@@ -18,13 +18,13 @@
       "version": "20260903180057",
       "name": "tighten_profile_and_notification_boundaries"
     },
-    "vercel_verified_at": "2026-09-02T20:08:03.0000000Z",
+    "vercel_verified_at": "2026-09-03T18:08:26.8014772Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
-    "vercel_deployment_id": "dpl_hSLWSe88LkSt1LJUhimHaVFxwbRs",
+    "vercel_deployment_id": "dpl_LkBkdJdWyD7ji8cWsNSgKK5wFoQ3",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "856627918c14f72e62b07866c532dd30f9dad326",
-    "github_verified_at": "2026-09-02T20:08:03.0000000Z",
+    "vercel_deployed_commit": "fef4a36ec33e1e8643d98c4919e46df7e81bb86c",
+    "github_verified_at": "2026-09-03T18:08:26.8014772Z",
     "github_production_guardian_run": null
   },
   "refresh_commands": {
