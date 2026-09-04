@@ -144,3 +144,30 @@ export function rangeReference(fromRef, toRef) {
   if (!a || !b || a === b) return a || b;
   return `${a}:${b}`;
 }
+
+/**
+ * One step of pointing at cells, and -- the part that matters -- where the NEXT step writes from.
+ *
+ * A drag is not one edit but a run of them: every cell the pointer crosses rewrites the same
+ * reference wider. That only works if each step knows to REPLACE what the last one wrote, and
+ * `referenceSlotAt` offers a span to replace on exactly one condition -- the caret is sitting
+ * just after something that already reads as a reference.
+ *
+ * So the anchor has to travel to the END of what was just written. Held at the caret the gesture
+ * STARTED from, every later step looked back at an opening bracket instead, took the insert
+ * branch, and left the earlier reference stranded to the right of the new one: dragging A1 to C1
+ * gave `=SUM(A1:C1A1:B1A1`, and shift-clicking gave `=SUM(A1:C1A1`. The caret was right on screen
+ * throughout; it was the anchor that was stale, which is why it survived a caret-shaped read of
+ * the code.
+ *
+ * Returned rather than mutated so the caller has nothing to remember, and pure so a whole
+ * gesture can be replayed in a test instead of asserted about as source text.
+ */
+export function pointReference(text, anchor, fromRef, toRef) {
+  const value = String(text ?? '');
+  const at = Math.max(0, Math.min(Number(anchor) || 0, value.length));
+  const ref = rangeReference(fromRef, toRef);
+  const out = insertReference(value, at, ref);
+  if (!out.changed) return { text: value, caret: at, anchor: at, ref, changed: false };
+  return { text: out.text, caret: out.caret, anchor: out.caret, ref, changed: true };
+}

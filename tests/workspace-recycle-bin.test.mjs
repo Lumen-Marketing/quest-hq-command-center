@@ -8,7 +8,8 @@ import {
   TRASH_DAYS,
   createRecycleBin,
   emptyTrash,
-  expiredInTrash,
+  closeToPurge,
+  expiringFromTrash,
   purgeFieldFromTrash,
   purgeFromTrash,
   restoreFieldFromTrash,
@@ -130,15 +131,40 @@ test('emptying the bin reports how many it destroyed', () => {
   assert.equal(emptyTrash(a), 0);
 });
 
-test('old records are reported, never swept', () => {
-  // A bin that quietly destroys things on a timer is one nobody can rely on -- and there is no
-  // scheduled job here to run the sweep honestly anyway.
+test('the bin counts down to when the sweeper takes each record', () => {
+  // This used to assert the opposite -- that old records were reported and never swept, because
+  // there was no scheduled job and nothing but a document to sweep. The bin is rows now, and
+  // purge_expired_wb_records runs nightly, so the question is what goes next rather than what
+  // has been ignored.
   const a = app();
   sendToTrash(a, ['i1']);
-  a.trash[0].deletedAt = new Date(Date.now() - ((TRASH_DAYS + 1) * 86400000)).toISOString();
+  a.trash[0].purgeAfter = new Date(Date.now() + (2 * 86400000)).toISOString();
   sendToTrash(a, ['i2']);
-  assert.deepEqual(expiredInTrash(a).map((i) => i.id), ['i1']);
-  assert.equal(a.trash.length, 2, 'both are still there');
+  a.trash[0].purgeAfter = new Date(Date.now() + (20 * 86400000)).toISOString();
+
+  const due = expiringFromTrash(a);
+  assert.deepEqual(due.map((entry) => entry.item.id), ['i1', 'i2'], 'nearest first');
+  assert.equal(due[0].daysLeft, 2);
+  assert.equal(due[1].daysLeft, 20);
+  assert.equal(closeToPurge(a), 1, 'only the one inside its last week is worth a warning');
+});
+
+test('a bin loaded before the columns existed still counts down', () => {
+  // purgeAfter comes from the row. An entry that predates it has only the date it was deleted,
+  // and TRASH_DAYS from there is the honest answer rather than no answer.
+  const a = app();
+  sendToTrash(a, ['i1']);
+  delete a.trash[0].purgeAfter;
+  a.trash[0].deletedAt = new Date(Date.now() - ((TRASH_DAYS - 3) * 86400000)).toISOString();
+  assert.equal(expiringFromTrash(a)[0].daysLeft, 3);
+});
+
+test('an entry with no dates at all is left out rather than counted as due now', () => {
+  const a = app();
+  sendToTrash(a, ['i1']);
+  delete a.trash[0].purgeAfter;
+  delete a.trash[0].deletedAt;
+  assert.deepEqual(expiringFromTrash(a), [], 'nothing is destroyed on the strength of a missing date');
 });
 
 // ---- the tab, and the way in --------------------------------------------------------------
@@ -219,13 +245,22 @@ test('somebody who cannot manage the workspace can look but not touch', () => {
   assert.ok(!/data-wb-trash-empty/.test(html));
 });
 
-test('a long-sitting record is pointed out, with the rule stated', () => {
+test('the card states the rule, whether or not anything is close to going', () => {
+  // The rule is now true of everything in the bin, so it is said unconditionally. Saying it
+  // only when something was already overdue was honest when nothing was ever removed; with a
+  // sweeper running nightly it would be the one thing a person needed to know and did not.
   const a = app();
   sendToTrash(a, ['i1']);
-  a.trash[0].deletedAt = new Date(Date.now() - ((TRASH_DAYS + 2) * 86400000)).toISOString();
   const html = view(a);
-  assert.match(html, new RegExp(`more than ${TRASH_DAYS} days`));
-  assert.match(html, /only empties when somebody empties it/);
+  assert.match(html, new RegExp(`removed for good ${TRASH_DAYS} days after it was deleted`));
+  assert.ok(!html.includes('only empties when somebody empties it'), 'the old promise is gone');
+});
+
+test('a record inside its last week is counted out separately', () => {
+  const a = app();
+  sendToTrash(a, ['i1']);
+  a.trash[0].purgeAfter = new Date(Date.now() + (3 * 86400000)).toISOString();
+  assert.match(view(a), /1 record is within a week of being destroyed/);
 });
 
 test('every class the bin uses is styled', () => {
@@ -265,13 +300,19 @@ const appWithField = () => ({
   ],
 });
 
-test('a binned field takes its data with it, off every record', () => {
+test('a binned field leaves its data on the records, and only the column goes', () => {
+  // It used to take the values with it, into the bin entry, on the reasoning that the document
+  // did not grow -- the same bytes moved from `item.values` into `app.fieldTrash`. The
+  // wb_records split made that false. Records are rows scoped per workspace; the bin rides the
+  // company document, which anyone with company-level `workspaces.view` can read. So deleting
+  // one column widened who could read every value it had ever held, and grew the document that
+  // is serialised on every save by the same amount.
   const app = appWithField();
   assert.equal(sendFieldsToTrash(app, ['f1'], 'me'), 1);
 
   assert.deepEqual(app.fields.map((f) => f.id), ['f2', 'f3'], 'gone from the field list');
-  assert.equal(app.items[0].values.f1, undefined, 'and off the records');
-  assert.equal(app.items[1].values.f1, undefined);
+  assert.equal(app.items[0].values.f1, 'Roof', 'the value stays on the record, out of the document');
+  assert.equal(app.items[1].values.f1, 'Deck');
   // Everything else is untouched -- a delete that took a neighbour with it would be worse.
   assert.equal(app.items[0].values.f2, 1000);
   assert.equal(app.items[0].values.f3, 'open');
@@ -279,8 +320,42 @@ test('a binned field takes its data with it, off every record', () => {
   const entry = app.fieldTrash[0];
   assert.equal(entry.field.label, 'Project');
   assert.equal(entry.deletedBy, 'me');
-  assert.deepEqual(entry.values, { i1: 'Roof', i2: 'Deck' }, 'only records that had a value');
-  assert.equal(trashedFieldValueCount(entry), 2);
+  assert.equal(entry.values, undefined, 'the bin entry is the column, not the column of data');
+  assert.equal(trashedFieldValueCount(entry, app), 2, 'and what a purge would cost is still counted');
+});
+
+test('a bin filled under the old shape still restores and still counts', () => {
+  // Documents in the wild carry entries that hold their own copy of the values. They have to
+  // keep working, or an upgrade turns somebody's bin into a list of empty columns.
+  const app = appWithField();
+  app.fields = app.fields.filter((f) => f.id !== 'f1');
+  app.items.forEach((item) => { delete item.values.f1; });
+  app.fieldTrash = [{
+    field: { id: 'f1', label: 'Project', type: 'text', config: {} },
+    position: 0,
+    values: { i1: 'Roof', i2: 'Deck' },
+    deletedAt: '2026-09-01T00:00:00.000Z',
+    deletedBy: 'me',
+  }];
+
+  assert.equal(trashedFieldValueCount(app.fieldTrash[0], app), 2, 'counted from its own copy');
+  assert.ok(restoreFieldFromTrash(app, 'f1'));
+  assert.equal(app.items[0].values.f1, 'Roof', 'and put back the old way');
+  assert.equal(app.fields[0].id, 'f1');
+});
+
+test('purging a field is where its values are actually destroyed', () => {
+  // The entry is only the column now, so the purge is what reaches the records. This is the one
+  // irreversible act in the bin and it has to reach everything it claims to.
+  const app = appWithField();
+  sendFieldsToTrash(app, ['f1']);
+  assert.equal(app.items[0].values.f1, 'Roof', 'still there while it sits in the bin');
+
+  assert.equal(purgeFieldFromTrash(app, 'f1'), true);
+  assert.equal(app.items[0].values.f1, undefined, 'gone from every record');
+  assert.equal(app.items[1].values.f1, undefined);
+  assert.equal(app.items[0].values.f2, 1000, 'and nothing else went with it');
+  assert.equal(purgeFieldFromTrash(app, 'f1'), false, 'purging what is not there reports nothing');
 });
 
 test('restoring a field brings back the values it held, in its old position', () => {

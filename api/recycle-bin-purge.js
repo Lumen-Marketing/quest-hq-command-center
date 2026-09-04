@@ -57,9 +57,16 @@ export default async function handler(request, response) {
 
     const purged = await client.rpc('purge_expired_recycle_bin', { p_limit: 500 });
     if (purged.error) throw purged.error;
+
+    // The App Builder bin sweeps here too, not only from pg_cron. Either alone is enough, which
+    // is the point: pg_cron is unavailable on some plans, and this endpoint needs a deployment.
+    // Both call the same bounded routine, so running twice in a night costs a no-op.
+    const purgedRecords = await client.rpc('purge_expired_wb_records', { p_limit: 500 });
+    if (purgedRecords.error) throw purgedRecords.error;
     return response.status(failures.length ? 207 : 200).json({
       removed_file_items: removedFiles,
       purged_database_items: Number(purged.data || 0),
+      purged_app_records: Number(purgedRecords.data || 0),
       failed_file_items: failures.length,
     });
   } catch {

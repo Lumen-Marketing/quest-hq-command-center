@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  applyFunction, functionQueryAt, insertReference, matchFunctions, rangeReference, referenceSlotAt,
-  separateReference,
+  applyFunction, functionQueryAt, insertReference, matchFunctions, pointReference, rangeReference,
+  referenceSlotAt, separateReference,
 } from '../src/sheet/formula-assist.js';
 import { SHEET_FUNCTIONS } from '../src/sheet/sheet-model.js';
 
@@ -178,4 +178,104 @@ test('shift builds the range from the anchor, in the order a spreadsheet writes 
   assert.equal(rangeReference('B2', 'D5'), 'B2:D5');
   assert.equal(rangeReference('D5', 'B2'), 'D5:B2', 'backwards is still what was pointed at');
   assert.equal(rangeReference('B2', 'B2'), 'B2', 'and a range of one cell is just the cell');
+});
+
+// ---- pointing, as a sequence -------------------------------------------------------------------
+//
+// The gestures shipped broken and every test passed, because the tests beside them asked whether
+// the source said the right words. A drag is not one edit, it is a run of them, and only the
+// SECOND step can show that the anchor is stale. So these replay whole gestures and read the
+// formula that comes out. Which gesture calls what is the wiring test's half; this is the
+// arithmetic underneath it.
+
+/**
+ * Point at cells the way the mouse delivers it, and hand back the finished formula.
+ *
+ * `{ ref }` is a click, `{ ref, shift }` and `{ ref, ctrl }` are the modified ones, and
+ * `{ drag }` is a cell the pointer crossed with the button still down.
+ */
+function point(steps, start = '=SUM(') {
+  let text = start;
+  let caret = start.length;
+  let picked = null;
+  let picking = null;
+  const write = (from, to) => {
+    const out = pointReference(text, picking.at, from, to);
+    if (!out.changed) return;
+    text = out.text;
+    caret = out.caret;
+    picking.at = out.anchor;
+  };
+  for (const step of steps) {
+    if (step.drag) { if (picking) write(picking.from, step.drag); continue; }
+    if (step.shift && picked) {
+      picking = picked;
+    } else if (step.ctrl && picked) {
+      const apart = separateReference(text, caret);
+      if (apart.changed) { text = apart.text; caret = apart.caret; }
+      picked = { from: step.ref, at: caret };
+      picking = picked;
+    } else {
+      picked = { from: step.ref, at: caret };
+      picking = picked;
+    }
+    write(picking.from, step.ref);
+  }
+  return text;
+}
+
+test('a drag rewrites one reference wider instead of trailing them across the formula', () => {
+  // What this used to produce, cell by cell: =SUM(A1, then =SUM(A1:B1A1, then =SUM(A1:C1A1:B1A1.
+  // The caret was in the right place the whole time; it was the anchor the next write started
+  // from that never moved off the opening bracket.
+  assert.equal(point([{ ref: 'A1' }, { drag: 'B1' }, { drag: 'C1' }]), '=SUM(A1:C1');
+  assert.equal(point([{ ref: 'A1' }, { drag: 'B2' }, { drag: 'A1' }]), '=SUM(A1', 'and back to one cell');
+});
+
+test('shift stretches the last reference from where it started', () => {
+  assert.equal(point([{ ref: 'A1' }, { ref: 'C1', shift: true }]), '=SUM(A1:C1');
+  // Shift again reaches further from the SAME anchor, rather than from the last cell shifted to.
+  assert.equal(point([{ ref: 'A1' }, { ref: 'C1', shift: true }, { ref: 'E1', shift: true }]), '=SUM(A1:E1');
+});
+
+test('ctrl leaves the reference alone and starts another beside it', () => {
+  assert.equal(point([{ ref: 'A1' }, { ref: 'C3', ctrl: true }]), '=SUM(A1,C3');
+  // And the new one drags out like any other, which is the case that stayed broken longest:
+  // the comma had put the anchor somewhere the drag then wrote over from.
+  assert.equal(point([{ ref: 'A1' }, { ref: 'C3', ctrl: true }, { drag: 'D4' }]), '=SUM(A1,C3:D4');
+  assert.equal(point([{ ref: 'A1' }, { ref: 'C3', ctrl: true }, { ref: 'E5', shift: true }]), '=SUM(A1,C3:E5');
+});
+
+test('the formula in the screenshot, built by the gestures that build it', () => {
+  // Three ctrl-clicks and a drag, which is how somebody actually writes =SUM(H1,G1,F1,A1:E1).
+  // Unclosed, because the editor deliberately never types the bracket back at you.
+  assert.equal(
+    point([{ ref: 'H1' }, { ref: 'G1', ctrl: true }, { ref: 'F1', ctrl: true }, { ref: 'A1', ctrl: true }, { drag: 'E1' }]),
+    '=SUM(H1,G1,F1,A1:E1',
+  );
+});
+
+test('a plain click still replaces the reference before it', () => {
+  // The oldest of the three, and the reason the anchor exists at all: without it a second click
+  // leaves =A1B2, which is not a formula.
+  assert.equal(point([{ ref: 'A1' }, { ref: 'B2' }]), '=SUM(B2');
+  assert.equal(point([{ ref: 'A1' }, { ref: 'B2' }], '='), '=B2');
+});
+
+test('the anchor it hands back is where the next reference replaces from', () => {
+  const first = pointReference('=SUM(', 5, 'A1', 'A1');
+  assert.deepEqual(
+    { text: first.text, caret: first.caret, anchor: first.anchor },
+    { text: '=SUM(A1', caret: 7, anchor: 7 },
+  );
+  // Handed straight back in, the next one replaces rather than lands beside it.
+  assert.equal(pointReference(first.text, first.anchor, 'A1', 'C1').text, '=SUM(A1:C1');
+  // Handed the caret the gesture began at, it does not -- which is the defect, stated once.
+  assert.equal(pointReference(first.text, 5, 'A1', 'C1').text, '=SUM(A1:C1A1');
+});
+
+test('pointing at a cell where a reference may not go changes nothing, and moves nothing', () => {
+  const out = pointReference('=SUM', 4, 'A1', 'A1');
+  assert.deepEqual({ text: out.text, anchor: out.anchor, changed: out.changed }, { text: '=SUM', anchor: 4, changed: false });
+  assert.equal(pointReference('plain text', 5, 'A1', 'A1').changed, false, 'and it is not a formula at all');
 });

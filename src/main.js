@@ -6,8 +6,9 @@ import {
 } from './workspace/builder-core.js';
 import { readPullRows } from './workspace/pull-rows.js';
 import {
-  collectDocRecords, describeRefusals, diffDocRecords, groupRecordRows, hydrateDocRecords,
-  migratedWorkspaceIdSet, persistRecordDiff, stripDocRecords,
+  collectDocRecords, describeRefusals, diffRecordsAgainst, docWithoutRecords, groupRecordRows,
+  hydrateDocRecords, migratedWorkspaceIdSet, persistRecordDiff, recordFingerprints,
+  stripDocRecords,
 } from './workspace/record-store.js';
 import { arrivalRef as wbArrivalRef } from './workspace/record-ref.js';
 
@@ -2629,6 +2630,10 @@ const state = {
   // apart from a deletion.
   wbDocVersions: {},
   wbDocBase: {},
+  // The same revision's RECORDS, as one fingerprint each rather than a second copy of them.
+  // The base existed to answer "did this record change since the last save", and answering
+  // that never needed the record back -- only whether it still matches.
+  wbRecordBase: {},
   // Which deferred domains have been fetched this session: '' | 'loading' | 'loaded'.
   loadedDomains: {},
   // Selector for whatever opened the current modal, so focus can go back there
@@ -4871,6 +4876,7 @@ function applyWorkspaceBuilderRows(rows, recordRows = null) {
     // unsaved edits as already agreed on, and quietly drop the other side's.
     state.wbDocVersions[companyId] = row.updated_at || '';
     state.wbDocBase[companyId] = wbCloneDoc(serverDoc);
+    state.wbRecordBase[companyId] = recordFingerprints(state.workspaceBuilderDocs[companyId]);
   });
   // Preserve any local-only docs (unsaved companies) the server didn't return.
   if (holdLocalWb) Object.keys(prevDocs).forEach((cid) => { if (!state.workspaceBuilderDocs[cid]) state.workspaceBuilderDocs[cid] = prevDocs[cid]; });
@@ -5358,6 +5364,7 @@ function resetLiveWorkspaceData() {
   // session has not actually read.
   state.wbDocVersions = {};
   state.wbDocBase = {};
+  state.wbRecordBase = {};
   // Forget what was fetched, or the next identity inherits this one's 'loaded' marks
   // and never fetches its own rows.
   state.loadedDomains = {};
@@ -13694,6 +13701,7 @@ function ensureWorkspaceBuilderLoaded(companyId) {
     state.workspaceBuilderDocs[key] = normalizeWorkspaceBuilderDoc(doc);
     // Snapshot what the server had, before any local edit can touch it.
     state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs[key]);
+    state.wbRecordBase[key] = recordFingerprints(state.workspaceBuilderDocs[key]);
     state.workspaceBuilderLoading = '';
     render();
   })();
@@ -13701,6 +13709,21 @@ function ensureWorkspaceBuilderLoaded(companyId) {
 }
 function wbCloneDoc(doc) {
   return doc ? JSON.parse(JSON.stringify(doc)) : null;
+}
+
+/**
+ * Say once, per company, that this device has stopped keeping an offline copy.
+ *
+ * Once, because the write fails on every save after the first, and a toast on every keystroke
+ * would be the reason somebody stops reading toasts. Said at all because the alternative was a
+ * person believing they had a copy they did not have -- which only becomes visible at the moment
+ * it is needed, and by then the tab has usually been reloaded.
+ */
+const wbLocalCopyWarned = new Set();
+function warnLocalCopyStopped(key) {
+  if (wbLocalCopyWarned.has(key)) return;
+  wbLocalCopyWarned.add(key);
+  showToast('This workspace is now too large for an offline copy on this device. Your work still saves to the server -- but nothing is being kept here, so avoid working offline.', 'local', 'Workspaces');
 }
 
 // A conditional write lost the race: someone saved between our last read and now.
@@ -13728,6 +13751,7 @@ async function wbMergeWithServerDoc(key, client) {
   state.workspaceBuilderDocs[key] = hydrateDocRecords(normalizeWorkspaceBuilderDoc(merged), localRecords);
   state.wbDocVersions[key] = fresh.data.updated_at || '';
   state.wbDocBase[key] = hydrateDocRecords(wbCloneDoc(theirs), localRecords);
+  state.wbRecordBase[key] = recordFingerprints(state.wbDocBase[key]);
   if (conflicts.length) {
     showToast(`Someone else was editing ${describeConflicts(conflicts, state.workspaceBuilderDocs[key])} at the same time. Your version was kept -- check it before moving on.`, 'local', 'Workspaces');
   }
@@ -13750,7 +13774,9 @@ async function saveWorkspaceBuilderDoc(companyId) {
   const key = canonicalCompanyId(companyId);
   const doc = state.workspaceBuilderDocs[key];
   if (!doc) return false;
-  if (!isReadOnlyDemo()) writeJson(workspaceBuilderStorageKey(companyId), doc);
+  // Whether the offline copy is current decides what the failure messages below may promise.
+  const cached = writeJson(workspaceBuilderStorageKey(companyId), doc);
+  if (!cached) warnLocalCopyStopped(key);
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
     // Mark this doc as being written so a background realtime refresh can't
@@ -13765,7 +13791,7 @@ async function saveWorkspaceBuilderDoc(companyId) {
       // would show a save that half happened. Doing records first means a refusal is reported
       // before anything else moves, and the four workspaces.records.* policies are the only
       // thing deciding which of them land -- which is the whole reason they are rows.
-      const recordDiff = diffDocRecords(state.wbDocBase[key], state.workspaceBuilderDocs[key]);
+      const recordDiff = diffRecordsAgainst(state.wbRecordBase[key], state.workspaceBuilderDocs[key]);
       if (recordDiff.inserts.length || recordDiff.updates.length || recordDiff.deletes.length) {
         const refused = await persistRecordDiff(client, { companyId: key, diff: recordDiff, actorId: actor });
         const message = describeRefusals(refused);
@@ -13789,14 +13815,25 @@ async function saveWorkspaceBuilderDoc(companyId) {
         // records under a workspace whose row was deleted; those were never imported, so
         // clearing them here would delete the only copy on an ordinary save.
         const migrated = migratedWorkspaceIdSet(state.operationalWorkspaces, key);
-        const payload = { company_id: key, doc: stripDocRecords(state.workspaceBuilderDocs[key], migrated), updated_by: actor };
+        // Read and let go: this is serialised onto the wire and dropped, so it shares what it
+        // does not replace instead of deep-cloning every record in the company to blank the
+        // arrays that hold them. See docWithoutRecords for why the merge path keeps the clone.
+        const payload = { company_id: key, doc: docWithoutRecords(state.workspaceBuilderDocs[key], migrated), updated_by: actor };
         const result = known
           ? await client.from('workspace_builder_state').update(payload).eq('company_id', key).eq('updated_at', known).select('updated_at')
           : await client.from('workspace_builder_state').insert(payload).select('updated_at');
 
         if (!result.error && (result.data || []).length) {
           state.wbDocVersions[key] = result.data[0].updated_at || '';
-          state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs[key]);
+          // The base is what the NEXT save compares against, and it was a deep copy of
+          // everything the company owns. It is now two cheaper things that answer the two
+          // questions actually asked of it: an itemless document for the three-way merge, and a
+          // fingerprint per record for the diff.
+          state.wbDocBase[key] = wbCloneDoc(docWithoutRecords(state.workspaceBuilderDocs[key], migrated));
+          // The fingerprints the diff already worked out, rather than a fresh walk of the whole
+          // document. They describe what this save sent, which is what the next diff should be
+          // measured against.
+          state.wbRecordBase[key] = recordDiff.prints;
           return true;
         }
         // 23505 is the unique violation from racing two first-ever inserts; like a
@@ -13806,11 +13843,15 @@ async function saveWorkspaceBuilderDoc(companyId) {
           return false;
         }
         if (!(await wbMergeWithServerDoc(key, client))) {
-          showToast('Workspace changes could not be saved. They are safe on this device -- reload to try again.', 'local', 'Workspaces');
+          showToast(cached
+            ? 'Workspace changes could not be saved. They are safe on this device -- reload to try again.'
+            : 'Workspace changes could not be saved, and this device has no room to hold them. Do not reload -- copy anything you cannot lose, then try again.', 'local', 'Workspaces');
           return false;
         }
       }
-      showToast('Workspace changes could not be saved while others are editing. They are safe on this device -- try again in a moment.', 'local', 'Workspaces');
+      showToast(cached
+        ? 'Workspace changes could not be saved while others are editing. They are safe on this device -- try again in a moment.'
+        : 'Workspace changes could not be saved while others are editing, and this device has no room to hold them. Do not reload -- try again in a moment.', 'local', 'Workspaces');
       return false;
     } finally {
       state.wbPendingSaves = Math.max(0, (state.wbPendingSaves || 1) - 1);
@@ -17069,21 +17110,52 @@ function wbSortKey(companyId, workspace, app, field, kind, value, values) {
     default: { const t = wbPlainVal(companyId, workspace, app, field, value, values); return t ? t.toLowerCase() : null; }
   }
 }
+/**
+ * Sort by one column.
+ *
+ * Each row's key is worked out ONCE, before the sort, rather than inside the comparator. A
+ * comparator runs about `n log n` times and asks for two keys each time, so the key for a given
+ * row was being rebuilt roughly `2 log2 n` times -- about twenty times per row at a thousand
+ * records. On a text column that is waste; on a `calculation` column the key runs the formula,
+ * so sorting a thousand records by a calculated total evaluated it some twenty thousand times to
+ * produce a thousand answers.
+ */
 function wbSortItems(companyId, workspace, app, rows, field, dir) {
   const kind = wbFieldKind(field);
   const isEmptyKey = (k) => k === null || k === undefined || k === '';
-  const sorted = [...rows].sort((a, b) => {
-    const ka = wbSortKey(companyId, workspace, app, field, kind, a.values[field.id], a.values);
-    const kb = wbSortKey(companyId, workspace, app, field, kind, b.values[field.id], b.values);
-    const ea = isEmptyKey(ka), eb = isEmptyKey(kb);
+  const keyed = rows.map((row) => ({
+    row,
+    key: wbSortKey(companyId, workspace, app, field, kind, row.values[field.id], row.values),
+  }));
+  keyed.sort((a, b) => {
+    const ea = isEmptyKey(a.key), eb = isEmptyKey(b.key);
     if (ea && eb) return 0;
     if (ea) return 1; // empties always sort last, regardless of direction
     if (eb) return -1;
-    const cmp = (typeof ka === 'number' && typeof kb === 'number') ? ka - kb : String(ka).localeCompare(String(kb));
+    const cmp = (typeof a.key === 'number' && typeof b.key === 'number')
+      ? a.key - b.key
+      : String(a.key).localeCompare(String(b.key));
     return dir === 'desc' ? -cmp : cmp;
   });
-  return sorted;
+  return keyed.map((entry) => entry.row);
 }
+/**
+ * The row checkboxes a person can actually see.
+ *
+ * Filters take rows out of the list before it is drawn, so a filtered-out record is not in the
+ * page at all. The SEARCH box does not: it hides rows that are already drawn, deliberately, so
+ * typing keeps focus. Both are ways of narrowing a list, and only one of them used to narrow
+ * what "Select all" meant -- searching for four Smiths and pressing it ticked all nine hundred
+ * records, and Delete selected then took all nine hundred. The dialog printed the true count,
+ * which is the only reason this was survivable.
+ *
+ * `hidden` is read off the row rather than the box, because it is the row the search hides.
+ */
+function wbSelectBoxes() {
+  return [...document.querySelectorAll('#wbItemsList [data-wb-select]')]
+    .filter((box) => !box.closest('[data-item]')?.hidden);
+}
+
 // Live client-side search: hide/show already-rendered rows by their data-search
 // text so typing keeps focus (no full re-render) and works both ways.
 function wbApplyItemSearch() {
@@ -20631,7 +20703,7 @@ function mountWorkspaceBuilder() {
       // The only irreversible act in the bin, so it is the one that asks. A field purge takes
       // the column's data on every record with it and nothing can bring that back.
       const entry = (app.fieldTrash || []).find((row) => row.field?.id === el.dataset.wbTrashFieldPurge);
-      const held = recycleBinModule?.trashedFieldValueCount(entry) || 0;
+      const held = recycleBinModule?.trashedFieldValueCount(entry, app) || 0;
       openWbConfirm(companyId, 'purge-field', held
         ? `"${entry?.field?.label || 'This field'}" still holds a value on ${held} record${held === 1 ? '' : 's'}. Deleting it for good destroys those values — nothing can bring them back.`
         : `"${entry?.field?.label || 'This field'}" will be deleted for good.`,
@@ -20907,14 +20979,24 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-import-fields]', () => { if (!wbGuard()) return; wbImportFieldsPrompt(companyId, workspaceId, appId); });
     // Bulk selection: per-row checkbox, select-all, and the action bar.
     bind('[data-wb-select]', (el) => { const ui = wbItemsUI(appId); if (el.checked) ui.sel.add(el.dataset.wbSelect); else ui.sel.delete(el.dataset.wbSelect); render(); }, 'onchange');
-    bind('[data-wb-select-all]', (el) => { const ui = wbItemsUI(appId); document.querySelectorAll('#wbItemsList [data-wb-select]').forEach((cb) => { if (el.checked) ui.sel.add(cb.dataset.wbSelect); else ui.sel.delete(cb.dataset.wbSelect); }); render(); }, 'onchange');
-    bind('[data-wb-select-all-btn]', () => { const ui = wbItemsUI(appId); document.querySelectorAll('#wbItemsList [data-wb-select]').forEach((cb) => ui.sel.add(cb.dataset.wbSelect)); render(); });
+    bind('[data-wb-select-all]', (el) => { const ui = wbItemsUI(appId); wbSelectBoxes().forEach((cb) => { if (el.checked) ui.sel.add(cb.dataset.wbSelect); else ui.sel.delete(cb.dataset.wbSelect); }); render(); }, 'onchange');
+    bind('[data-wb-select-all-btn]', () => { const ui = wbItemsUI(appId); wbSelectBoxes().forEach((cb) => ui.sel.add(cb.dataset.wbSelect)); render(); });
     bind('[data-wb-clear-sel]', () => { wbItemsUI(appId).sel.clear(); render(); });
     bind('[data-wb-print-sel]', () => wbPrintData(companyId, workspaceId, appId, new Set(wbItemsUI(appId).sel)));
-    bind('[data-wb-del-sel]', () => { if (!can('workspaces.records.delete', companyId)) return refuseRecord('delete'); const ids = [...wbItemsUI(appId).sel]; if (!ids.length) return; openWbConfirm(companyId, 'del-items', `${ids.length} record${ids.length === 1 ? '' : 's'} will be permanently removed.`, { workspaceId, appId, itemIds: ids }); });
+    bind('[data-wb-del-sel]', () => {
+      if (!can('workspaces.records.delete', companyId)) return refuseRecord('delete');
+      const ids = [...wbItemsUI(appId).sel];
+      if (!ids.length) return;
+      // Say so when part of what is about to go is not on screen. A tick somebody put on a row
+      // and then searched away from is still theirs to delete -- but "12 records" over a list
+      // showing four is the moment to mention the other eight, not after.
+      const hidden = ids.length - wbSelectBoxes().filter((cb) => ids.includes(cb.dataset.wbSelect)).length;
+      const note = hidden ? ` ${hidden} of them ${hidden === 1 ? 'is' : 'are'} hidden by the search box.` : '';
+      openWbConfirm(companyId, 'del-items', `${ids.length} record${ids.length === 1 ? '' : 's'} will be permanently removed.${note}`, { workspaceId, appId, itemIds: ids });
+    });
     // Reflect a partial selection as the indeterminate ("—") state on select-all.
     const selAll = document.querySelector('[data-wb-select-all]');
-    if (selAll) { const boxes = document.querySelectorAll('#wbItemsList [data-wb-select]'); const checked = [...boxes].filter((b) => b.checked).length; selAll.indeterminate = checked > 0 && checked < boxes.length; }
+    if (selAll) { const boxes = wbSelectBoxes(); const checked = boxes.filter((b) => b.checked).length; selAll.indeterminate = checked > 0 && checked < boxes.length; }
     // A file cell opens a preview/download chooser (not the row's edit modal).
     bind('[data-wb-view-file]', (el, e) => { e.stopPropagation(); openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // A phone cell asks first, in our words rather than the browser's, and notes the call.
@@ -39950,6 +40032,7 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
     else {
       state.wbDocVersions[key] = result.data?.[0]?.updated_at || '';
       state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs?.[key] || null);
+      state.wbRecordBase[key] = recordFingerprints(state.workspaceBuilderDocs?.[key] || null);
     }
   }
   return failures;
@@ -47424,12 +47507,26 @@ function readSeededList(key, fallback) {
   return Array.isArray(value) && value.length ? value : fallback;
 }
 
+/**
+ * Keep a copy on this device. Returns whether it actually landed.
+ *
+ * The swallowed exception is right for a best-effort cache and was wrong as the last word on it.
+ * Browsers cap localStorage at roughly 5 MB per origin, which a company document passes at
+ * around twelve thousand records -- and past that point every write threw, nothing counted it,
+ * and the on-device copy silently froze at the last one that fit. The save path then told the
+ * person their work was safe on this device and advised them to reload, which was the one action
+ * that would have discarded it.
+ *
+ * So the failure is still not thrown -- a cache miss must not fail the operation around it --
+ * but it is no longer invisible to the caller that goes on to make a promise about it.
+ */
 function writeJson(key, value) {
-  if (isReadOnlyDemo() && key !== SESSION_KEY) return;
+  if (isReadOnlyDemo() && key !== SESSION_KEY) return true;
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* local persistence is best effort */
+    return false;
   }
 }
 

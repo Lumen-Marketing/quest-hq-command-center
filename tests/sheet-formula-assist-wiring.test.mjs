@@ -22,10 +22,21 @@ test('dragging widens the reference to a range', () => {
 });
 
 test('the drag replaces one reference rather than trailing them across the sheet', () => {
-  // picking.at is the caret as it was when the drag began, so every mousemove rewrites the
-  // same span.
+  // The anchor has to MOVE, to the end of whatever was just written -- held at the caret the
+  // gesture began from, every mousemove after the first inserted instead of replacing and left
+  // =SUM(A1:C1A1:B1A1 behind. The sequence itself is checked in sheet-formula-assist.test.mjs;
+  // this is the half that can rot without any of those failing.
   assert.match(editor, /picked = \{ from: ref, at: writing\.selectionStart \};/);
-  assert.match(editor, /insertReference\(writing\.value, picking\.at, ref\)/);
+  assert.match(editor, /pointReference\(writing\.value, picking\.at, fromRef, toRef\)/);
+  assert.match(editor, /picking\.at = out\.anchor;/, 'and the returned anchor is kept, or nothing moves');
+});
+
+test('the name box counts out the range while it is being dragged', () => {
+  // "1R x 5C", the way both spreadsheets read a drag back to you, and gone again when the
+  // gesture is -- put back by hand, because syncBar would also refill the formula bar from the
+  // cell and the formula bar is usually the thing being typed into.
+  assert.match(editor, /\$\{rows\}R x \$\{cols\}C/);
+  assert.match(editor, /if \(dragging\?\.kind === 'pick' && refLabel\) refLabel\.textContent = rangeLabel\(sel\);/);
 });
 
 test('both editors get the same treatment', () => {

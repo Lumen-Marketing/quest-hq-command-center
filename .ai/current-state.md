@@ -42,6 +42,133 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
   helpers now have an empty search path. Live verification preserved all owners, grants and three
   trigger bindings, and the three callable chat helpers passed direct probes.
 
+## 2026-09-04 The app recycle bin becomes rows, with a 30-day expiry
+
+Written and green locally; **the migration is not applied**, so the tenancy gate is red until it
+is. See known issues for the exact state.
+
+- **Deleted records leave the company document.** `wb_records` gains `deleted_at`, `deleted_by`
+  and `purge_after` (`supabase/migrations/20260904120000_wb_records_soft_delete.sql`). A binned
+  record is the same row wearing a stamp, so it keeps the workspace policy it always had --
+  `has_workspace_permission(workspace_id, 'workspaces.records.view')` -- instead of moving into a
+  document readable with company-level `workspaces.view`. Both `stripDocRecords` and
+  `docWithoutRecords` now blank `app.trash` alongside `app.items`.
+- **Two facts, two columns.** `deleted_at` is when it went and is what the bin shows;
+  `purge_after` is when the sweeper may destroy it. One column carrying both would have made the
+  backfill a data-loss event: a record sitting in a document bin since March would arrive already
+  expired and be destroyed on the first night, without anyone having been told the rule changed.
+  Every backfilled row gets a full 30 days from the migration while keeping its true deletion date.
+- **Binning keeps needing `workspaces.records.delete`.** Setting `deleted_at` is an UPDATE, and
+  the update policy asks for `records.edit` -- left there, this would have handed "empty a list
+  into the bin" to every role allowed to correct a typo. `wb_trash_records` and
+  `wb_restore_records` are `security definer` routines that check the delete key; purging by hand
+  stays an ordinary DELETE, which that key already gates.
+- **The diff learned two transitions.** A record can move between the list and the bin with no
+  value changing, so `recordFingerprints` carries which side it was on and `diffRecordsAgainst`
+  returns `trashes` and `restores` beside inserts/updates/deletes. Gone from *both* the list and
+  the bin is now the only thing that means destroy it -- before, every deletion looked like that
+  and every one was a purge.
+- **The sweeper runs twice over.** `purge_expired_wb_records` is scheduled in pg_cron at 03:25
+  and also called by the existing authenticated Vercel cron at 03:20, because pg_cron is
+  unavailable on some plans and the endpoint needs a deployment. Both are bounded; running twice
+  in a night costs a no-op.
+- **`expiredInTrash` is replaced by `expiringFromTrash` / `closeToPurge`.** The old helper
+  reported records past 30 days and the card said, truthfully, that nothing would ever remove
+  them. Both halves of that are now false, so the question changed from "what has been ignored"
+  to "what goes next": the card states the rule unconditionally and counts what is inside its
+  last week. A bin loaded before the columns existed counts down from `deletedAt` instead.
+- **Every cast in the backfill is guarded**, and that is not fastidiousness: a document holds
+  whatever a browser once wrote. `deletedBy` was a display name before it was a profile id,
+  `createdAt` may be absent, and a legacy `ws-<companyId>` id is not a uuid at all -- an
+  unguarded cast on any of those aborts the migration for every company. The workspace is matched
+  as text, timestamps are cast only when they look like timestamps, and the author is resolved
+  against `profiles` rather than cast, so a colleague who has left costs an attribution instead
+  of the whole migration.
+
+## 2026-09-04 Workspace-apps defect pass: seven of eight fixed
+
+An audit of the workspace-app modules found eight defects, none of which failed a test. Seven are
+fixed here. The eighth needs a schema decision and is recorded under known issues.
+
+- **Select all took what the search had hidden** (`wbSelectBoxes` in `src/main.js`). Filters take
+  rows out before the list is drawn; the search box hides rows already drawn, so typing keeps
+  focus. Select all walked every checkbox either way, so searching for four Smiths and pressing it
+  ticked all nine hundred records and Delete selected took all nine hundred. Every way of
+  selecting many rows now goes through one helper that reads `hidden` off the row, and the delete
+  confirmation names how many of the selected are off screen.
+- **Export to CSV and import back corrupted five field types in six.** Import named 13 of the 30
+  types and let the rest fall through to a raw string: a Tags field held `"Roofing, Urgent"` where
+  the renderer asks `Array.isArray`, so the record read as empty while looking populated.
+  `src/workspace/csv-cells.js` adds tags, checklist and rating, and states two lists explicitly --
+  fields the product COMPUTES (`calculation`, `rollup`, `autonumber`, `created_time`,
+  `updated_time`) and fields one cell cannot honestly carry (`relationship`, `company_contact`,
+  `file`, `image`, `sheet`, `form`, `button`). Refusing costs nothing, because an import only ever
+  CREATES records: there is no existing link being cleared, only a wrong one not being made. The
+  toast names the refused columns rather than counting them as misspelt headers.
+- **A deleted field no longer takes every record's value into the company document**
+  (`sendFieldsToTrash`). It used to, on the reasoning that the document did not grow -- the same
+  bytes moved from `item.values` into `app.fieldTrash`. The `wb_records` split on 2026-08-28 made
+  that false, and made it a boundary crossing: records are rows scoped by
+  `has_workspace_permission(workspace_id, 'workspaces.records.view')`, while the bin rides the
+  company document, readable with company-level `workspaces.view`. Values now stay on the records,
+  where every reader iterates `app.fields` and therefore cannot see them; the purge is what
+  destroys them. Legacy entries carrying their own copy still restore and still count.
+- **One save no longer re-serialises everything the company owns four times.**
+  `docWithoutRecords` builds the upload payload by sharing what it does not replace instead of
+  deep-cloning every record to blank the arrays holding them, and `recordFingerprints` /
+  `diffRecordsAgainst` keep one string per record instead of a second copy of the document. The
+  diff hands its fingerprints back, so the next base costs nothing -- and describes what the save
+  actually SENT, so an edit made while the write was in the air stays pending instead of being
+  marked saved. Measured, medians of five, one field changed: **2,400 records 33 ms → 14 ms;
+  12,000 records 227 ms → 58 ms; 36,000 records 567 ms → 167 ms.** The deep `stripDocRecords`
+  stays for the merge path, where the result becomes the live document and shared arrays would
+  make the next edit invisible to the next merge.
+- **The offline copy no longer lies about itself.** Browsers cap `localStorage` near 5 MB, which a
+  company document passes around twelve thousand records; `writeJson` caught the quota exception
+  and discarded it, and the save-failure message then promised the work was safe on this device
+  and advised a reload -- the one action that would have discarded it. `writeJson` returns whether
+  it landed, the messages only promise a local copy when there is one, and a company whose
+  document stops fitting is told once.
+- **The button guard is asked of the button.** `document` has no `closest`, so
+  `root.closest?.(…) !== null` was `undefined !== null` -- true every time, and the root is
+  `document` on every workspace render. Opening any add dialog disabled every seatless push button
+  on the page, each re-labelled "Save this record first", including the ones on the record behind
+  it. Reported 20 August; the optional call is what made it silent. A plausible cause of the
+  unreproduced Move-button report.
+- **Sort keys are computed once per row** rather than twice per comparison -- about `2 log2 n`
+  times each, and on a `calculation` column the key runs the formula, so a thousand records were
+  evaluated some twenty thousand times to produce a thousand answers.
+- **The tests are the finding behind the findings.** All eight passed 4,577 tests. The static ones
+  asserted that the source said the right words, and one of them pinned an exact one-line binding,
+  so a correctness fix read as a permission regression. New tests execute the round trip, replay
+  the record diff, and where the code needs a browser they assert the property -- which helper is
+  called, where a key is computed, which node a guard is asked of -- not the punctuation.
+
+## 2026-09-04 The pointing anchor actually moves
+
+- **Every drag and every shift-click was writing a trail of references** into the formula, not a
+  range. Dragging A1 to C1 produced `=SUM(A1:C1A1:B1A1`; shift-clicking produced `=SUM(A1:C1A1`.
+  Only the plain click and the first ctrl-click were ever right, which is why the feature read as
+  working and was not.
+- **The anchor was stale, not the caret.** A drag is a run of edits, and each one must REPLACE
+  what the last wrote -- which `referenceSlotAt` offers on exactly one condition, that the caret
+  sits just after something already reading as a reference. `picking.at` was held at the caret the
+  gesture STARTED from, so every step after the first looked back at an opening bracket, took the
+  insert branch, and stranded the earlier reference to the right of the new one.
+- **`pointReference(text, anchor, fromRef, toRef)`** in `src/sheet/formula-assist.js` now returns
+  the next anchor beside the text and caret, and `writeReference` keeps it. `picking` and `picked`
+  are the same object, so shift and ctrl -- which arrive on a later click -- inherit the corrected
+  anchor without a second piece of bookkeeping.
+- **The tests beside it all passed, and that is the lesson.** They were regexes over the source
+  asking whether it said the right words; only a SECOND step can show an anchor is stale, so the
+  new ones replay whole gestures -- drag, shift, ctrl, ctrl-then-drag, and the
+  `=SUM(H1,G1,F1,A1:E1)` from the report -- and read the formula that comes out. Which gesture
+  calls what stays a wiring test; the arithmetic underneath it no longer is.
+- **The name box counts the drag out** as `1R x 5C` while a reference is being stretched, the way
+  both spreadsheets do, and goes back to naming the selection on mouse-up. Restored by hand rather
+  than through `syncBar`, which would also refill the formula bar from the cell -- and the formula
+  bar is usually the thing being typed into.
+
 ## 2026-09-03 Shift and ctrl while pointing at cells, as Excel has them
 
 - **Pointing at cells to build a formula now takes the two modifiers.** Plain click replaces the

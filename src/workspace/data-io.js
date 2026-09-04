@@ -14,6 +14,10 @@
 
 import { parseCsvRows } from '../data/csv.js';
 import { describeExtras, portableExtras } from './app-portability.js';
+import {
+  COMPUTED_FIELD_TYPES, UNIMPORTABLE_FIELD_TYPES, fieldTakesCsvValue, parseChecklistCell,
+  parseRatingCell, parseTagsCell,
+} from './csv-cells.js';
 import { adoptFields, buildFieldSet, presentIn, readFieldSet } from './field-portability.js';
 
 // Imported here rather than passed in from main.js: ops-workspace-id.js exists to stay OUT
@@ -189,7 +193,14 @@ export function createDataIO(ctx) {
     const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
   }
   // Coerce a raw CSV cell into the stored value for a given field type.
+  //
+  // The two lists in ./csv-cells.js come first, and deliberately: a field the product computes
+  // and a field that holds a document are refused BY TYPE rather than by being forgotten at the
+  // bottom of a switch. That is what the old `default: return s` did to seventeen of the thirty
+  // types -- right for text, email, phone and url, and structurally wrong for the rest.
   function wbCoerceImport(companyId, app, field, cell) {
+    if (COMPUTED_FIELD_TYPES.has(field.type)) return undefined; // computed — never imported
+    if (UNIMPORTABLE_FIELD_TYPES.has(field.type)) return undefined; // a name is not a link
     const s = String(cell ?? '').trim();
     if (s === '') return '';
     switch (field.type) {
@@ -199,9 +210,10 @@ export function createDataIO(ctx) {
       case 'date': return wbParseDateCell(s);
       case 'status': case 'category': { const o = (field.config.options || []).find((x) => x.label.toLowerCase() === s.toLowerCase() || x.id === s); return o ? o.id : ''; }
       case 'user': { const m = wbMembers(companyId).find((x) => x.name.toLowerCase() === s.toLowerCase() || x.id === s); return m ? m.id : ''; }
-      case 'calculation': return undefined; // computed — never imported
-      case 'relationship': case 'file': case 'image': return ''; // not supported via CSV
-      default: return s; // text, textarea, email, phone, location
+      case 'tags': { const ids = parseTagsCell(s, field.config?.options); return ids.length ? ids : ''; }
+      case 'checklist': { const steps = parseChecklistCell(s, wbUid); return steps.length ? steps : ''; }
+      case 'rating': return parseRatingCell(s, field);
+      default: return s; // text, textarea, email, url, phone, location
     }
   }
   function wbImportCsvPrompt(companyId, workspaceId, appId) {
@@ -254,6 +266,10 @@ export function createDataIO(ctx) {
     });
     if (!added) { showToast('No rows could be imported — check that values line up with the headers.', 'local', 'Workspaces'); return; }
     const skipped = headers.length - matched;
+    // A column whose header DID match a field, on a field no CSV cell can speak for. Counted
+    // apart from the unmatched ones because it is a different thing to be told: "Customer was
+    // skipped" is news, and hiding it inside "1 unmatched column" would blame the header.
+    const refused = fieldForCol.filter((field) => field && !fieldTakesCsvValue(field.type));
     // The workspace-level summary line used to be written here as well. It is not any more:
     // the transfer row below says the same thing, and says it from a table a role with import
     // and nothing else can actually write -- the document needs workspaces.manage. Two sources
@@ -265,7 +281,13 @@ export function createDataIO(ctx) {
       direction: 'import', format: 'csv', recordCount: added, fileName,
     });
     wbSave(companyId);
-    showToast(`Imported ${added} item${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} unmatched column${skipped === 1 ? '' : 's'} skipped` : ''}.`, 'local', 'Workspaces');
+    // Named rather than counted. "Customer and Ref were skipped" is what somebody needs to hear
+    // to go and look at those two columns; "2 columns skipped" is a number they can do nothing
+    // with, and both used to be reported as though the header had simply been misspelt.
+    const refusedNote = refused.length
+      ? ` · ${refused.map((field) => `"${field.label}"`).join(', ')} ${refused.length === 1 ? 'is a field' : 'are fields'} a CSV cannot fill in`
+      : '';
+    showToast(`Imported ${added} item${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} unmatched column${skipped === 1 ? '' : 's'} skipped` : ''}${refusedNote}.`, 'local', 'Workspaces');
     render();
   }
 

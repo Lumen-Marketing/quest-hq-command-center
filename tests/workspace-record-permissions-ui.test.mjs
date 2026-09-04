@@ -49,7 +49,11 @@ test('card and board configuration stay with the app-building permission', () =>
 
 test('bulk delete is offered and accepted only with the delete permission', () => {
   assert.match(items, /canDeleteRecords \? '<button class="btn btn-sm danger" type="button" data-wb-del-sel/);
-  assert.match(main, /data-wb-del-sel\]', \(\) => \{ if \(!can\('workspaces\.records\.delete', companyId\)\) return refuseRecord/);
+  // The gate, not its punctuation: the binding grew a hidden-row count and became several
+  // lines, and pinning the one-line form made a correctness fix look like a permission
+  // regression. What matters is that the press is refused before anything is selected.
+  const delSel = main.slice(main.indexOf("data-wb-del-sel]'"));
+  assert.match(delSel.slice(0, 400), /if \(!can\('workspaces\.records\.delete', companyId\)\) return refuseRecord\('delete'\);/);
   // Selecting rows is useful to anyone who can act on them either way.
   assert.match(items, /const selectable = canWriteRecords \|\| canDeleteRecords;/);
 });

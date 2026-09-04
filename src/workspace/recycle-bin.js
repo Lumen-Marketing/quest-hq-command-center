@@ -128,20 +128,23 @@ export function sendFieldsToTrash(app, fieldIds, by = '') {
   if (!Array.isArray(app.fieldTrash)) app.fieldTrash = [];
   const at = stamp();
   going.forEach((field) => {
-    // The value this field held on every record, keyed by record id. Only records that had
-    // one: an empty map is the honest record of a field nobody ever filled in.
-    const values = {};
-    (app.items || []).forEach((item) => {
-      const value = item?.values?.[field.id];
-      if (value === undefined) return;
-      values[item.id] = value;
-      delete item.values[field.id];
-    });
+    // The VALUES STAY ON THE RECORDS. Only the definition goes in the bin.
+    //
+    // They used to be lifted off every record and parked in the bin entry, on the reasoning --
+    // true when it was written -- that the document did not grow, because the same bytes simply
+    // moved from `item.values` into `app.fieldTrash`. The wb_records split on 2026-08-28 made
+    // that false. Records are rows now, scoped per workspace by
+    // `has_workspace_permission(workspace_id, 'workspaces.records.view')`; the bin rides the
+    // company document, readable by anyone with company-level `workspaces.view`. Moving the
+    // values across meant deleting one column widened who could read every value it had ever
+    // held, and grew the document that is serialised on every save by the same amount.
+    //
+    // Left where they are, they are inert: every reader iterates `app.fields`, so a value whose
+    // field is not in that list is invisible -- which is exactly what Restore needs to find.
     app.fieldTrash.unshift({
       field: { ...field },
       // Where it sat, so Restore can put it back where it was rather than at the end.
       position: (app.fields || []).findIndex((entry) => entry.id === field.id),
-      values,
       deletedAt: at,
       deletedBy: by,
     });
@@ -167,26 +170,49 @@ export function restoreFieldFromTrash(app, fieldId) {
     ? Math.min(entry.position, app.fields.length)
     : app.fields.length;
   app.fields.splice(where, 0, { ...entry.field });
-  // And the data. A record deleted in the meantime simply has nothing to put back.
-  (app.items || []).forEach((item) => {
-    const value = entry.values?.[item.id];
-    if (value === undefined) return;
-    if (!item.values || typeof item.values !== 'object') item.values = {};
-    item.values[entry.field.id] = value;
-  });
+  // The values are already on the records and come back with the column. An entry made before
+  // they were left in place carries its own copy, and that is put back the old way -- a bin
+  // filled under the previous shape has to keep restoring, not become a list of empty columns.
+  if (entry.values && typeof entry.values === 'object') {
+    (app.items || []).forEach((item) => {
+      const value = entry.values[item.id];
+      if (value === undefined) return;
+      if (!item.values || typeof item.values !== 'object') item.values = {};
+      item.values[entry.field.id] = value;
+    });
+  }
   return entry.field;
 }
 
-/** Destroy one field and its data for good. Nothing comes back from here. */
+/**
+ * Destroy one field and its data for good. Nothing comes back from here.
+ *
+ * The values live on the records now, so this is where they are actually removed -- the entry
+ * alone is only the column's definition. A legacy entry carrying its own copy is dropped with
+ * the entry, which destroys the same thing either way.
+ */
 export function purgeFieldFromTrash(app, fieldId) {
   const before = (app.fieldTrash || []).length;
+  if (before === (app.fieldTrash || []).filter((entry) => entry.field?.id !== fieldId).length) return false;
   app.fieldTrash = (app.fieldTrash || []).filter((entry) => entry.field?.id !== fieldId);
-  return app.fieldTrash.length < before;
+  (app.items || []).forEach((item) => {
+    if (item?.values && Object.prototype.hasOwnProperty.call(item.values, fieldId)) delete item.values[fieldId];
+  });
+  return true;
 }
 
-/** How many records a binned field still holds a value for -- what a purge would destroy. */
-export function trashedFieldValueCount(entry) {
-  return Object.keys(entry?.values || {}).length;
+/**
+ * How many records a binned field still holds a value for -- what a purge would destroy.
+ *
+ * Counted off the records, because that is where the values are. A legacy entry that carries its
+ * own copy is counted from that instead, so a bin filled under the previous shape still reports
+ * honestly about what emptying it costs.
+ */
+export function trashedFieldValueCount(entry, app = null) {
+  if (entry?.values && typeof entry.values === 'object') return Object.keys(entry.values).length;
+  const fieldId = entry?.field?.id;
+  if (!fieldId || !app) return 0;
+  return (app.items || []).filter((item) => item?.values?.[fieldId] !== undefined).length;
 }
 
 /** Everything in the bin, records and fields both, so a caller can count what a purge costs. */
@@ -194,22 +220,37 @@ export function trashTotals(app) {
   return {
     records: (app.trash || []).length,
     fields: (app.fieldTrash || []).length,
-    fieldValues: (app.fieldTrash || []).reduce((sum, entry) => sum + trashedFieldValueCount(entry), 0),
+    fieldValues: (app.fieldTrash || []).reduce((sum, entry) => sum + trashedFieldValueCount(entry, app), 0),
   };
 }
 
 /**
- * Records that have been in the bin longer than TRASH_DAYS.
+ * Records the sweeper will destroy soonest, nearest first.
  *
- * Reported rather than swept automatically: a bin that quietly destroys things on a timer is
- * one nobody can rely on, and this app has no scheduled job to run the sweep honestly anyway.
+ * This used to report records already past TRASH_DAYS and say, truthfully, that nothing would
+ * ever remove them -- there was no scheduled job, and nothing but a document to sweep. Both are
+ * now false: the bin is rows carrying `purge_after`, and `purge_expired_wb_records` runs
+ * nightly. So the question changed from "what has been ignored" to "what is about to go".
+ *
+ * Read from `purgeAfter` where the row supplies one, and worked out from `deletedAt` where it
+ * does not -- a bin loaded before the columns existed still counts down honestly.
  */
-export function expiredInTrash(app, now = Date.now()) {
-  const cutoff = now - (TRASH_DAYS * 24 * 60 * 60 * 1000);
-  return (app.trash || []).filter((item) => {
-    const at = Date.parse(item.deletedAt || '');
-    return Number.isFinite(at) && at < cutoff;
-  });
+export function expiringFromTrash(app, now = Date.now()) {
+  const span = TRASH_DAYS * 24 * 60 * 60 * 1000;
+  return (app.trash || [])
+    .map((item) => {
+      const stamped = Date.parse(item.purgeAfter || '');
+      const deleted = Date.parse(item.deletedAt || '');
+      const at = Number.isFinite(stamped) ? stamped : (Number.isFinite(deleted) ? deleted + span : NaN);
+      return { item, at, daysLeft: Number.isFinite(at) ? Math.ceil((at - now) / (24 * 60 * 60 * 1000)) : null };
+    })
+    .filter((entry) => Number.isFinite(entry.at))
+    .sort((a, b) => a.at - b.at);
+}
+
+/** How many are inside their last week -- the only count worth putting on the card. */
+export function closeToPurge(app, now = Date.now()) {
+  return expiringFromTrash(app, now).filter((entry) => entry.daysLeft !== null && entry.daysLeft <= 7).length;
 }
 
 export function createRecycleBin(ctx) {
@@ -219,7 +260,7 @@ export function createRecycleBin(ctx) {
 
   /** A deleted field, and what restoring it would bring back with it. */
   function fieldRow(app, entry, canManage) {
-    const held = trashedFieldValueCount(entry);
+    const held = trashedFieldValueCount(entry, app);
     return `
       <div class="wb-trash-row is-field" data-wb-trash-field="${h(entry.field.id)}">
         <div class="wb-trash-what">
@@ -241,7 +282,7 @@ export function createRecycleBin(ctx) {
     const isOwner = isCompanyOwner(companyId);
     const trash = app.trash || [];
     const fields = app.fieldTrash || [];
-    const stale = expiredInTrash(app).length;
+    const soon = closeToPurge(app);
     if (!trash.length && !fields.length) {
       return `<div class="wb-trash card">
         <div class="section-head"><div><h3>Recycle bin</h3><p>Records and fields deleted from ${h(app.name)} wait here so a misclick is not the end of them.</p></div></div>
@@ -258,7 +299,7 @@ export function createRecycleBin(ctx) {
         ${canManage && isOwner ? '<button class="btn danger" type="button" data-wb-trash-empty><i class="ti ti-lock"></i>Empty the bin</button>' : ''}
       </div>
       ${canManage && !isOwner ? '<div class="wb-sub wb-trash-owner"><i class="ti ti-lock"></i>Emptying the bin is an account owner\'s decision — it destroys everything here, including the values any deleted field was holding. Restore and purge one at a time are still yours.</div>' : ''}
-      ${stale ? `<div class="wb-sub wb-trash-stale"><i class="ti ti-clock"></i>${stale} ${stale === 1 ? 'record has' : 'records have'} been here more than ${TRASH_DAYS} days. Nothing is removed automatically — the bin only empties when somebody empties it.</div>` : ''}
+      ${soon ? `<div class="wb-sub wb-trash-stale"><i class="ti ti-clock"></i>${soon} ${soon === 1 ? 'record is' : 'records are'} within a week of being destroyed. Anything here is removed for good ${TRASH_DAYS} days after it was deleted.</div>` : `<div class="wb-sub wb-trash-stale"><i class="ti ti-clock"></i>Anything here is removed for good ${TRASH_DAYS} days after it was deleted.</div>`}
       <div class="wb-trash-list">
         ${fields.map((entry) => fieldRow(app, entry, canManage)).join('')}
         ${trash.map((item) => `

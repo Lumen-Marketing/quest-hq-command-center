@@ -608,11 +608,19 @@ export function createButtonPush(ctx) {
     // A record being ADDED has not been saved, so there is nothing to send, change or link from.
     // Pressing a push button here would file a record the app does not have yet, and pressing a
     // "change fields" one would write into boxes that are about to be replaced by the save. So
-    // every button on a new-record form is held until the record exists.
-    const adding = !!state.builderModal && !state.builderModal.editId
-      && root.closest?.('.wb-modal, .wb-record-page') !== null;
+    // every button on the new-record form is held until the record exists.
+    //
+    // ON THE FORM, which has to be asked of each BUTTON. It used to be asked of the root, as
+    // `root.closest?.(...) !== null` -- and the root is `document` on every workspace render,
+    // which has no `closest` at all. `undefined !== null` is true, so the guard passed for
+    // everything: opening any add dialog disabled every seatless button on the page, including
+    // the ones on the record behind it, each re-labelled "Save this record first". The optional
+    // call is what made it silent; without it the missing method would have thrown on day one.
+    const addingRecord = !!state.builderModal && !state.builderModal.editId;
     root.querySelectorAll('[data-wb-press]').forEach((button) => {
-      if (adding && !button.dataset.wbPressCtx) {
+      // The add form is the open dialog. A record page is a record that already exists, so its
+      // buttons are pressable whatever is open in front of them.
+      if (addingRecord && !button.dataset.wbPressCtx && button.closest('.wb-modal')) {
         button.disabled = true;
         button.title = 'Save this record first — there is nothing to send yet.';
         return;

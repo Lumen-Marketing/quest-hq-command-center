@@ -25,7 +25,7 @@ import {
   shownValue,
 } from './sheet-model.js';
 import {
-  applyFunction, functionQueryAt, insertReference, matchFunctions, rangeReference, referenceSlotAt,
+  applyFunction, functionQueryAt, matchFunctions, pointReference, referenceSlotAt,
   separateReference,
 } from './formula-assist.js';
 import {
@@ -404,22 +404,35 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   /**
    * Put the clicked cell -- or the dragged rectangle -- into whichever editor is open.
    *
-   * `picking.at` is the caret as it was when the drag began, so every mousemove replaces the
-   * same reference rather than appending a trail of them across the sheet.
+   * `picking.at` is where the next reference is written FROM, and it moves to the end of each one
+   * as it lands. That is what makes a drag rewrite a single reference wider instead of trailing
+   * them across the formula; `pointReference` carries the reasoning and the sequence it fixes.
    */
   function writeReference(fromRef, toRef) {
     if (!writing || !picking) return;
-    const ref = rangeReference(fromRef, toRef);
-    const out = insertReference(writing.value, picking.at, ref);
+    const out = pointReference(writing.value, picking.at, fromRef, toRef);
     if (!out.changed) return;
     writing.value = out.text;
     writing.setSelectionRange(out.caret, out.caret);
+    // `picking` and `picked` are the same object, so shift and ctrl -- which arrive later, on a
+    // separate click -- extend from where the last reference actually ended rather than from
+    // where the gesture before it began.
+    picking.at = out.anchor;
     // The reference the formula now points at, highlighted on the grid, so the sheet shows what
     // the text says while it is being written.
     const box = parseRef(fromRef) && parseRef(toRef) ? rangeOf(fromRef, toRef) : null;
     if (!pickBoxes.length) pickBoxes.push(null);
     pickBoxes[pickBoxes.length - 1] = box;
     paintSelection();
+    // What the pointer has covered so far, in the box that names the selection -- "1R x 5C"
+    // while a range is being dragged out, the way both spreadsheets count it back to you. It is
+    // the reference being WRITTEN, not the selection, so it lasts as long as the gesture and
+    // syncBar puts the selection's own name back afterwards.
+    if (box && refLabel) {
+      const rows = box.r2 - box.r1 + 1;
+      const cols = box.c2 - box.c1 + 1;
+      refLabel.textContent = rows === 1 && cols === 1 ? out.ref : `${rows}R x ${cols}C`;
+    }
     showSuggestions();
   }
 
@@ -866,6 +879,10 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
       fillTo = null;
       paint();
     }
+    // The size readout belongs to the gesture, so it goes when the gesture does. Put back by
+    // hand rather than through syncBar, which would also refill the formula bar from the cell --
+    // and the formula bar is very often the thing being typed into.
+    if (dragging?.kind === 'pick' && refLabel) refLabel.textContent = rangeLabel(sel);
     fillTo = null;
     dragging = null;
     picking = null;

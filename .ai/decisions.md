@@ -1,5 +1,30 @@
 # Durable decisions
 
+## The App Builder recycle bin expires after 30 days, and the sweep is automatic
+
+Decided 2026-09-04, reversing an earlier decision recorded in `expiredInTrash`: that a bin which
+quietly destroys things on a timer is one nobody can rely on, so old records were reported and
+never swept. That reasoning rested on two facts which are no longer true — there was no scheduled
+job that could run the sweep honestly, and there was nothing but a company-wide jsonb document to
+sweep.
+
+Deleted records are now rows in `wb_records` carrying `deleted_at` and `purge_after`, so the bin
+sits inside the workspace boundary that governs live records, and
+`purge_expired_wb_records` can see exactly what it may destroy. Thirty days matches the period
+Company Contacts already offers, so the product makes one promise about deletion rather than two.
+
+Two consequences worth stating, because both are irreversible:
+
+- **The bin is no longer a place to leave things.** A record nobody restores within thirty days is
+  destroyed, and automatic backups are off by default, so there is no second copy behind it.
+- **A retention period is a promise to the customer**, not an implementation detail. Shortening it
+  later destroys data that people were told they had; lengthening it is safe. Treat thirty days as
+  a floor.
+
+The rejected alternative — keeping ids in the document and values in the rows — needed no
+migration and remains the cheaper rollback, but it leaves the bin's shape split across two stores
+and gives a scheduled sweep nothing coherent to read.
+
 ## Vendor-neutral project brain
 
 The canonical context lives in .ai rather than a vendor-specific instruction file. Vendor adapters only point to .ai/README.md. This keeps AI handoffs and future human handoffs consistent across tools.

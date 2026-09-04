@@ -3,6 +3,65 @@
 Only confirmed, actionable items belong here. Resolved findings live in `current-state.md` and
 `decisions.md`, not in this list.
 
+## The soft-delete migration is written but not applied, and the tenancy gate is red until it is
+
+`supabase/migrations/20260904120000_wb_records_soft_delete.sql` exists in the tree and the client
+is already repointed at it. Nothing has been applied to production, so:
+
+- `npm run tenancy:check` **fails**, correctly: the snapshot was captured 2026-09-03 and one
+  migration has landed in the tree since, so a green matrix would be a false assurance. It cannot
+  be refreshed until the migration is applied, because the snapshot is read from live metadata.
+- `npm test`, `npm run build`, the bundle budget and `npm run ai:check` all pass.
+
+Order to apply, and it matters: the migration COPIES each `app.trash` entry into `wb_records`
+rather than moving it, exactly as the 2026-08-28 records migration did, so an old tab open during
+the deploy cannot lose anything. Apply the migration, refresh
+`.ai/database/snapshot.json` from live, re-run the tenancy gate, then deploy the client — which is
+the release that starts stripping `app.trash` from the document.
+
+Two things to verify in production afterwards, both cheap and both destructive if wrong:
+
+- `select count(*) from public.wb_records where deleted_at is not null;` should match the number
+  of entries the documents held, and every `purge_after` should be ~30 days out — no backfilled
+  row may carry a `purge_after` in the past.
+- `select public.purge_expired_wb_records(1);` should return 0 on the day of the deploy.
+
+## The old entry, kept for its reasoning: deleted records outside the workspace boundary
+
+RESOLVED IN THE TREE by the migration above; this stays until that migration is applied, because
+until then it is still true of production.
+
+Live records are rows in `wb_records`, gated per workspace by
+`has_workspace_permission(workspace_id, 'workspaces.records.view')`. Deleted ones stay in
+`app.trash` inside `workspace_builder_state.doc`, whose select policy is company-level:
+`is_company_member(company_id) and subscription_allows_access(company_id) and
+has_company_permission(company_id, 'workspaces.view')`. `stripDocRecords` and
+`docWithoutRecords` blank `app.items` before upload and deliberately do not touch `app.trash`.
+
+So deleting a record widens who may read it: a member of one workspace can read every record ever
+deleted from a sibling workspace in the same company, in the document the browser downloads at
+sign-in. The equivalent for deleted FIELDS was fixed on 2026-09-04 by leaving their values on the
+records; records themselves need one of two decisions, neither of which should be taken silently:
+
+- **Soft-delete in `wb_records`** — a migration adding `deleted_at` / `deleted_by`, plus RPCs for
+  bin, restore and purge so that binning keeps needing `workspaces.records.delete` rather than
+  becoming an ordinary `records.edit` UPDATE. The correct shape, and a production schema change
+  with no schema-current staging database to prove it against.
+- **Ids in the document, values in the rows** — no migration: `app.trash` stores
+  `{ id, deletedAt, deletedBy }`, the values stay in `wb_records`, and hydration routes trashed
+  rows into the bin the same way it already routes live rows into `app.items`. Cheaper and
+  reversible, but it changes the in-memory shape of a bin entry and needs a one-time migration of
+  the trash already sitting in every company document.
+
+The first was chosen on 2026-09-04: soft-delete in `wb_records`, with a 30-day expiry swept by
+`purge_expired_wb_records`. The second is recorded because it remains the cheaper rollback if the
+migration proves unwelcome.
+
+Until it is applied, the exposure is unbounded in time as well, because the app bin has no expiry:
+`expiredInTrash` reports records older than `TRASH_DAYS` and deliberately never sweeps them, and
+`emptyTrash` is account-owner only. Contacts are offered "Recycle Bin for 30 days"; app records
+are kept until somebody purges them by hand.
+
 ## Supabase leaked-password protection still needs an owner session
 
 The security advisor still reports `auth_leaked_password_protection`. Questbase already checks

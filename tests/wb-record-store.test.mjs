@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  appKey, collectDocRecords, describeRefusals, diffDocRecords, groupRecordRows,
-  hydrateDocRecords, migratedWorkspaceIdSet, persistRecordDiff, recordRow, stripDocRecords,
+  appKey, collectDocRecords, describeRefusals, diffDocRecords, diffRecordsAgainst,
+  docWithoutRecords, groupRecordRows, hydrateDocRecords, migratedWorkspaceIdSet,
+  persistRecordDiff, recordFingerprints, recordRow, stripDocRecords,
 } from '../src/workspace/record-store.js';
 
 // Records used to live inside workspace_builder_state.doc, one jsonb cell per company holding
@@ -29,7 +30,7 @@ test('rows become items keyed by workspace and app, in a stable order', () => {
     { id: 'r2', workspace_id: '2c4a7f18-0f4c-4a5a-9d31-9b6b2f1a1c00', app_id: 'app-1', created_at: '2026-02-01', data: { id: 'r2', values: { a: 2 } } },
     { id: 'r1', workspace_id: '2c4a7f18-0f4c-4a5a-9d31-9b6b2f1a1c00', app_id: 'app-1', created_at: '2026-01-01', data: { id: 'r1', values: { a: 1 } } },
   ]);
-  const items = byApp.get(appKey(WS, 'app-1'));
+  const { items } = byApp.get(appKey(WS, 'app-1'));
   assert.deepEqual(items.map((item) => item.id), ['r1', 'r2'], 'oldest first, so a list looks the same on every load');
   // The item object crosses verbatim: this is what keeps the 139 read sites working.
   assert.deepEqual(items[0], { id: 'r1', values: { a: 1 } });
@@ -172,4 +173,184 @@ test('a refused record is named rather than failing the whole save', () => {
 
 test('nothing refused says nothing', () => {
   assert.equal(describeRefusals({ created: [], edited: [], deleted: [] }), '');
+});
+
+// ---- what one save costs ----------------------------------------------------------------------
+//
+// An ordinary save used to make four whole-document passes: stringify everything into
+// localStorage, stringify both sides of every record to diff them, deep-clone everything to
+// blank the arrays it had just copied, and deep-clone everything again to keep as the base.
+// Cost scaled with everything the company owned rather than with what changed. Two of the four
+// are gone; these hold them gone, and hold the behaviour they replaced identical.
+
+test('the stored document shares what it does not replace, instead of copying every record', () => {
+  const items = [{ id: 'r1', values: { a: 1 } }];
+  const source = doc(items);
+  const migrated = new Set([WS]);
+  const out = docWithoutRecords(source, migrated);
+
+  assert.deepEqual(out.workspaces[0].apps[0].items, [], 'the records still do not travel');
+  assert.notEqual(out, source, 'and the caller cannot write through it to the live document');
+  assert.notEqual(out.workspaces[0].apps[0], source.workspaces[0].apps[0]);
+  // The point of it: the records themselves were never copied to produce a payload holding none.
+  assert.equal(source.workspaces[0].apps[0].items, items, 'the live document is untouched');
+});
+
+test('the cheap form and the deep form agree on what is stored', () => {
+  const source = doc([{ id: 'r1', values: { a: 1 } }], {
+    extra: [{ id: 'app-2', linked: true, items: [{ id: 'r9', values: {} }] }],
+  });
+  const migrated = new Set([WS]);
+  assert.deepEqual(docWithoutRecords(source, migrated), stripDocRecords(source, migrated));
+  assert.deepEqual(docWithoutRecords(source, null), stripDocRecords(source, null));
+});
+
+test('a linked app keeps its records in the cheap form too', () => {
+  const source = doc([], { extra: [{ id: 'app-2', linked: true, items: [{ id: 'r9', values: {} }] }] });
+  const out = docWithoutRecords(source, new Set([WS]));
+  assert.deepEqual(out.workspaces[0].apps[1].items, [{ id: 'r9', values: {} }]);
+});
+
+test('fingerprints answer the only question the base was ever asked', () => {
+  const before = doc([{ id: 'r1', values: { a: 1 } }, { id: 'r2', values: { a: 2 } }]);
+  const prints = recordFingerprints(before);
+  const after = doc([{ id: 'r1', values: { a: 99 } }, { id: 'r3', values: { a: 3 } }]);
+
+  const diff = diffRecordsAgainst(prints, after);
+  assert.deepEqual(diff.inserts.map((e) => e.item.id), ['r3']);
+  assert.deepEqual(diff.updates.map((e) => e.item.id), ['r1']);
+  assert.deepEqual(diff.deletes.map((e) => e.item.id), ['r2']);
+  // A delete needs its id and where it lived, which is all persistRecordDiff reads.
+  assert.equal(diff.deletes[0].workspaceId, WS);
+});
+
+test('the fingerprint diff and the document diff give the same answer', () => {
+  const before = doc([{ id: 'r1', values: { a: 1 } }, { id: 'r2', values: { a: 2 } }]);
+  const after = doc([{ id: 'r1', values: { a: 1 } }, { id: 'r2', values: { a: 22 } }]);
+  const viaDoc = diffDocRecords(before, after);
+  const viaPrints = diffRecordsAgainst(recordFingerprints(before), after);
+  assert.deepEqual(viaPrints.inserts, viaDoc.inserts);
+  assert.deepEqual(viaPrints.updates, viaDoc.updates);
+  assert.deepEqual(viaPrints.deletes.map((e) => e.item.id), viaDoc.deletes.map((e) => e.item.id));
+});
+
+test('a record moved between apps is still an update, on the fingerprints too', () => {
+  // Where a record lives is part of its fingerprint, or a move that changed no value would
+  // never be written and the row would keep pointing at the app it left.
+  const before = doc([{ id: 'r1', values: { a: 1 } }], { appId: 'app-1' });
+  const after = doc([{ id: 'r1', values: { a: 1 } }], { appId: 'app-2' });
+  const diff = diffRecordsAgainst(recordFingerprints(before), after);
+  assert.deepEqual(diff.updates.map((e) => e.appId), ['app-2']);
+});
+
+test('the diff hands back the fingerprints of what it just compared', () => {
+  // So the caller does not walk the whole document again to build the next base. They describe
+  // what this save SENT, which is why an edit made while the write was in the air stays pending.
+  const before = doc([{ id: 'r1', values: { a: 1 } }]);
+  const after = doc([{ id: 'r1', values: { a: 2 } }]);
+  const diff = diffRecordsAgainst(recordFingerprints(before), after);
+  assert.ok(diff.prints instanceof Map);
+  assert.deepEqual(diffRecordsAgainst(diff.prints, after), {
+    inserts: [], updates: [], deletes: [], trashes: [], restores: [], prints: diff.prints,
+  }, 'feeding them straight back reports nothing left to write');
+});
+
+// ---- the bin is rows now ------------------------------------------------------------------------
+//
+// Deleted records used to stay in `app.trash` inside the company document, whose select policy is
+// company-level -- so DELETING a record widened who could read it. They are rows wearing a
+// `deleted_at` now, which keeps the workspace's own policy and gives the 30-day sweep something
+// it can actually see.
+
+const binned = (items, trash) => ({
+  workspaces: [{ id: WS, apps: [{ id: 'app-1', items, trash }] }],
+});
+
+test('a row with deleted_at hydrates into the bin, not the list', () => {
+  const byApp = groupRecordRows([
+    { id: 'live', workspace_id: '2c4a7f18-0f4c-4a5a-9d31-9b6b2f1a1c00', app_id: 'app-1', created_at: '2026-01-01', data: { id: 'live', values: {} } },
+    {
+      id: 'gone',
+      workspace_id: '2c4a7f18-0f4c-4a5a-9d31-9b6b2f1a1c00',
+      app_id: 'app-1',
+      created_at: '2026-01-02',
+      data: { id: 'gone', values: { a: 1 } },
+      deleted_at: '2026-09-01T10:00:00.000Z',
+      deleted_by: 'p1',
+      purge_after: '2026-10-01T10:00:00.000Z',
+    },
+  ]);
+  const held = byApp.get(appKey(WS, 'app-1'));
+  assert.deepEqual(held.items.map((i) => i.id), ['live']);
+  assert.deepEqual(held.trash.map((i) => i.id), ['gone']);
+  // The bin has always read these off the entry, so the columns are put back on top of the item.
+  assert.equal(held.trash[0].deletedAt, '2026-09-01T10:00:00.000Z');
+  assert.equal(held.trash[0].deletedBy, 'p1');
+  assert.equal(held.trash[0].purgeAfter, '2026-10-01T10:00:00.000Z');
+
+  const target = binned([], []);
+  hydrateDocRecords(target, byApp);
+  assert.deepEqual(target.workspaces[0].apps[0].items.map((i) => i.id), ['live']);
+  assert.deepEqual(target.workspaces[0].apps[0].trash.map((i) => i.id), ['gone']);
+});
+
+test('binning a record is a trash, not a delete', () => {
+  // The whole point. Before the bin was rows, a record leaving `items` was gone from the diff's
+  // point of view and the row was destroyed -- there was nothing left for a restore to find.
+  const before = recordFingerprints(binned([{ id: 'r1', values: { a: 1 } }], []));
+  const after = binned([], [{ id: 'r1', values: { a: 1 }, deletedAt: '2026-09-04', deletedBy: 'p1' }]);
+  const diff = diffRecordsAgainst(before, after);
+  assert.deepEqual(diff.trashes.map((e) => e.item.id), ['r1']);
+  assert.deepEqual(diff.deletes, [], 'nothing is destroyed');
+  assert.deepEqual(diff.updates, [], 'and the record itself did not change');
+});
+
+test('the bin stamps are the bin\'s, not the record\'s', () => {
+  // They live in columns. If they rode in `data`, binning would rewrite the record and read as
+  // an edit, and what came back from a restore would not be what was deleted.
+  const live = binned([{ id: 'r1', values: { a: 1 } }], []);
+  const inBin = binned([], [{ id: 'r1', values: { a: 1 }, deletedAt: '2026-09-04', deletedBy: 'p1', purgeAfter: '2026-10-04' }]);
+  const [livePrint] = [...recordFingerprints(live).values()];
+  const [binPrint] = [...recordFingerprints(inBin).values()];
+  assert.equal(livePrint.print, binPrint.print, 'the same record either side of the bin');
+  assert.equal(livePrint.trashed, false);
+  assert.equal(binPrint.trashed, true);
+});
+
+test('restoring is its own write, and purging is the only destroy left', () => {
+  const inBin = recordFingerprints(binned([], [{ id: 'r1', values: {}, deletedAt: '2026-09-04' }]));
+
+  const back = diffRecordsAgainst(inBin, binned([{ id: 'r1', values: {} }], []));
+  assert.deepEqual(back.restores.map((e) => e.item.id), ['r1']);
+  assert.deepEqual(back.deletes, []);
+
+  const purged = diffRecordsAgainst(inBin, binned([], []));
+  assert.deepEqual(purged.deletes.map((e) => e.item.id), ['r1'], 'gone from both is a purge');
+  assert.deepEqual(purged.restores, []);
+});
+
+test('a record created and binned between two saves arrives before it is marked deleted', () => {
+  // Otherwise the bin holds something the table has never heard of, and the restore fails.
+  const diff = diffRecordsAgainst(new Map(), binned([], [{ id: 'r1', values: {}, deletedAt: '2026-09-04' }]));
+  assert.deepEqual(diff.inserts.map((e) => e.item.id), ['r1']);
+  assert.deepEqual(diff.trashes.map((e) => e.item.id), ['r1']);
+});
+
+test('the stored document carries no bin either', () => {
+  // The boundary fix: the bin is what was crossing it.
+  const source = binned([{ id: 'r1', values: {} }], [{ id: 'r2', values: {}, deletedAt: '2026-09-04' }]);
+  for (const stripped of [stripDocRecords(source, MIGRATED), docWithoutRecords(source, MIGRATED)]) {
+    assert.deepEqual(stripped.workspaces[0].apps[0].items, []);
+    assert.deepEqual(stripped.workspaces[0].apps[0].trash, []);
+  }
+  assert.equal(source.workspaces[0].apps[0].trash.length, 1, 'and the live document keeps it');
+});
+
+test('a merge puts the bin back with the records', () => {
+  // Both are stripped before merging and re-hydrated after. Collecting only the live ones would
+  // empty every bin on the first save conflict.
+  const source = binned([{ id: 'r1', values: {} }], [{ id: 'r2', values: {}, deletedAt: '2026-09-04' }]);
+  const rebuilt = hydrateDocRecords(stripDocRecords(source, MIGRATED), collectDocRecords(source));
+  assert.deepEqual(rebuilt.workspaces[0].apps[0].items.map((i) => i.id), ['r1']);
+  assert.deepEqual(rebuilt.workspaces[0].apps[0].trash.map((i) => i.id), ['r2']);
 });
