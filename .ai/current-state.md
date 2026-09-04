@@ -44,8 +44,9 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
 
 ## 2026-09-04 The app recycle bin becomes rows, with a 30-day expiry
 
-**Applied to production and verified**; the client release is not deployed, so production still
-reads its bins from the document and behaves exactly as before. Two migrations:
+**Applied and deployed.** Application commit `0635fd3` is live on `https://www.questbase.io`; the
+production smoke passed 36/36 routes with 4/4 entry assets and asserted the deployed commit, and
+CI passed on the same SHA. Two migrations:
 `20260904120000_wb_records_soft_delete` (live version 20260904012407) and
 `20260904130000_wb_trash_records_actor_is_the_caller` (live 20260904013449).
 
@@ -53,6 +54,11 @@ Verified after applying: 29 live rows untouched, 206 of 214 document bin entries
 rows already past their purge date**, every `purge_after` on 2026-10-04, oldest true deletion date
 preserved at 2026-08-16, and `purge_expired_wb_records(1)` returning 0. The eight that could not
 become rows are recorded under known issues; nothing was destroyed.
+
+The documents still hold all 214 entries, and that is the expected intermediate state: the
+migration COPIED rather than moved, and a document only loses its bin on the next save by a
+signed-in person. As those saves land, each document drops to the leftovers the table could not
+take. Nothing is destroyed by that transition -- the rows already exist.
 
 - **Deleted records leave the company document.** `wb_records` gains `deleted_at`, `deleted_by`
   and `purge_after` (`supabase/migrations/20260904120000_wb_records_soft_delete.sql`). A binned

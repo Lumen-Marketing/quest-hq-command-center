@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "generated_at": "2026-09-04T01:34:57.726267Z",
-  "generated_from_commit": "fef4a36ec33e1e8643d98c4919e46df7e81bb86c",
+  "generated_from_commit": "0635fd3dbdf22fa8039bf9a88c5d472ebf9da0a5",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "fef4a36ec33e1e8643d98c4919e46df7e81bb86c",
+    "main_commit_at_capture": "0635fd3dbdf22fa8039bf9a88c5d472ebf9da0a5",
     "latest_migration": "20260904130000_wb_trash_records_actor_is_the_caller.sql"
   },
   "live": {
@@ -18,13 +18,13 @@
       "version": "20260904013449",
       "name": "wb_trash_records_actor_is_the_caller"
     },
-    "vercel_verified_at": "2026-09-03T18:08:26.8014772Z",
+    "vercel_verified_at": "2026-09-04T02:12:00.000Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
     "vercel_deployment_id": "dpl_LkBkdJdWyD7ji8cWsNSgKK5wFoQ3",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "fef4a36ec33e1e8643d98c4919e46df7e81bb86c",
-    "github_verified_at": "2026-09-03T18:08:26.8014772Z",
+    "vercel_deployed_commit": "0635fd3dbdf22fa8039bf9a88c5d472ebf9da0a5",
+    "github_verified_at": "2026-09-04T02:12:00.000Z",
     "github_production_guardian_run": null
   },
   "refresh_commands": {
