@@ -354,3 +354,58 @@ test('a merge puts the bin back with the records', () => {
   assert.deepEqual(rebuilt.workspaces[0].apps[0].items.map((i) => i.id), ['r1']);
   assert.deepEqual(rebuilt.workspaces[0].apps[0].trash.map((i) => i.id), ['r2']);
 });
+
+// ---- what the table could not take --------------------------------------------------------------
+//
+// A document array tolerates a repeated record id; a primary key cannot. On 2026-09-04 the live
+// bins held 214 entries under 207 distinct ids -- six ids repeated, and not all for the same
+// reason: some were one record deleted, restored, edited and deleted again inside half an hour,
+// others were genuinely different records in different apps that shared an id because a Button
+// move carried it across. One more id belonged to a record that is still live.
+//
+// Eight entries therefore cannot become rows. Dropping them on the strength of that would destroy
+// exactly the entries nobody has looked at yet, so the document keeps them and only them.
+
+test('a bin entry the table has no row for stays in the document', () => {
+  const doc = { workspaces: [{ id: WS, apps: [{ id: 'app-1', items: [], trash: [{ id: 'orphan', values: { a: 1 } }] }] }] };
+  hydrateDocRecords(doc, new Map());
+  const [kept] = doc.workspaces[0].apps[0].trash;
+  assert.equal(kept.id, 'orphan');
+  assert.equal(kept.unmigrated, true, 'marked, so the save path knows to put it back');
+});
+
+test('and survives the strip that empties the rest of the bin', () => {
+  // The invariant: the document holds only what the table does not.
+  const doc = { workspaces: [{ id: WS, apps: [{ id: 'app-1', items: [], trash: [{ id: 'orphan', values: {} }] }] }] };
+  hydrateDocRecords(doc, new Map());
+  doc.workspaces[0].apps[0].trash.push({ id: 'has-a-row', values: {}, deletedAt: '2026-09-04' });
+
+  for (const stripped of [stripDocRecords(doc, MIGRATED), docWithoutRecords(doc, MIGRATED)]) {
+    assert.deepEqual(
+      stripped.workspaces[0].apps[0].trash.map((e) => e.id),
+      ['orphan'],
+      'the one with a row goes, the one without stays',
+    );
+  }
+});
+
+test('a leftover is never diffed, so it cannot overwrite the record that owns its id', () => {
+  // Its id belongs to a different record that does have a row. Seating it would insert over that
+  // record, and once it left the bin it would ask the database to delete it.
+  const doc = { workspaces: [{ id: WS, apps: [{ id: 'app-1', items: [], trash: [] }] }] };
+  hydrateDocRecords(doc, new Map());
+  doc.workspaces[0].apps[0].trash = [{ id: 'shared', values: { which: 'leftover' }, unmigrated: true }];
+
+  const diff = diffRecordsAgainst(new Map(), doc);
+  assert.deepEqual([diff.inserts.length, diff.updates.length, diff.trashes.length], [0, 0, 0]);
+  assert.deepEqual(recordFingerprints(doc).size, 0, 'it is not part of the record set at all');
+});
+
+test('giving a leftover a fresh id is all it takes to migrate it', () => {
+  // The invariant self-heals, which is what makes the eight a decision rather than a blocker.
+  const doc = { workspaces: [{ id: WS, apps: [{ id: 'app-1', items: [], trash: [{ id: 'orphan', values: {}, unmigrated: true }] }] }] };
+  doc.workspaces[0].apps[0].trash = [{ id: 'orphan-2', values: {}, deletedAt: '2026-09-04' }];
+  const diff = diffRecordsAgainst(new Map(), doc);
+  assert.deepEqual(diff.inserts.map((e) => e.item.id), ['orphan-2']);
+  assert.deepEqual(diff.trashes.map((e) => e.item.id), ['orphan-2'], 'and it arrives already binned');
+});

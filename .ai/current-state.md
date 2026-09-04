@@ -44,8 +44,15 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
 
 ## 2026-09-04 The app recycle bin becomes rows, with a 30-day expiry
 
-Written and green locally; **the migration is not applied**, so the tenancy gate is red until it
-is. See known issues for the exact state.
+**Applied to production and verified**; the client release is not deployed, so production still
+reads its bins from the document and behaves exactly as before. Two migrations:
+`20260904120000_wb_records_soft_delete` (live version 20260904012407) and
+`20260904130000_wb_trash_records_actor_is_the_caller` (live 20260904013449).
+
+Verified after applying: 29 live rows untouched, 206 of 214 document bin entries backfilled, **0
+rows already past their purge date**, every `purge_after` on 2026-10-04, oldest true deletion date
+preserved at 2026-08-16, and `purge_expired_wb_records(1)` returning 0. The eight that could not
+become rows are recorded under known issues; nothing was destroyed.
 
 - **Deleted records leave the company document.** `wb_records` gains `deleted_at`, `deleted_by`
   and `purge_after` (`supabase/migrations/20260904120000_wb_records_soft_delete.sql`). A binned
@@ -77,6 +84,19 @@ is. See known issues for the exact state.
   them. Both halves of that are now false, so the question changed from "what has been ignored"
   to "what goes next": the card states the rule unconditionally and counts what is inside its
   last week. A bin loaded before the columns existed counts down from `deletedAt` instead.
+- **The actor is the caller, and only the caller.** The first migration gave `wb_trash_records`
+  an optional `p_actor` that the browser never passed. Since the routine is SECURITY DEFINER and
+  executable by `authenticated`, anyone with `workspaces.records.delete` could have binned a
+  record and stamped somebody else's id on it -- and the bin renders `deleted_by` as "who sent
+  it". No privilege was gained and nothing was lost, but a forgeable attribution on a destructive
+  action is only ever noticed later, by whoever is trying to work out who emptied a list. The
+  two-argument form is dropped rather than left beside the new one, because PostgREST would still
+  have routed to it.
+- **A repeated record id is a real thing, and a primary key is not.** The live bins held 214
+  entries under 207 ids. `distinct on` keeps the newest deletion; the losers are not destroyed,
+  because `hydrateDocRecords` marks any entry the table has no row for and both strip paths keep
+  exactly those. The invariant: the document holds only what the table does not, and it
+  self-heals -- a fresh id turns a leftover into a row on the next save.
 - **Every cast in the backfill is guarded**, and that is not fastidiousness: a document holds
   whatever a browser once wrote. `deletedBy` was a display name before it was a profile id,
   `createdAt` may be absent, and a legacy `ws-<companyId>` id is not a uuid at all -- an

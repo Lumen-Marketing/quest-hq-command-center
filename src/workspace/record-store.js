@@ -88,10 +88,22 @@ export function hydrateDocRecords(doc, byApp) {
     // loaded before this release and saves after it must not read its own records as trash.
     const grouped = Array.isArray(held) ? { items: held, trash: [] } : (held || { items: [], trash: [] });
     app.items = grouped.items;
-    // Only when the table has something to say. An app whose rows predate the soft-delete
-    // columns keeps whatever the document carried, which is what stops the release from
-    // emptying a bin it has not read yet.
-    if (grouped.trash.length || Array.isArray(app.trash)) app.trash = grouped.trash;
+    // The bin is the table's rows, plus anything the document still holds that the table does
+    // not. A document array tolerates a repeated record id and a primary key cannot, so a
+    // handful of bin entries genuinely cannot become rows -- on 2026-09-04, eight of 214: seven
+    // sharing an id with another binned record, one sharing an id with a record that is still
+    // live. Dropping them because the migration could not take them would destroy exactly the
+    // entries nobody has looked at yet.
+    //
+    // Marked, so the save path can put back what it must keep. The invariant this creates is
+    // worth stating plainly: THE DOCUMENT HOLDS ONLY WHAT THE TABLE DOES NOT. It also self-heals
+    // -- give a leftover a fresh id and it becomes a row on the next save, and the document
+    // empties itself.
+    const inTable = new Set(grouped.trash.map((entry) => String(entry.id)));
+    const leftover = (Array.isArray(app.trash) ? app.trash : [])
+      .filter((entry) => entry?.id && !inTable.has(String(entry.id)))
+      .map((entry) => ({ ...entry, unmigrated: true }));
+    if (grouped.trash.length || Array.isArray(app.trash)) app.trash = [...grouped.trash, ...leftover];
   }
   return doc;
 }
@@ -142,7 +154,13 @@ export function stripDocRecords(doc, migratedWorkspaceIds = null) {
     // The bin goes with the records, and for the same reason. Left in the document it was read
     // by anyone with company-level `workspaces.view`, so deleting a record widened who could
     // see it -- the rows carry `deleted_at` now and keep the workspace's own policy.
-    if (migratedWorkspaceIds.has(workspaceId)) { app.items = []; app.trash = []; }
+    //
+    // Except what the table could not take. Those stay, because the alternative is destroying
+    // them: see hydrateDocRecords for what ends up marked.
+    if (migratedWorkspaceIds.has(workspaceId)) {
+      app.items = [];
+      app.trash = (Array.isArray(app.trash) ? app.trash : []).filter((entry) => entry?.unmigrated);
+    }
   }
   return copy;
 }
@@ -171,7 +189,12 @@ export function docWithoutRecords(doc, migratedWorkspaceIds = null) {
       if (!apps || !migratedWorkspaceIds.has(String(workspace?.id || ''))) return workspace;
       // A linked app is a pointer at another workspace's app; its records belong to the
       // workspace that owns them and are left exactly where `ownedApps` leaves them.
-      return { ...workspace, apps: apps.map((app) => (app && !app.linked ? { ...app, items: [], trash: [] } : app)) };
+      return {
+        ...workspace,
+        apps: apps.map((app) => (app && !app.linked
+          ? { ...app, items: [], trash: (Array.isArray(app.trash) ? app.trash : []).filter((entry) => entry?.unmigrated) }
+          : app)),
+      };
     }),
   };
 }
@@ -209,7 +232,13 @@ function itemsByIdFor(doc) {
     for (const item of (Array.isArray(app.items) ? app.items : [])) seat(item, false);
     // A record in the bin has not gone anywhere: its row is still there, wearing a deleted_at.
     // Walking only `items` would read every deletion as a purge and destroy it outright.
-    for (const item of (Array.isArray(app.trash) ? app.trash : [])) seat(item, true);
+    //
+    // A leftover is skipped: it has no row of its own, and its id belongs to a different record
+    // that does. Seating it would either insert over that record or, once it left the bin, ask
+    // the database to delete it.
+    for (const item of (Array.isArray(app.trash) ? app.trash : [])) {
+      if (!item?.unmigrated) seat(item, true);
+    }
   }
   return map;
 }

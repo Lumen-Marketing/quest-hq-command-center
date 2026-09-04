@@ -3,64 +3,43 @@
 Only confirmed, actionable items belong here. Resolved findings live in `current-state.md` and
 `decisions.md`, not in this list.
 
-## The soft-delete migration is written but not applied, and the tenancy gate is red until it is
+## Eight bin entries could not become rows, and are still in the company document
 
-`supabase/migrations/20260904120000_wb_records_soft_delete.sql` exists in the tree and the client
-is already repointed at it. Nothing has been applied to production, so:
+The soft-delete migration was applied on 2026-09-04 and backfilled 206 of the 214 entries the
+company documents held. Eight could not be inserted, because `wb_records.id` is a primary key and
+a jsonb array is not:
 
-- `npm run tenancy:check` **fails**, correctly: the snapshot was captured 2026-09-03 and one
-  migration has landed in the tree since, so a green matrix would be a false assurance. It cannot
-  be refreshed until the migration is applied, because the snapshot is read from live metadata.
-- `npm test`, `npm run build`, the bundle budget and `npm run ai:check` all pass.
+- **Seven** share an id with another binned record. Some are the same record deleted, restored,
+  edited and deleted again inside half an hour -- `wb-2976bd40-c8f` three times on 16 August with
+  near-identical values. Others are genuinely different records that share an id because a Button
+  move carried it across: `wb-bf665740-875` exists in two apps with different field sets
+  entirely, and `wb-f92a20aa-b44` in two workspaces, 10 fields against 15, deleted eleven days
+  apart. The migration kept the newest deletion per id.
+- **One** shares an id with a record that is still live. The live record wins.
 
-Order to apply, and it matters: the migration COPIES each `app.trash` entry into `wb_records`
-rather than moving it, exactly as the 2026-08-28 records migration did, so an old tab open during
-the deploy cannot lose anything. Apply the migration, refresh
-`.ai/database/snapshot.json` from live, re-run the tenancy gate, then deploy the client — which is
-the release that starts stripping `app.trash` from the document.
+Nothing was destroyed. `hydrateDocRecords` marks any bin entry the table has no row for as
+`unmigrated`, and both strip paths keep exactly those -- so the invariant is that THE DOCUMENT
+HOLDS ONLY WHAT THE TABLE DOES NOT, and eight entries remain readable company-wide rather than
+workspace-scoped. It self-heals: give a leftover a fresh id and it becomes a row on the next save.
 
-Two things to verify in production afterwards, both cheap and both destructive if wrong:
+Deciding what they are is a person's job, not a migration's. The stale-duplicate cases can be
+purged from their bins; the two that are distinct records need new ids if they are worth keeping.
 
-- `select count(*) from public.wb_records where deleted_at is not null;` should match the number
-  of entries the documents held, and every `purge_after` should be ~30 days out — no backfilled
-  row may carry a `purge_after` in the past.
-- `select public.purge_expired_wb_records(1);` should return 0 on the day of the deploy.
+## The client release is not deployed
 
-## The old entry, kept for its reasoning: deleted records outside the workspace boundary
+The migration copies rather than moves, so production is running the old client against the new
+schema and behaving exactly as before. The bin still reads from the document there. Deploying
+`fix/workspace-apps-defect-pass` is what starts writing `deleted_at` and stripping `app.trash`.
 
-RESOLVED IN THE TREE by the migration above; this stays until that migration is applied, because
-until then it is still true of production.
+Until then the 30-day sweep has nothing to destroy that the old client can still see: every
+backfilled row carries `purge_after` 2026-10-04, and `purge_expired_wb_records` returns 0.
 
-Live records are rows in `wb_records`, gated per workspace by
-`has_workspace_permission(workspace_id, 'workspaces.records.view')`. Deleted ones stay in
-`app.trash` inside `workspace_builder_state.doc`, whose select policy is company-level:
-`is_company_member(company_id) and subscription_allows_access(company_id) and
-has_company_permission(company_id, 'workspaces.view')`. `stripDocRecords` and
-`docWithoutRecords` blank `app.items` before upload and deliberately do not touch `app.trash`.
+## SECURITY DEFINER advisor findings moved from 59 to 61
 
-So deleting a record widens who may read it: a member of one workspace can read every record ever
-deleted from a sibling workspace in the same company, in the document the browser downloads at
-sign-in. The equivalent for deleted FIELDS was fixed on 2026-09-04 by leaving their values on the
-records; records themselves need one of two decisions, neither of which should be taken silently:
-
-- **Soft-delete in `wb_records`** — a migration adding `deleted_at` / `deleted_by`, plus RPCs for
-  bin, restore and purge so that binning keeps needing `workspaces.records.delete` rather than
-  becoming an ordinary `records.edit` UPDATE. The correct shape, and a production schema change
-  with no schema-current staging database to prove it against.
-- **Ids in the document, values in the rows** — no migration: `app.trash` stores
-  `{ id, deletedAt, deletedBy }`, the values stay in `wb_records`, and hydration routes trashed
-  rows into the bin the same way it already routes live rows into `app.items`. Cheaper and
-  reversible, but it changes the in-memory shape of a bin entry and needs a one-time migration of
-  the trash already sitting in every company document.
-
-The first was chosen on 2026-09-04: soft-delete in `wb_records`, with a 30-day expiry swept by
-`purge_expired_wb_records`. The second is recorded because it remains the cheaper rollback if the
-migration proves unwelcome.
-
-Until it is applied, the exposure is unbounded in time as well, because the app bin has no expiry:
-`expiredInTrash` reports records older than `TRASH_DAYS` and deliberately never sweeps them, and
-`emptyTrash` is account-owner only. Contacts are offered "Recycle Bin for 30 days"; app records
-are kept until somebody purges them by hand.
+`wb_trash_records(text[])` and `wb_restore_records(text[])` are executable by `authenticated` by
+design -- the browser calls them -- and each checks `workspaces.records.delete` per row with a
+pinned empty search path. `purge_expired_wb_records` is service-role only and is not among them.
+The category remains deliberate and individually reviewed; see the entry below.
 
 ## Supabase leaked-password protection still needs an owner session
 

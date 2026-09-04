@@ -215,8 +215,16 @@ with bin_entries as (
     and nullif(btrim(entry->>'id'), '') is not null
     and nullif(btrim(app->>'id'), '') is not null
 )
+-- DISTINCT ON, because a document array tolerates a repeated id and a primary key cannot. On
+-- 2026-09-04 six ids appeared twice or three times across the live bins, and they were not all
+-- the same thing: some were one record deleted, restored, edited and deleted again within
+-- half an hour, and others were genuinely different records in different apps that shared an id
+-- because a Button move carried it across. Newest deletion wins, which is the least-bad
+-- automatic answer -- and the entries that lose are NOT destroyed, because this migration only
+-- copies. The client keeps in the document exactly what the table does not hold, so a loser
+-- stays visible in its bin until somebody decides what it is.
 insert into public.wb_records (id, company_id, workspace_id, app_id, data, created_at, deleted_at, deleted_by, purge_after)
-select
+select distinct on (btrim(b.entry->>'id'))
   btrim(b.entry->>'id'),
   b.company_id,
   w.id,
@@ -235,6 +243,11 @@ join public.workspaces w
 -- without an author, which is what the bin already renders for a departed colleague.
 left join public.profiles p
   on p.id::text = lower(nullif(btrim(b.entry->>'deletedBy'), ''))
+order by
+  btrim(b.entry->>'id'),
+  case when b.entry->>'deletedAt' ~ '^\d{4}-\d{2}-\d{2}' then (b.entry->>'deletedAt')::timestamptz else now() end desc
+-- An id that is already a LIVE row is left alone: the live record wins, and its bin entry stays
+-- in the document rather than overwriting the row somebody is still using.
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------------------

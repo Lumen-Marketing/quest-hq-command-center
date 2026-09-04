@@ -9658,6 +9658,30 @@
      "position": 8,
      "udt_name": "timestamptz",
      "data_type": "timestamp with time zone"
+    },
+    {
+     "name": "deleted_at",
+     "default": null,
+     "nullable": true,
+     "position": 9,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    },
+    {
+     "name": "deleted_by",
+     "default": null,
+     "nullable": true,
+     "position": 10,
+     "udt_name": "uuid",
+     "data_type": "uuid"
+    },
+    {
+     "name": "purge_after",
+     "default": null,
+     "nullable": true,
+     "position": 11,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
     }
    ],
    "primary_key": [
@@ -13484,6 +13508,12 @@
    "active": true,
    "database": "postgres",
    "schedule": "15 3 * * *"
+  },
+  {
+   "name": "quest-hq-wb-records-purge",
+   "active": true,
+   "database": "postgres",
+   "schedule": "25 3 * * *"
   }
  ],
  "functions": [
@@ -13918,6 +13948,16 @@
    "authenticated_execute": false
   },
   {
+   "name": "purge_expired_wb_records",
+   "returns": "integer",
+   "arguments": "p_limit integer",
+   "volatility": "v",
+   "anon_execute": false,
+   "security_definer": true,
+   "service_role_execute": true,
+   "authenticated_execute": false
+  },
+  {
    "name": "quest_confirm_email_before_insert",
    "returns": "trigger",
    "arguments": "",
@@ -14301,6 +14341,26 @@
    "name": "wb_modify_item_comment",
    "returns": "jsonb",
    "arguments": "p_company_id text, p_workspace_id text, p_app_id text, p_item_id text, p_comment_id text, p_action text, p_text text",
+   "volatility": "v",
+   "anon_execute": false,
+   "security_definer": true,
+   "service_role_execute": true,
+   "authenticated_execute": true
+  },
+  {
+   "name": "wb_restore_records",
+   "returns": "integer",
+   "arguments": "p_ids text[]",
+   "volatility": "v",
+   "anon_execute": false,
+   "security_definer": true,
+   "service_role_execute": true,
+   "authenticated_execute": true
+  },
+  {
+   "name": "wb_trash_records",
+   "returns": "integer",
+   "arguments": "p_ids text[]",
    "volatility": "v",
    "anon_execute": false,
    "security_definer": true,
@@ -15034,9 +15094,17 @@
   {
    "name": "tighten_profile_and_notification_boundaries",
    "version": "20260903180057"
+  },
+  {
+   "name": "wb_records_soft_delete",
+   "version": "20260904012407"
+  },
+  {
+   "name": "wb_trash_records_actor_is_the_caller",
+   "version": "20260904013449"
   }
  ],
- "captured_at": "2026-09-03T18:03:13.925881+00:00",
+ "captured_at": "2026-09-04T01:34:57.726267+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",
@@ -16805,7 +16873,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "company_id",
+   "to_column": "id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",
@@ -16814,7 +16882,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "id",
+   "to_column": "company_id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",
@@ -17124,6 +17192,15 @@
    "from_table": "wb_records",
    "delete_rule": "SET NULL",
    "from_column": "created_by",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "wb_records_deleted_by_fkey",
+   "to_table": "profiles",
+   "to_column": "id",
+   "from_table": "wb_records",
+   "delete_rule": "SET NULL",
+   "from_column": "deleted_by",
    "update_rule": "NO ACTION"
   },
   {
