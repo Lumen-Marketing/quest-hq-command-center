@@ -1,4 +1,4 @@
-export const DEFAULT_PRODUCTION_URL = 'https://quest-hq-command-center-gamma.vercel.app';
+export const DEFAULT_PRODUCTION_URL = 'https://www.questbase.io';
 
 export function parseSmokeArgs(argv = []) {
   const values = {};
@@ -52,8 +52,11 @@ export function validateLegacyRedirect(html) {
   if (!LEGACY_REDIRECT_MARKERS.some((marker) => source.includes(marker))) {
     return { ok: false, reason: 'missing Questbase legacy redirect marker' };
   }
-  if (!/window\.location\.replace\s*\(/.test(source)) {
-    return { ok: false, reason: 'legacy page does not redirect into the application' };
+  if (!/<script\b[^>]*\bsrc=["'][^"']*\/legacy-redirect\.js(?:\?[^"']*)?["'][^>]*><\/script>/i.test(source)) {
+    return { ok: false, reason: 'legacy page does not load the CSP-safe redirect' };
+  }
+  if (/<script\b(?![^>]*\bsrc=)[^>]*>/i.test(source)) {
+    return { ok: false, reason: 'legacy page contains an inline script blocked by CSP' };
   }
   return { ok: true };
 }

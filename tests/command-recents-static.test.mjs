@@ -17,13 +17,29 @@ test('the route is tracked into recents on every rendered company view', () => {
   assert.match(main, /trackRouteForRecents\(state\.route\);/);
   assert.match(main, /function trackRouteForRecents\(route\)/);
   // Dedupes repeated renders of the same view before writing.
-  assert.match(main, /entry\.key === lastRecentKey/);
+  assert.match(main, /dedupeKey === lastRecentKey/);
 });
 
-test('recents are per-company, capped, and most-recent-first', () => {
+test('recents are per-profile, company and workspace, capped, and most-recent-first', () => {
   assert.match(main, /COMMAND_RECENTS_KEY/);
+  assert.match(main, /function commandRecentStorageKey\(companyId, profileId = activeDraftProfileId\(\)\)/);
+  assert.match(main, /`\$\{COMMAND_RECENTS_KEY\}\.\$\{owner\}\.\$\{canonicalCompanyId\(companyId\)\}`/);
+  assert.match(main, /run: \{ kind: 'record', companyId, workspaceId/);
+  assert.match(main, /run: \{ kind: 'navigate', companyId, workspaceId/);
   assert.match(main, /\.slice\(0, COMMAND_RECENTS_MAX\)/);
   assert.match(main, /list\.unshift\(entry\)/);
+});
+
+test('stale recents are revalidated and sign-out clears the current profile history', () => {
+  assert.match(main, /commandRecentAllowed\(entry, companyId, allowedWorkspaceIds\)/);
+  assert.match(main, /commandRecentRecordExists\(entry, companyId, workspaceId\)/);
+  assert.match(main, /valid\.length !== list\.length/);
+  assert.match(main, /clearCommandRecents\(draftProfileId\);/);
+});
+
+test('recent navigation restores its recorded workspace and company', () => {
+  assert.match(main, /run\.workspaceId \? \{ workspace: run\.workspaceId \} : \{\}/);
+  assert.match(main, /run\.companyId \|\| activeCompanyId\(\)/);
 });
 
 test('recents lead the empty-query results', () => {

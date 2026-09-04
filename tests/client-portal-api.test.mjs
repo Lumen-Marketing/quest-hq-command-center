@@ -67,6 +67,66 @@ test('a valid portal session reaches the handler and drives the injected db', as
   assert.ok(calls.some((call) => call.path.includes('client_portal_events')), 'status change should be logged');
 });
 
+test('GET annotations accepts a portal session in the Authorization header', async () => {
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
+  process.env.CLIENT_PORTAL_SESSION_SECRET = 'test-session-secret';
+
+  const session = signPortalSession({
+    portal_id: 'portal_1',
+    company_id: 'company_1',
+    guest_id: 'guest_1',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  const calls = [];
+  const fakeDb = async (path) => {
+    calls.push(path);
+    if (path.includes('client_portals?')) {
+      return { ok: true, status: 200, async json() { return [{ id: 'portal_1' }]; } };
+    }
+    return { ok: true, status: 200, async json() { return []; } };
+  };
+  const request = {
+    method: 'GET',
+    headers: { host: 'localhost', authorization: `Bearer ${session}` },
+    url: '/api/client-portal-annotations?document_id=doc_1',
+  };
+  const response = createJsonResponse();
+
+  await annotationsHandler(request, response, { db: fakeDb });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { annotations: [] });
+  assert.ok(calls.some((path) => path.includes('document_id=eq.doc_1')));
+  assert.doesNotMatch(request.url, /[?&]session=/);
+});
+
+test('GET annotations rejects a portal session supplied in the URL', async () => {
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
+  process.env.CLIENT_PORTAL_SESSION_SECRET = 'test-session-secret';
+
+  const session = signPortalSession({
+    portal_id: 'portal_1',
+    company_id: 'company_1',
+    guest_id: 'guest_1',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  const response = createJsonResponse();
+  const request = {
+    method: 'GET',
+    headers: { host: 'localhost' },
+    url: `/api/client-portal-annotations?session=${encodeURIComponent(session)}&document_id=doc_1`,
+  };
+
+  await annotationsHandler(request, response, {
+    db: async () => { throw new Error('URL credentials must be rejected before database access'); },
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.json(), { error: 'Portal session expired.' });
+});
+
 test('a valid session with an invalid review status is rejected before any db write', async () => {
   process.env.SUPABASE_URL = 'https://example.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';

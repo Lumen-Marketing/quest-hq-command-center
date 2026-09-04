@@ -82,6 +82,12 @@ function queryFrom(req) {
   }
 }
 
+function bearerTokenFrom(req) {
+  const authorization = String(req.headers?.authorization || req.headers?.Authorization || '').trim();
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
 async function readBody(req, maxBytes) {
   if (!METHODS_WITH_BODY.has(req.method)) return {};
   try {
@@ -180,7 +186,9 @@ export function defineEndpoint(config, handler) {
       const ctx = { req, res, query, body, ...overrides, db };
 
       if (auth === 'portal-session') {
-        const session = verifyPortalSession(body.session || query.session);
+        // Prefer the Authorization header so GET callers do not put the signed portal
+        // session in URLs, where it can be retained by logs and browser history.
+        const session = verifyPortalSession(bearerTokenFrom(req) || body.session);
         if (!session) return sendJson(res, 401, { error: 'Portal session expired.' });
         // Signature and expiry are not the whole question — the portal has to still be open.
         // Doing this here rather than in each handler is the point: it is one place, and a new

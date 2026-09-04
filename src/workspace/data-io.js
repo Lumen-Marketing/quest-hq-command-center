@@ -97,8 +97,13 @@ export function createDataIO(ctx) {
       .wb-sum-paired td, .wb-sum-paired th { border-bottom:none !important; }
       .wb-sum-print-table caption { text-align:left; font-weight:700; font-size:13px; padding:0 0 6px; }
       @media print { .wb-report-grid { display:block; } .wb-chart-card { break-inside:avoid; page-break-inside:avoid; margin-bottom:14px; } }
-    </style></head><body>${bodyHTML}<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};<\/script></body></html>`);
+    </style></head><body>${bodyHTML}</body></html>`);
     win.document.close();
+    // Production CSP blocks inline scripts. Keep print orchestration in the already-trusted
+    // application bundle and wait for the copied stylesheets before opening the dialog.
+    const print = () => window.setTimeout(() => { win.focus(); win.print(); }, 350);
+    if (win.document.readyState === 'complete') print();
+    else win.addEventListener('load', print, { once: true });
   }
   function wbPrintTitleBlock(companyId, app, subtitle) {
     const when = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });

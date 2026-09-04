@@ -4806,7 +4806,7 @@ function renderFatalPage(headline, error) {
         </div>
         <h1>${h(headline)}</h1>
         <p class="form-message error">${h(detail)}</p>
-        <button class="btn btn-primary" type="button" onclick="location.reload()">Reload</button>
+        <button class="btn btn-primary" type="button" data-fatal-reload>Reload</button>
       </section>
     </main>`;
 }
@@ -25092,6 +25092,7 @@ function renderLandingPage(forceAuthModal = false) {
     } catch (error) {
       console.error('Landing page render failed', error);
       app.innerHTML = renderFatalPage('We could not load the sign-in page.', error);
+      app.querySelector('[data-fatal-reload]')?.addEventListener('click', () => window.location.reload());
       return undefined;
     }
   }
@@ -27238,22 +27239,86 @@ function commandPaletteCommands(query) {
   return commandPaletteModule.buildCommandIndex({ modules, companies, actions: commandPaletteQuickActions(), records, activeCompanyId: companyId });
 }
 
-// Recently-visited modules and records, per company, so an empty ⌘K is useful
-// before the user types. Captured from the route on every distinct view.
+function commandRecentStorageKey(companyId, profileId = activeDraftProfileId()) {
+  const owner = String(profileId || '').trim();
+  return owner ? `${COMMAND_RECENTS_KEY}.${owner}.${canonicalCompanyId(companyId)}` : '';
+}
+
+function commandRecentModuleAllowed(section, companyId, workspaceId) {
+  const module = MODULE_REGISTRY.find((item) => item.id === section);
+  if (!module) return false;
+  if (module.id === 'dashboard' || module.id === 'help') return true;
+  if (module.status === 'planned' || !isModuleInstalled(module.id, companyId, workspaceId)) return false;
+  if (!subscriptionAllowsCompany(companyId) && !['settings', 'setup', 'admin', 'users'].includes(module.id)) return false;
+  if (module.id === 'admin') return canViewAdminSurface(companyId);
+  return can(module.permission || `${module.id}.view`, companyId, workspaceId);
+}
+
+function commandRecentRecordExists(entry, companyId, workspaceId) {
+  const params = entry?.run?.params || {};
+  // Keep a proposal recent while its deferred dataset is arriving; the next render will
+  // validate it against the loaded rows instead of deleting a legitimate shortcut early.
+  if (params.proposal_id && !ensureDomainLoaded('proposals')) return true;
+  const specs = [
+    ['contact_id', state.contacts],
+    ['job_id', state.jobs],
+    ['deal_id', state.deals],
+    ['proposal_id', state.proposals],
+  ];
+  const match = specs.find(([param]) => params[param]);
+  if (!match) return false;
+  const [param, rows] = match;
+  const record = rows.find((item) => String(item.id) === String(params[param]));
+  if (!record || canonicalCompanyId(record.company_id) !== canonicalCompanyId(companyId)) return false;
+  return !record.workspace_id || String(record.workspace_id) === workspaceId;
+}
+
+function commandRecentAllowed(entry, companyId, allowedWorkspaceIds) {
+  const run = entry?.run;
+  const workspaceId = String(run?.workspaceId || '');
+  if (!workspaceId || run?.companyId !== canonicalCompanyId(companyId) || !allowedWorkspaceIds.has(workspaceId)) return false;
+  if (!commandRecentModuleAllowed(run.section, companyId, workspaceId)) return false;
+  return run.kind !== 'record' || commandRecentRecordExists(entry, companyId, workspaceId);
+}
+
+// Recently-visited modules and records are scoped to the signed-in person, company and
+// workspace. Entries are rechecked every time the menu opens, so removed access or deleted
+// records cannot leave a stale cross-workspace shortcut behind.
 function commandRecents(companyId = activeCompanyId()) {
-  const list = readJson(`${COMMAND_RECENTS_KEY}.${companyId}`, []);
-  return Array.isArray(list) ? list : [];
+  const storageKey = commandRecentStorageKey(companyId);
+  if (!storageKey) return [];
+  const stored = readJson(storageKey, []);
+  const list = Array.isArray(stored) ? stored : [];
+  const allowedWorkspaceIds = new Set(allowedOperationalWorkspaces(companyId).map((workspace) => workspace.id));
+  const valid = list.filter((entry) => commandRecentAllowed(entry, companyId, allowedWorkspaceIds));
+  if (valid.length !== list.length) writeJson(storageKey, valid);
+  return valid;
 }
 
 function recordCommandRecent(companyId, entry) {
+  const storageKey = commandRecentStorageKey(companyId);
+  if (!storageKey) return;
   const list = commandRecents(companyId).filter((item) => item && item.key !== entry.key);
   list.unshift(entry);
-  writeJson(`${COMMAND_RECENTS_KEY}.${companyId}`, list.slice(0, COMMAND_RECENTS_MAX));
+  writeJson(storageKey, list.slice(0, COMMAND_RECENTS_MAX));
+}
+
+function clearCommandRecents(profileId = activeDraftProfileId()) {
+  const owner = String(profileId || '').trim();
+  if (!owner) return;
+  const prefix = `${COMMAND_RECENTS_KEY}.${owner}.`;
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(prefix)) localStorage.removeItem(key);
+  }
+  lastRecentKey = '';
 }
 
 function trackRouteForRecents(route) {
   if (!route || route.name !== 'company' || !route.params) return;
-  const companyId = route.companyId;
+  const companyId = canonicalCompanyId(route.companyId);
+  const workspaceId = String(route.params.get('workspace') || workspaceIdForCompany(companyId) || '');
+  if (!workspaceId || !allowedOperationalWorkspaces(companyId).some((workspace) => workspace.id === workspaceId)) return;
   const RECORD_SPECS = [
     ['contact_id', 'contacts', (id) => contactById(id)?.name, 'ti-user', (id) => ({ contact_id: id })],
     ['job_id', 'jobs', (id) => jobById(id)?.name, 'ti-hammer', (id) => ({ tab: 'profile', job_id: id })],
@@ -27266,17 +27331,18 @@ function trackRouteForRecents(route) {
     const id = route.params.get(param);
     if (!id) continue;
     const label = labelFn(id);
-    if (label) entry = { key: `rec:${param}:${id}`, group: 'Recent', label, hint: '', icon, run: { kind: 'record', section, params: paramsFn(id) } };
+    if (label) entry = { key: `rec:${workspaceId}:${param}:${id}`, group: 'Recent', label, hint: '', icon, run: { kind: 'record', companyId, workspaceId, section, params: paramsFn(id) } };
     break;
   }
   if (!entry) {
     const module = MODULE_REGISTRY.find((m) => m.id === route.section);
     if (module && canViewModule(module, companyId)) {
-      entry = { key: `nav:${route.section}`, group: 'Recent', label: module.label, hint: module.group || '', icon: module.icon, run: { kind: 'navigate', section: route.section } };
+      entry = { key: `nav:${workspaceId}:${route.section}`, group: 'Recent', label: module.label, hint: module.group || '', icon: module.icon, run: { kind: 'navigate', companyId, workspaceId, section: route.section } };
     }
   }
-  if (!entry || entry.key === lastRecentKey) return;
-  lastRecentKey = entry.key;
+  const dedupeKey = entry ? `${commandRecentStorageKey(companyId)}:${entry.key}` : '';
+  if (!entry || dedupeKey === lastRecentKey) return;
+  lastRecentKey = dedupeKey;
   recordCommandRecent(companyId, entry);
 }
 
@@ -27463,15 +27529,15 @@ function runCommand(command) {
 
   closeCommandPalette(); // resets state and re-renders, removing the overlay
   if (run.kind === 'navigate') {
-    navigate(companyPath(run.section, {}, activeCompanyId()));
+    navigate(companyPath(run.section, run.workspaceId ? { workspace: run.workspaceId } : {}, run.companyId || activeCompanyId()));
   } else if (run.kind === 'record') {
-    const params = { ...(run.params || {}) };
+    const params = { ...(run.params || {}), ...(run.workspaceId ? { workspace: run.workspaceId } : {}) };
     if (params.file_id) {
       state.selectedFileId = params.file_id;
       state.modal = 'file-detail';
       delete params.file_id;
     }
-    navigate(companyPath(run.section, params, activeCompanyId()));
+    navigate(companyPath(run.section, params, run.companyId || activeCompanyId()));
   } else if (run.kind === 'company') {
     if (!run.noop) setActiveCompany(run.companyId);
   } else if (run.kind === 'action') {
@@ -31581,6 +31647,7 @@ function wbSetItemStage(companyId, workspaceId, appId, itemId, fieldId, stageId)
 
 async function signOut() {
   const draftProfileId = activeDraftProfileId();
+  clearCommandRecents(draftProfileId);
   if (draftProfileId) {
     if (formDraftManager) formDraftManager.purgeProfile(draftProfileId);
     else formDraftManagerReady.then((manager) => manager?.purgeProfile(draftProfileId));
@@ -36194,8 +36261,10 @@ async function loadClientPortalAnnotations() {
     state.clientPortalPublic.annotations = (data || []).map(normalizeClientPortalAnnotation);
     return state.clientPortalPublic.annotations;
   }
-  const url = `/api/client-portal-annotations?session=${encodeURIComponent(portal.session)}&document_id=${encodeURIComponent(portal.documentId)}`;
-  const response = await fetch(url);
+  const url = `/api/client-portal-annotations?document_id=${encodeURIComponent(portal.documentId)}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${portal.session}` },
+  });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) return [];
   state.clientPortalPublic.annotations = (payload.annotations || []).map(normalizeClientPortalAnnotation);

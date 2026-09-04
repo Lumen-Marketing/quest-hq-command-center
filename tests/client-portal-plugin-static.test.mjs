@@ -124,6 +124,14 @@ test('public portal viewer exposes plan markup tools and persistent annotations'
   assert.match(styles, /\.cp-fullscreen/);
 });
 
+test('public portal annotation reads keep the session token out of the URL', () => {
+  const start = source.indexOf('async function loadClientPortalAnnotations()');
+  const end = source.indexOf('async function cpReloadPortalAnnotations', start);
+  const block = source.slice(start, end);
+  assert.match(block, /headers: \{ Authorization: `Bearer \$\{portal\.session\}` \}/);
+  assert.doesNotMatch(block, /[?&]session=/);
+});
+
 test('client portal tool selection does not remount the PDF viewer', () => {
   assert.match(source, /function updateClientPortalAnnotateTool\(toolId\)/);
   assert.match(source, /button\.classList\.toggle\('active', active\)/);

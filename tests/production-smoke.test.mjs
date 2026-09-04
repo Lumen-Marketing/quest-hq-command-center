@@ -17,8 +17,8 @@ test('smoke CLI accepts an explicit deployment and commit marker', () => {
   });
 });
 
-test('production smoke defaults to the current gamma production domain', () => {
-  assert.equal(DEFAULT_PRODUCTION_URL, 'https://quest-hq-command-center-gamma.vercel.app');
+test('production smoke defaults to the public production domain', () => {
+  assert.equal(DEFAULT_PRODUCTION_URL, 'https://www.questbase.io');
 });
 
 test('app shell validation rejects generic SPA 200 responses', () => {
@@ -49,13 +49,20 @@ test('asset extraction returns same-origin built CSS and JavaScript assets', () 
   assert.deepEqual(validateAppShell(html), { ok: true });
 });
 
-test('legacy redirect validation requires the Quest marker and a real location replacement', () => {
+test('legacy redirect validation requires the Quest marker and a CSP-safe external redirect', () => {
   assert.deepEqual(validateLegacyRedirect('<title>Opening Quest HQ</title>'), {
     ok: false,
-    reason: 'legacy page does not redirect into the application',
+    reason: 'legacy page does not load the CSP-safe redirect',
   });
   assert.deepEqual(validateLegacyRedirect(`
     <title>Opening Quest HQ</title>
-    <script>window.location.replace('/company/lumen/jobs')</script>
+    <script src="/legacy-redirect.js?v=abc123" data-legacy-file="jobs.html"></script>
   `), { ok: true });
+  assert.deepEqual(validateLegacyRedirect(`
+    <title>Opening Quest HQ</title>
+    <script>window.location.replace('/company/lumen/jobs')</script>
+  `), {
+    ok: false,
+    reason: 'legacy page does not load the CSP-safe redirect',
+  });
 });

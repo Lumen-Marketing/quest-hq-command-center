@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-test('production guardian checks main and maintains one recoverable incident', () => {
+test('production guardian checks the public production domain and maintains one recoverable incident', () => {
   const source = readFileSync(
     new URL('../.github/workflows/production-guardian.yml', import.meta.url),
     'utf8',
@@ -29,7 +29,7 @@ test('production guardian checks main and maintains one recoverable incident', (
   assert.match(source, /id:\s*smoke[\s\S]*?continue-on-error:\s*true/);
   assert.match(
     source,
-    /npm run smoke:prod -- --base-url https:\/\/quest-hq-command-center-gamma\.vercel\.app --expect-sha "\$\{\{ steps\.revision\.outputs\.sha \}\}"/,
+    /npm run smoke:prod -- --base-url https:\/\/www\.questbase\.io --expect-sha "\$\{\{ steps\.revision\.outputs\.sha \}\}"/,
   );
 
   assert.equal(source.match(/uses:\s*actions\/github-script@v8/g)?.length, 2);

@@ -41,7 +41,7 @@ jobs:
       - name: Run production smoke check
         id: smoke
         continue-on-error: true
-        run: npm run smoke:prod -- --base-url https://quest-hq-command-center-gamma.vercel.app --expect-sha "${{ steps.revision.outputs.sha }}"
+        run: npm run smoke:prod -- --base-url https://www.questbase.io --expect-sha "${{ steps.revision.outputs.sha }}"
 
       - name: Open or update failure incident
         if: steps.smoke.outcome == 'failure'
