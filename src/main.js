@@ -4829,6 +4829,13 @@ function ensureDataLoad() {
         await loadSupabaseBootstrapData().catch((bootstrapError) => console.warn('Workspace bootstrap load failed', bootstrapError));
       }
       if (state.sync.mode === 'loading') state.sync = { label: 'Local fallback', mode: 'local' };
+      // A total failure never reaches summarizeInitialDataFailures, so the partial-load
+      // banner -- the one that carries the Retry -- never appeared. Without this the
+      // workspace just renders empty behind a small "Local fallback" label, which reads
+      // as "you have no data" rather than "we could not fetch it".
+      if (!(state.initialLoadFailures || []).length) {
+        state.initialLoadFailures = ['Workspace data'];
+      }
     })
     .finally(async () => {
       state.dataLoaded = true;
@@ -5044,8 +5051,8 @@ async function loadSupabaseData() {
   if (!joinRequestsResult.error) state.joinRequests = (joinRequestsResult.data || []).map(normalizeJoinRequest);
   if (!messageConversationsResult.error) state.messageConversations = (messageConversationsResult.data || []).map(normalizeMessageConversation);
   if (!messageAccessResult.error) state.messageAccess = (messageAccessResult.data || []).map(normalizeMessageAccess);
-  if (!messagesResult.error) state.messages = (messagesResult.data || []).map(normalizeMessage);
-  if (!messageAttachmentsResult.error) state.messageAttachments = (messageAttachmentsResult.data || []).map(normalizeMessageAttachment);
+  if (!messagesResult.error) state.messages = (messagesResult.data || []).slice().reverse().map(normalizeMessage);
+  if (!messageAttachmentsResult.error) state.messageAttachments = (messageAttachmentsResult.data || []).slice().reverse().map(normalizeMessageAttachment);
   if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
   if (!calendarEventsResult.error) state.calendarEvents = activeRows(calendarEventsResult.data || []).map(normalizeCalendarEvent);
   if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
@@ -9892,9 +9899,16 @@ const CONTACT_MERGE_FIELDS = ['name', 'phone', 'email', 'location', 'title', 'so
 
 
 
-// Merge duplicates into the survivor: fill the survivor's blank fields, move
-// every foreign reference (deals, tasks, activities) onto it, then recycle the
-// duplicates. Reference moves go through the live client when signed in.
+// Merge duplicates into the survivor: move every foreign reference onto it, fill the
+// survivor's blank fields, then recycle the duplicates.
+//
+// The reference move is one transaction on the server (merge_contact_references), and
+// nothing is recycled unless it returns cleanly. It used to be a loop of independent
+// updates whose results were never read, covering three of the nine places a contact is
+// referenced -- so a failed or unhandled move left records on a contact that was then
+// archived. contact_label_assignments, crm_sites and underwriting_cases cascade, and
+// purge_expired_recycle_bin hard-deletes the contact when the window closes, so those
+// leftovers were destroyed rather than merely mislinked.
 async function mergeContacts(survivorId, duplicateIds) {
   const companyId = activeCompanyId();
   if (!requirePermission('contacts.manage', companyId, 'Your role cannot merge contacts.', 'Contacts')) return;
@@ -9902,30 +9916,58 @@ async function mergeContacts(survivorId, duplicateIds) {
   const dups = duplicateIds.map((id) => contactById(id)).filter((c) => c && c.id !== survivorId);
   if (!survivor || !dups.length) return;
 
-  // 1. Fill blank survivor fields from the duplicates.
+  const client = createSupabaseClient();
+  const live = client && isLiveSupabaseSession();
+  const dupIdList = dups.map((d) => d.id);
+  const dupIds = new Set(dupIdList);
+
+  // 1. Move every reference, or stop. Rows outside the loaded window are covered too:
+  //    the server matches on the duplicate ids, not on what this tab happens to hold.
+  if (live) {
+    const moved = await safeSupabaseQuery(client.rpc('merge_contact_references', {
+      p_survivor_id: survivorId,
+      p_duplicate_ids: dupIdList,
+    }));
+    if (moved?.error) {
+      console.warn('Contact merge could not move linked records', moved.error);
+      showToast('Could not move the linked records, so nothing was merged. The duplicates are untouched.', 'error', 'Contacts');
+      return;
+    }
+  }
+
+  // 2. Fill blank survivor fields from the duplicates.
   const { mergeContactFields } = await import('./data/dedupe.js');
   const merged = normalizeContact(mergeContactFields(survivor, dups, CONTACT_MERGE_FIELDS));
   await persistContact(merged);
 
-  const client = createSupabaseClient();
-  const live = client && isLiveSupabaseSession();
-  const dupIds = new Set(dups.map((d) => d.id));
-
-  // 2. Move foreign references onto the survivor (local state + live DB).
-  for (const deal of state.deals.filter((d) => dupIds.has(d.primary_contact_id))) {
+  // 3. Mirror the move into memory so the screen agrees with the database without a reload.
+  for (const deal of (state.deals || []).filter((d) => dupIds.has(d.primary_contact_id))) {
     upsertDeal({ ...deal, primary_contact_id: survivorId });
-    if (live) await safeSupabaseQuery(client.from('deals').update({ primary_contact_id: survivorId }).eq('id', deal.id));
   }
-  for (const task of state.tasks.filter((t) => dupIds.has(t.contact_id))) {
+  for (const task of (state.tasks || []).filter((t) => dupIds.has(t.contact_id))) {
     upsertTask({ ...task, contact_id: survivorId });
-    if (live) await safeSupabaseQuery(client.from('tasks').update({ contact_id: survivorId }).eq('id', task.id));
   }
-  for (const activity of state.activities.filter((a) => a.related_type === 'contact' && dupIds.has(a.related_id))) {
-    upsertActivity({ ...activity, related_id: survivorId });
-    if (live) await safeSupabaseQuery(client.from('activities').update({ related_id: survivorId }).eq('id', activity.id));
+  for (const job of (state.jobs || []).filter((j) => dupIds.has(j.contact_id))) {
+    upsertJob({ ...job, contact_id: survivorId });
   }
+  for (const site of (state.crmSites || []).filter((c) => dupIds.has(c.contact_id))) {
+    upsertCrmSite({ ...site, contact_id: survivorId });
+  }
+  // activities carry the contact twice: a real contact_id column with its own foreign key,
+  // and the generic related_type/related_id pair. Only the second was ever moved.
+  for (const activity of (state.activities || []).filter((a) => dupIds.has(a.contact_id) || (a.related_type === 'contact' && dupIds.has(a.related_id)))) {
+    upsertActivity({
+      ...activity,
+      contact_id: dupIds.has(activity.contact_id) ? survivorId : activity.contact_id,
+      related_id: activity.related_type === 'contact' && dupIds.has(activity.related_id) ? survivorId : activity.related_id,
+    });
+  }
+  // Proposals, underwriting cases and label assignments are deferred domains. The server
+  // has already moved them inside the transaction above, and touching them here would
+  // force all three to load on every merge -- the eager loading the deferred split exists
+  // to avoid. Whenever a screen next opens one, it loads the merged truth.
 
-  // 3. Recycle the now-empty duplicates.
+  // 4. Recycle the now-empty duplicates.
   for (const dup of dups) {
     await recycleDeleteRecord({ type: 'contact', id: dup.id, options: { silent: true } });
   }
@@ -45404,14 +45446,14 @@ async function loadIdentityRealtimeDomain(client, domain) {
     const [conversations, access, messages, attachments, reads] = await Promise.all([
       client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
       client.from('message_conversation_access').select('*'),
-      client.from('messages').select('*').order('created_at', { ascending: true }).limit(500),
-      client.from('message_attachments').select('*').order('created_at', { ascending: true }).limit(500),
+      client.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
+      client.from('message_attachments').select('*').order('created_at', { ascending: false }).limit(500),
       client.from('message_reads').select('*'),
     ]);
     if (!conversations.error) state.messageConversations = (conversations.data || []).map(normalizeMessageConversation);
     if (!access.error) state.messageAccess = (access.data || []).map(normalizeMessageAccess);
-    if (!messages.error) state.messages = (messages.data || []).map(normalizeMessage);
-    if (!attachments.error) state.messageAttachments = (attachments.data || []).map(normalizeMessageAttachment);
+    if (!messages.error) state.messages = (messages.data || []).slice().reverse().map(normalizeMessage);
+    if (!attachments.error) state.messageAttachments = (attachments.data || []).slice().reverse().map(normalizeMessageAttachment);
     if (!reads.error) state.messageReads = (reads.data || []).map(normalizeMessageRead);
     return;
   }

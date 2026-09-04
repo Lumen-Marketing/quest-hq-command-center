@@ -66,8 +66,11 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     joinRequestsResult: client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
     messageConversationsResult: client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
     messageAccessResult: client.from('message_conversation_access').select('*'),
-    messagesResult: client.from('messages').select('*').order('created_at', { ascending: true }).limit(500),
-    messageAttachmentsResult: client.from('message_attachments').select('*').order('created_at', { ascending: true }).limit(500),
+    // Newest 500, not oldest 500. Ascending order with a cap returned the FIRST 500 rows a
+    // workspace ever wrote, so once a busy account crossed that line no new message could
+    // ever load. Fetch descending and put the list back in ascending order for display.
+    messagesResult: client.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
+    messageAttachmentsResult: client.from('message_attachments').select('*').order('created_at', { ascending: false }).limit(500),
     messageReadsResult: client.from('message_reads').select('*'),
     calendarEventsResult: client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
     notificationsResult: client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
