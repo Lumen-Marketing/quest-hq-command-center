@@ -1,5 +1,27 @@
 # Known issues and risks
 
+## The form upload sweep has never run against real data
+
+`/api/form-upload-purge` is deployed and scheduled, and `abandoned_form_uploads` returned zero
+candidates on 2026-09-04 -- correct for a bucket with nothing older than 48 hours, but it means
+the delete path has not yet removed a real object. Check `removed_uploads` on the first runs.
+
+## Contacts merged before 2026-09-05 may have stranded rows
+
+The old merge left references on duplicates that were then archived. Where the duplicate has
+already been purged, cascading rows in `contact_label_assignments`, `crm_sites` and
+`underwriting_cases` are gone. Where it is still in the recycle bin, the rows can still be
+re-pointed. No audit of affected contacts has been run.
+
+## Most list queries are still capped without pagination
+
+The chat window now takes the newest rows rather than the oldest, which was the reported
+defect. The caps themselves remain: `activities` and `form_responses` at 500,
+`client_portal_events` at 500, `notifications` and `wb_data_transfers` at 200,
+`audit_events` at 100, `company_time_entries` at 500. There is no cursor or load-more on any
+of them, so a large account still cannot reach past the window. Real pagination is a
+larger change than this pass covered.
+
 Only confirmed, actionable items belong here. Resolved findings live in `current-state.md` and
 `decisions.md`, not in this list.
 

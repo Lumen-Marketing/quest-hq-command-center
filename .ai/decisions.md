@@ -1,5 +1,25 @@
 # Durable decisions
 
+## A contact merge moves every reference in one transaction, or it moves none
+
+Decided 2026-09-05. Merging used to be a sequence of independent updates from the browser:
+one statement per table, results never read, and the duplicate recycled at the end whatever
+happened. It covered `deals.primary_contact_id`, `tasks.contact_id` and
+`activities.related_id`, and missed `activities.contact_id` -- a separate column with its own
+foreign key -- along with `jobs`, `proposal_documents`, `crm_sites`, `underwriting_cases` and
+`contact_label_assignments`.
+
+Two things made a partial merge worse than a failed one. It only ever inspected rows already
+loaded into the tab, so anything past the load window was invisible to it. And three of the
+missed tables cascade, so once `purge_expired_recycle_bin` hard-deleted the archived duplicate,
+their rows went with it.
+
+`merge_contact_references` is SECURITY DEFINER, re-checks `crm.manage` on the survivor's
+workspace, refuses duplicates from another company or workspace, and matches on the duplicate
+ids rather than on what the client holds. The client recycles only after it returns. A merge
+that cannot finish now leaves the duplicates in place to be tried again, which is the failure
+mode a user can act on.
+
 ## The App Builder recycle bin expires after 30 days, and the sweep is automatic
 
 Decided 2026-09-04, reversing an earlier decision recorded in `expiredInTrash`: that a bin which

@@ -13518,6 +13518,16 @@
  ],
  "functions": [
   {
+   "name": "abandoned_form_uploads",
+   "returns": "TABLE(object_path text, created_at timestamp with time zone)",
+   "arguments": "p_older_than_hours integer, p_limit integer",
+   "volatility": "v",
+   "anon_execute": false,
+   "security_definer": true,
+   "service_role_execute": true,
+   "authenticated_execute": false
+  },
+  {
    "name": "accept_company_invite",
    "returns": "text",
    "arguments": "invite_token text",
@@ -13881,6 +13891,16 @@
    "name": "mark_platform_backup_copy_deleted",
    "returns": "text",
    "arguments": "copy_id text",
+   "volatility": "v",
+   "anon_execute": false,
+   "security_definer": true,
+   "service_role_execute": true,
+   "authenticated_execute": true
+  },
+  {
+   "name": "merge_contact_references",
+   "returns": "jsonb",
+   "arguments": "p_survivor_id text, p_duplicate_ids text[]",
    "volatility": "v",
    "anon_execute": false,
    "security_definer": true,
@@ -15102,9 +15122,17 @@
   {
    "name": "wb_trash_records_actor_is_the_caller",
    "version": "20260904013449"
+  },
+  {
+   "version": "20260904215926",
+   "name": "merge_contact_references"
+  },
+  {
+   "version": "20260904215937",
+   "name": "purge_abandoned_form_uploads"
   }
  ],
- "captured_at": "2026-09-04T01:34:57.726267+00:00",
+ "captured_at": "2026-09-04T22:01:56.717525+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",

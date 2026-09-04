@@ -2,6 +2,33 @@
 
 Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-09-05 contact merge, chat window, load recovery and abandoned uploads
+
+- Contact merge is one transaction. `merge_contact_references` moves every reference the
+  duplicates hold and the client recycles nothing unless it returns cleanly. The previous
+  loop covered three of the nine places a contact is referenced, never read whether any
+  update succeeded, and archived the duplicate regardless.
+- Because `contact_label_assignments`, `crm_sites` and `underwriting_cases` are
+  `ON DELETE CASCADE`, and `purge_expired_recycle_bin` hard-deletes the contact once the
+  retention window closes, records left on a merged-away duplicate were destroyed on a
+  delay rather than merely mislinked. Existing rows stranded by earlier merges are not
+  repaired by this change.
+- Chat loads the newest 500 messages and attachments instead of the oldest. The queries
+  were ordered ascending under a cap, so a workspace past 500 messages could not load a
+  new one; the window is reversed back to reading order before render.
+- A total workspace data-load failure now raises the existing "Some data did not load"
+  banner and its Retry. Only partial failures reached that code before, so a complete
+  failure showed an empty workspace behind a small `Local fallback` label.
+- Abandoned public-form uploads are swept daily by `/api/form-upload-purge`, which asks
+  `abandoned_form_uploads` for objects older than 48 hours that no `form_responses`
+  answer references and removes them through the storage API.
+- Both migrations were applied to production on 2026-09-04 as `20260904215926`
+  (`merge_contact_references`) and `20260904215937` (`purge_abandoned_form_uploads`); the
+  repository filenames carry those same versions. Grants were verified from the live catalog:
+  the merge routine is executable by `authenticated`, the sweep by `service_role` only. The
+  snapshot, `database/functions.md` and the manifest were refreshed against the live catalog
+  and `npm run tenancy:check` certifies the matrix again.
+
 ## 2026-09-04 focused security and reliability pass
 
 - Application commit `fef4a36ec33e1e8643d98c4919e46df7e81bb86c` is live on

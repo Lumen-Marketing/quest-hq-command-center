@@ -1,9 +1,10 @@
 # Public functions
 
-Captured through 2026-09-01T20:02:47.185039Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured through 2026-09-04T22:01:56.717525Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- | --- |
+| `abandoned_form_uploads(p_older_than_hours integer, p_limit integer)` | TABLE(object_path text, created_at timestamp with time zone) | yes | no | no | yes |
 | `accept_company_invite(invite_token text)` | text | yes | no | yes | yes |
 | `accept_public_proposal(proposal_token text, signer_name text, signer_email text, decision text)` | jsonb | yes | no | no | yes |
 | `apply_company_plugin_preset(target_company_id text, preset_code text)` | text[] | yes | no | yes | yes |
@@ -41,6 +42,7 @@ Captured through 2026-09-01T20:02:47.185039Z from the live catalog. Execute gran
 | `lookup_company_invite(invite_token text)` | TABLE(company_id text, company_name text, email text, status text, expires_at timestamp with time zone) | yes | no | no | yes |
 | `manage_platform_company(target_company_id text, platform_action text, review_note text)` | text | yes | no | yes | yes |
 | `mark_platform_backup_copy_deleted(copy_id text)` | text | yes | no | yes | yes |
+| `merge_contact_references(p_survivor_id text, p_duplicate_ids text[])` | jsonb | yes | no | yes | yes |
 | `message_touch_conversation()` | trigger | yes | no | no | yes |
 | `mirror_workspace_backup_copy()` | trigger | yes | no | no | yes |
 | `permanently_delete_platform_backup_copy(copy_id text)` | text | yes | no | yes | yes |
