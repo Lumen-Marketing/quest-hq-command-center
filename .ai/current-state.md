@@ -4,6 +4,10 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
 
 ## 2026-09-05 contact merge, chat window, load recovery and abandoned uploads
 
+- Released as `95689b9` in deployment `dpl_DAf3rZVZKfeQL95ZtWnz85W2Fm1s`, READY on
+  `https://www.questbase.io`. The commit-pinned smoke check passed 36/36 production routes
+  with 4/4 entry assets.
+
 - Contact merge is one transaction. `merge_contact_references` moves every reference the
   duplicates hold and the client recycles nothing unless it returns cleanly. The previous
   loop covered three of the nine places a contact is referenced, never read whether any
