@@ -2,7 +2,11 @@
 
 Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
-## 2026-09-09 remaining code-review closure (release in progress)
+## 2026-09-09 remaining code-review closure
+
+- Released as `285d133` in deployment `dpl_3HpnJX4DCSSaUN75oEGfFbpf1aoo`, READY on
+  `https://www.questbase.io`. The commit-pinned smoke check passed 36/36 production routes
+  with 4/4 entry assets.
 
 - Public form files now begin with a short-lived, question-bound upload intent. Submission
   accepts only published question types/options, verifies the real private Storage object and
@@ -18,8 +22,6 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
   again state. A failure no longer leaves the user watching an endless loading placeholder.
 - Host-shell renders update around the embedded Tasks surface without removing or reparenting its
   iframe, preserving its browsing context, scroll position and unfinished interaction.
-
-Production migration and deployment identifiers must be added only after live verification.
 
 ## 2026-09-05 contact merge, chat window, load recovery and abandoned uploads
 
