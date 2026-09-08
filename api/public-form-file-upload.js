@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { defineEndpoint } from './_lib/endpoint.js';
 import { HttpError } from './_lib/http-security.js';
 import { createStorageClient } from './_lib/supabase-storage.js';
+import { clientIp } from './_lib/http-security.js';
+import { consumeDurableRateLimit } from './_lib/rate-limit.js';
 import {
   ALLOWED_PUBLIC_FORM_FILE_EXTS,
   ALLOWED_PUBLIC_FORM_FILE_TYPES,
   FORM_FILE_BUCKET,
   FORM_FILE_MAX_BYTES,
+  FORM_UPLOAD_INTENT_TTL_MS,
   hasDangerousUploadExtension,
   uploadFileExtension,
 } from './_lib/form-files.js';
@@ -45,10 +48,10 @@ export default defineEndpoint(
     notConfiguredStatus: 500,
     notConfiguredMessage: 'Public form files are not configured.',
     bodyLimitBytes: 16 * 1024,
-    rateLimit: { namespace: 'public-form-file-upload', limit: 20, windowMs: 10 * 60 * 1000 },
+    rateLimit: { namespace: 'public-form-file-upload', limit: 20, windowMs: 10 * 60 * 1000, durable: true },
   },
   async (ctx) => {
-    const { body, db } = ctx;
+    const { body, db, req } = ctx;
     const storage = ctx.storage || createStorageClient();
 
     const formId = String(body.form_id || '').trim();
@@ -72,8 +75,33 @@ export default defineEndpoint(
     const question = Array.isArray(form.questions) ? form.questions.find((item) => item.id === questionId) : null;
     if (!question || question.type !== 'file') throw new HttpError(400, 'This question does not accept files.');
 
+    const formQuota = await consumeDurableRateLimit(db, {
+      namespace: `public-form-file-upload:${form.id}`,
+      ip: clientIp(req),
+      limit: 20,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (formQuota && !formQuota.allowed) throw new HttpError(429, 'Too many uploads for this form. Please try again shortly.');
+
     await ensureFormFileBucket(storage);
     const objectPath = `${form.company_id}/${form.id}/${questionId}/${randomUUID()}-${fileName}`;
+    const uploadIntentId = randomUUID();
+    const intentRes = await db('/rest/v1/form_upload_intents', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        id: uploadIntentId,
+        company_id: form.company_id,
+        form_id: form.id,
+        question_id: questionId,
+        object_path: objectPath,
+        expected_name: fileName,
+        expected_type: fileType,
+        expected_size: fileSize,
+        expires_at: new Date(Date.now() + FORM_UPLOAD_INTENT_TTL_MS).toISOString(),
+      }),
+    });
+    if (!intentRes.ok) throw new HttpError(500, 'Could not prepare file upload.');
     const { data, error } = await storage.storage
       .from(FORM_FILE_BUCKET)
       .createSignedUploadUrl(objectPath, { upsert: false });
@@ -82,6 +110,7 @@ export default defineEndpoint(
     return {
       bucket_id: FORM_FILE_BUCKET,
       object_path: objectPath,
+      upload_intent_id: uploadIntentId,
       token: data?.token || '',
       signed_upload_url: data?.signedUrl || '',
       file_name: fileName,

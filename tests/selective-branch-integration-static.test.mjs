@@ -11,7 +11,8 @@ import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 // asserting against main.js alone would report it as deleted.
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/ui/appearance-panel.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/crm/location-picker-modal.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/crm/location-picker-modal.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/data/realtime-query-batches.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8');

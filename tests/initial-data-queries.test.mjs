@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   loadInitialDataQueries,
+  loadPaginatedDataQuery,
   safeInitialDataQuery,
   summarizeInitialDataFailures,
 } from '../src/data/initial-data-queries.js';
@@ -21,6 +22,7 @@ function queryClient() {
       order: () => builder,
       is: () => builder,
       limit: () => builder,
+      range: () => builder,
       then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
     };
     return builder;
@@ -46,6 +48,47 @@ test('every independent first-paint query starts in the same batch', async () =>
   assert.deepEqual(results.automationsResult, { data: ['automations'], error: null });
   assert.deepEqual(results.companiesResult, { data: ['companies'], error: null });
   assert.deepEqual(results.platformAdminResult, { data: ['rpc:is_platform_admin'], error: null });
+});
+
+test('paged lists cross the API row cap without duplicates or omissions', async () => {
+  const source = Array.from({ length: 1205 }, (_, index) => ({ id: `row-${String(index).padStart(4, '0')}` }));
+  const ranges = [];
+  const makeQuery = () => {
+    let result = [];
+    return {
+      range(from, to) {
+        ranges.push([from, to]);
+        result = source.slice(from, to + 1);
+        return this;
+      },
+      then(resolve, reject) { return Promise.resolve({ data: result, error: null }).then(resolve, reject); },
+    };
+  };
+
+  const result = await loadPaginatedDataQuery(makeQuery, (query) => Promise.resolve(query), { pageSize: 500, label: 'Contacts' });
+  assert.equal(result.error, null);
+  assert.equal(result.data.length, 1205);
+  assert.deepEqual(result.data.map((row) => row.id), source.map((row) => row.id));
+  assert.deepEqual(ranges, [[0, 499], [500, 999], [1000, 1499]]);
+});
+
+test('paged lists preserve completed pages when a later page fails', async () => {
+  let page = 0;
+  const result = await loadPaginatedDataQuery(
+    () => ({
+      range() { return this; },
+      then(resolve, reject) {
+        page += 1;
+        return Promise.resolve(page === 1
+          ? { data: Array.from({ length: 2 }, (_, id) => ({ id })), error: null }
+          : { data: null, error: new Error('offline') }).then(resolve, reject);
+      },
+    }),
+    (query) => Promise.resolve(query),
+    { pageSize: 2, label: 'Jobs' },
+  );
+  assert.equal(result.data.length, 2);
+  assert.match(result.error.message, /offline/);
 });
 
 test('startup requests carry human-readable timing labels', async () => {

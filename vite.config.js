@@ -72,6 +72,8 @@ export default defineConfig({
             normalizedId.endsWith('/src/workspaces/plugin-catalog.js')
             || normalizedId.endsWith('/src/workspaces/tenant-route.js')
             || normalizedId.endsWith('/src/communications/sms-readiness.js')
+            || normalizedId.endsWith('/src/ui/workspace-loading.js')
+            || normalizedId.endsWith('/src/ui/lazy-surface-error.js')
           ) {
             return 'workspace-runtime';
           }

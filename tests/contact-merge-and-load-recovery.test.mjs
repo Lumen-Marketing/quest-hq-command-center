@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const root = new URL('..', import.meta.url);
@@ -10,7 +11,7 @@ const main = read('src/main.js');
 const initialQueries = read('src/data/initial-data-queries.js');
 const snapshot = JSON.parse(read('.ai/database/snapshot.json'));
 
-const migrationsDir = join(new URL('supabase/migrations/', root).pathname.replace(/^\/([A-Za-z]:)/, '$1'), '.');
+const migrationsDir = join(fileURLToPath(new URL('supabase/migrations/', root)), '.');
 const migration = (needle) => {
   const name = readdirSync(migrationsDir).find((n) => n.includes(needle));
   assert.ok(name, `no migration matching ${needle}`);

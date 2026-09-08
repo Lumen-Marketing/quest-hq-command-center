@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { embeddedTaskFrameMarkup, retainEmbeddedTaskFrame } from '../src/tasks/embedded-frame.js';
+import { readFileSync } from 'node:fs';
+import { embeddedTaskFrameMarkup, renderShellPreservingTaskFrame } from '../src/tasks/embedded-frame.js';
 
 function node({ src = '', key = '' } = {}) {
   return {
@@ -21,27 +22,15 @@ test('renders a placeholder only for the exact mounted Tasks URL', () => {
   assert.match(embeddedTaskFrameMarkup(root, '/taskmanagement/app.html?workspace_id=two'), /^<iframe/);
 });
 
-test('restores a detached frame into the matching placeholder', () => {
-  const key = '/taskmanagement/app.html?workspace_id=one';
-  const frame = node({ src: key });
-  const placeholder = node({ key });
-  const root = {
-    querySelector: () => frame,
-    querySelectorAll: () => [placeholder],
-  };
-  const restore = retainEmbeddedTaskFrame(root);
-  assert.equal(frame.removed, true);
-  assert.equal(restore(), true);
-  assert.equal(placeholder.replacement, frame);
+test('the preservation path never removes or reparents the live iframe', () => {
+  const source = readFileSync(new URL('../src/tasks/embedded-frame.js', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /frame\.remove\(|replaceWith\(frame\)|appendChild\(frame\)/);
+  assert.match(source, /renderShellPreservingTaskFrame/);
+  assert.match(main, /if \(!renderShellPreservingTaskFrame\(app, shell\)\) app\.innerHTML = shell/);
 });
 
-test('does not reuse a frame when the new route has a different key', () => {
+test('preservation declines cleanly outside a browser', () => {
   const frame = node({ src: '/taskmanagement/app.html?workspace_id=one' });
-  const placeholder = node({ key: '/taskmanagement/app.html?workspace_id=two' });
-  const root = {
-    querySelector: () => frame,
-    querySelectorAll: () => [placeholder],
-  };
-  assert.equal(retainEmbeddedTaskFrame(root)(), false);
-  assert.equal(placeholder.replacement, null);
+  assert.equal(renderShellPreservingTaskFrame({ querySelector: () => frame }, '<div></div>'), false);
 });

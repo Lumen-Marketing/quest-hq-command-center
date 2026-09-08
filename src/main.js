@@ -74,9 +74,10 @@ import {
 } from './settings/navigation-model.js';
 import { applyReadOnlyControlState } from './ui/read-only-controls.js';
 import { renderContentSkeleton, renderWorkspaceSkeleton } from './ui/workspace-loading.js';
+import { showLazySurfaceFailure } from './ui/lazy-surface-error.js';
 import { workspaceBuilderStyles } from './workspace/builder-style-loader.js';
 import { activeCompanyContactFields } from './data/company-contact-field-lifecycle.js';
-import { embeddedTaskFrameMarkup, retainEmbeddedTaskFrame } from './tasks/embedded-frame.js';
+import { embeddedTaskFrameMarkup, renderShellPreservingTaskFrame } from './tasks/embedded-frame.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -2563,6 +2564,11 @@ const state = {
   messages: readSeededList(MESSAGE_CACHE_KEY, messagesFallback).map(normalizeMessage),
   messageReads: readSeededList(MESSAGE_READ_CACHE_KEY, messageReadsFallback).map(normalizeMessageRead),
   messageAttachments: readSeededList(MESSAGE_ATTACHMENT_CACHE_KEY, messageAttachmentsFallback).map(normalizeMessageAttachment),
+  // Bootstrap keeps chat previews fast with the newest global slice. Opening a thread then
+  // pages its complete history once per session instead of silently hiding older messages.
+  messageHistoryLoaded: new Set(),
+  messageHistoryLoading: new Set(),
+  messageHistoryErrors: {},
   calendarEvents: activeRows(readSeededList(CALENDAR_EVENT_CACHE_KEY, calendarEventsFallback)).map(normalizeCalendarEvent),
   clientPortals: activeRows(readSeededList(CLIENT_PORTAL_CACHE_KEY, [])).map(normalizeClientPortal),
   clientPortalDocuments: activeRows(readSeededList(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, [])).map(normalizeClientPortalDocument),
@@ -3548,7 +3554,7 @@ function loadAppearancePanel() {
 
 function renderAppearanceControls() {
   if (appearancePanelFn) return appearancePanelFn();
-  loadAppearancePanel().then(() => render()).catch((error) => console.error('Appearance panel failed to load', error));
+  loadAppearancePanel().then(() => render()).catch((error) => reportLazySurfaceFailure('Appearance panel failed to load', error));
   return '<div class="appearance-controls" data-appearance-controls></div>';
 }
 function refreshAppearanceControls() {
@@ -4212,9 +4218,7 @@ function render() {
   // The renderer emits a zero-load placeholder only when the existing frame has the exact
   // same workspace/job URL; route changes still create a fresh frame as they should.
   const shell = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock() + renderLayoutDiagnostic();
-  const restoreEmbeddedTaskFrame = retainEmbeddedTaskFrame(app);
-  app.innerHTML = shell;
-  restoreEmbeddedTaskFrame();
+  if (!renderShellPreservingTaskFrame(app, shell)) app.innerHTML = shell;
   applyReadOnlyControlState(app, { readOnly: isReadOnlyDemo(), isMutableAction, isMutableFormSubmit });
   mountLayoutDiagnosticIfRequested();
   queueMicrotask(restoreSidebarScroll);
@@ -4913,7 +4917,7 @@ function ensureDomainLoaded(domain) {
   // Demo and local sessions have their data seeded in memory already; there is
   // nothing to fetch and nothing to wait for.
   if (!isLiveSupabaseSession()) return true;
-  if (state.loadedDomains[domain] === 'loading') return false;
+  if (state.loadedDomains[domain] === 'loading' || state.loadedDomains[domain] === 'error') return false;
   const client = createSupabaseClient();
   if (!client) return true;
   state.loadedDomains[domain] = 'loading';
@@ -4923,13 +4927,12 @@ function ensureDomainLoaded(domain) {
       await loadRealtimeDomain(client, domain);
       state.loadedDomains[domain] = 'loaded';
     } catch (error) {
-      // Let it be retried rather than leaving the section permanently empty.
-      state.loadedDomains[domain] = '';
-      console.error(`Deferred load failed for ${domain}`, error);
+      state.loadedDomains[domain] = 'error';
+      reportLazySurfaceFailure(`Could not load ${domain}`, error, { domain });
     } finally {
       finishTimedOperation('Deferred data load', startedAt, 1500, domain);
     }
-    render();
+    if (state.loadedDomains[domain] === 'loaded') render();
   })();
   return false;
 }
@@ -5322,6 +5325,21 @@ function safeSupabaseQuery(query) {
   return Promise.resolve(query).catch((error) => ({ error }));
 }
 
+function requireQueries(...results) {
+  const failed = results.find((result) => result?.error);
+  if (failed) throw failed.error;
+}
+
+async function pagedSupabaseQuery(makeQuery, label) {
+  const { loadPaginatedDataQuery } = await import('./data/initial-data-queries.js');
+  return loadPaginatedDataQuery(makeQuery, safeSupabaseQuery, { label });
+}
+
+async function realtimeQueryBatch(client, domain, options) {
+  const { loadRealtimeQueryBatch } = await import('./data/realtime-query-batches.js');
+  return loadRealtimeQueryBatch(client, domain, pagedSupabaseQuery, safeSupabaseQuery, options);
+}
+
 function resetLiveWorkspaceData() {
   state.everLoaded = false;
   state.jobs = [];
@@ -5348,6 +5366,9 @@ function resetLiveWorkspaceData() {
   state.messages = [];
   state.messageReads = [];
   state.messageAttachments = [];
+  state.messageHistoryLoaded = new Set();
+  state.messageHistoryLoading = new Set();
+  state.messageHistoryErrors = {};
   state.calendarEvents = [];
   state.clientPortals = [];
   state.clientPortalDocuments = [];
@@ -6086,7 +6107,7 @@ function loadRenderKnowledgePage() {
 
 function renderKnowledgePage(route, companyId) {
   if (renderKnowledgePageModule) return renderKnowledgePageModule.renderKnowledgePage(route, companyId);
-  loadRenderKnowledgePage().then(() => render()).catch((error) => console.error('renderKnowledgePage failed to load', error));
+  loadRenderKnowledgePage().then(() => render()).catch((error) => reportLazySurfaceFailure('Knowledge Base could not load', error));
   return questLoader('Loading');
 }
 
@@ -6137,13 +6158,13 @@ function loadRenderWorkspaceSettings() {
 
 function renderWorkspaceSettings(companyId) {
   if (renderWorkspaceSettingsModule) return renderWorkspaceSettingsModule.renderWorkspaceSettings(companyId);
-  loadRenderWorkspaceSettings().then(() => render()).catch((error) => console.error('renderWorkspaceSettings failed to load', error));
+  loadRenderWorkspaceSettings().then(() => render()).catch((error) => reportLazySurfaceFailure('Workspace settings could not load', error));
   return questLoader('Loading');
 }
 
 function renderWorkspaceSettingsSurface(method, companyId) {
   if (renderWorkspaceSettingsModule?.[method]) return renderWorkspaceSettingsModule[method](companyId);
-  loadRenderWorkspaceSettings().then(() => render()).catch((error) => console.error(`${method} failed to load`, error));
+  loadRenderWorkspaceSettings().then(() => render()).catch((error) => reportLazySurfaceFailure('Workspace settings could not load', error));
   return questLoader('Loading');
 }
 
@@ -6170,7 +6191,7 @@ function loadRenderClientPortalsPage() {
 
 function renderClientPortalsPage(route, companyId) {
   if (renderClientPortalsPageModule) return renderClientPortalsPageModule.renderClientPortalsPage(route, companyId);
-  loadRenderClientPortalsPage().then(() => render()).catch((error) => console.error('renderClientPortalsPage failed to load', error));
+  loadRenderClientPortalsPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Client portals could not load', error));
   return questLoader('Loading');
 }
 
@@ -6197,7 +6218,7 @@ function loadRenderFormsPage() {
 
 function renderFormsPage(companyId) {
   if (renderFormsPageModule) return renderFormsPageModule.renderFormsPage(companyId);
-  loadRenderFormsPage().then(() => render()).catch((error) => console.error('renderFormsPage failed to load', error));
+  loadRenderFormsPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Forms could not load', error));
   return questLoader('Loading');
 }
 
@@ -6224,7 +6245,7 @@ function loadRenderPriceBookPage() {
 
 function renderPriceBookPage(route, companyId) {
   if (renderPriceBookPageModule) return renderPriceBookPageModule.renderPriceBookPage(route, companyId);
-  loadRenderPriceBookPage().then(() => render()).catch((error) => console.error('renderPriceBookPage failed to load', error));
+  loadRenderPriceBookPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Price Book could not load', error));
   return questLoader('Loading');
 }
 
@@ -6251,7 +6272,7 @@ function loadRenderTeamWorkloadPage() {
 
 function renderTeamWorkloadPage(companyId) {
   if (renderTeamWorkloadPageModule) return renderTeamWorkloadPageModule.renderTeamWorkloadPage(companyId);
-  loadRenderTeamWorkloadPage().then(() => render()).catch((error) => console.error('renderTeamWorkloadPage failed to load', error));
+  loadRenderTeamWorkloadPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Team workload could not load', error));
   return questLoader('Loading');
 }
 
@@ -6282,7 +6303,7 @@ function loadRenderEodPage() {
 
 function renderEodPage(route, companyId) {
   if (renderEodPageModule) return renderEodPageModule.renderEodPage(route, companyId);
-  loadRenderEodPage().then(() => render()).catch((error) => console.error('renderEodPage failed to load', error));
+  loadRenderEodPage().then(() => render()).catch((error) => reportLazySurfaceFailure('EOD reports could not load', error));
   return questLoader('Loading');
 }
 
@@ -6336,7 +6357,7 @@ function loadRenderCallsPage() {
 
 function renderCallsPage(route, companyId) {
   if (renderCallsPageModule) return renderCallsPageModule.renderCallsPage(route, companyId);
-  loadRenderCallsPage().then(() => render()).catch((error) => console.error('renderCallsPage failed to load', error));
+  loadRenderCallsPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Calls could not load', error));
   return questLoader('Loading');
 }
 
@@ -6363,7 +6384,7 @@ function loadRenderWorkdayPage() {
 
 function renderWorkdayPage(companyId) {
   if (renderWorkdayPageModule) return renderWorkdayPageModule.renderWorkdayPage(companyId);
-  loadRenderWorkdayPage().then(() => render()).catch((error) => console.error('renderWorkdayPage failed to load', error));
+  loadRenderWorkdayPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Workday could not load', error));
   return questLoader('Loading');
 }
 
@@ -6390,7 +6411,7 @@ function loadRenderProposalPublicPage() {
 
 function renderProposalPublicPage(route) {
   if (renderProposalPublicPageModule) return renderProposalPublicPageModule.renderProposalPublicPage(route);
-  loadRenderProposalPublicPage().then(() => render()).catch((error) => console.error('renderProposalPublicPage failed to load', error));
+  loadRenderProposalPublicPage().then(() => render()).catch((error) => reportLazySurfaceFailure('renderProposalPublicPage failed to load', error));
   return questLoader('Loading');
 }
 
@@ -6438,7 +6459,7 @@ function loadPortalPublicPage() {
 
 function renderClientPortalPublicPage(route) {
   if (portalPublicPageModule) return portalPublicPageModule.renderClientPortalPublicPage(route);
-  loadPortalPublicPage().then(() => render()).catch((error) => console.error('Portal failed to load', error));
+  loadPortalPublicPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Portal failed to load', error));
   return questLoader('Loading');
 }
 
@@ -6469,7 +6490,7 @@ function loadContactRecord() {
 
 function renderContactRecord(companyId, contact) {
   if (contactRecordModule) return contactRecordModule.renderContactRecord(companyId, contact);
-  loadContactRecord().then(() => render()).catch((error) => console.error('Contact record failed to load', error));
+  loadContactRecord().then(() => render()).catch((error) => reportLazySurfaceFailure('Contact record could not load', error));
   return questLoader('Loading contact');
 }
 
@@ -6497,7 +6518,7 @@ function loadRenderContactTable() {
 
 function renderContactTable(companyId) {
   if (renderContactTableModule) return renderContactTableModule.renderContactTable(companyId);
-  loadRenderContactTable().then(() => render()).catch((error) => console.error('renderContactTable failed to load', error));
+  loadRenderContactTable().then(() => render()).catch((error) => reportLazySurfaceFailure('Contacts could not load', error));
   return questLoader('Loading');
 }
 
@@ -6525,7 +6546,7 @@ function loadItemsView() {
 
 function wbViewItems(companyId, workspace, app) {
   if (itemsViewModule) return itemsViewModule.wbViewItems(companyId, workspace, app);
-  loadItemsView().then(() => render()).catch((error) => console.error('items view failed to load', error));
+  loadItemsView().then(() => render()).catch((error) => reportLazySurfaceFailure('items view failed to load', error));
   return questLoader('Loading');
 }
 
@@ -6552,7 +6573,7 @@ function loadDashboardWidgetRegistry() {
 
 function dashboardWidgetRegistry(companyId, ctx) {
   if (dashboardWidgetRegistryModule) return dashboardWidgetRegistryModule.dashboardWidgetRegistry(companyId, ctx);
-  loadDashboardWidgetRegistry().then(() => render()).catch((error) => console.error('dashboardWidgetRegistry failed to load', error));
+  loadDashboardWidgetRegistry().then(() => render()).catch((error) => reportLazySurfaceFailure('dashboardWidgetRegistry failed to load', error));
   return questLoader('Loading');
 }
 
@@ -6593,7 +6614,7 @@ function loadWbViewItemPage() {
 
 function wbViewItemPage(route, companyId, workspace, app, item) {
   if (wbViewItemPageModule) return wbViewItemPageModule.wbViewItemPage(route, companyId, workspace, app, item);
-  loadWbViewItemPage().then(() => render()).catch((error) => console.error('wbViewItemPage failed to load', error));
+  loadWbViewItemPage().then(() => render()).catch((error) => reportLazySurfaceFailure('wbViewItemPage failed to load', error));
   return questLoader('Loading');
 }
 
@@ -6620,7 +6641,7 @@ function loadRenderWorkspaceBuilderModal() {
 
 function renderWorkspaceBuilderModal() {
   if (renderWorkspaceBuilderModalModule) return renderWorkspaceBuilderModalModule.renderWorkspaceBuilderModal();
-  loadRenderWorkspaceBuilderModal().then(() => render()).catch((error) => console.error('renderWorkspaceBuilderModal failed to load', error));
+  loadRenderWorkspaceBuilderModal().then(() => render()).catch((error) => reportLazySurfaceFailure('renderWorkspaceBuilderModal failed to load', error));
   return questLoader('Loading');
 }
 
@@ -7283,7 +7304,7 @@ function loadCallsWidget() {
 
 function renderCallsWidget(companyId) {
   if (callsWidgetModule) return callsWidgetModule.renderCallsWidget(companyId);
-  loadCallsWidget().then(() => render()).catch((error) => console.error('Calls widget failed to load', error));
+  loadCallsWidget().then(() => render()).catch((error) => reportLazySurfaceFailure('Calls widget failed to load', error));
   return questLoader('Loading');
 }
 
@@ -8142,7 +8163,7 @@ function loadCompanyDashboard() {
 
 function renderCompanyDashboard(companyId) {
   if (companyDashboardModule) return companyDashboardModule.renderCompanyDashboard(companyId);
-  loadCompanyDashboard().then(() => render()).catch((error) => console.error('Dashboard failed to load', error));
+  loadCompanyDashboard().then(() => render()).catch((error) => reportLazySurfaceFailure('Dashboard could not load', error));
   return questLoader('Loading dashboard');
 }
 
@@ -8560,7 +8581,7 @@ function loadAppWidgetConfigModal() {
 
 function renderDashboardAppWidgetConfigModal(companyId) {
   if (appWidgetConfigModalModule) return appWidgetConfigModalModule.renderDashboardAppWidgetConfigModal(companyId);
-  loadAppWidgetConfigModal().then(() => render()).catch((error) => console.error('Widget settings failed to load', error));
+  loadAppWidgetConfigModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Widget settings failed to load', error));
   return questLoader('Loading settings');
 }
 
@@ -9497,7 +9518,7 @@ function loadWorkdayPanel() {
 
 function renderWorkdayPanel(item, companyId) {
   if (workdayPanelModule) return workdayPanelModule.renderWorkdayPanel(item, companyId);
-  loadWorkdayPanel().then(() => render()).catch((error) => console.error('Workday panel failed to load', error));
+  loadWorkdayPanel().then(() => render()).catch((error) => reportLazySurfaceFailure('Workday panel failed to load', error));
   return questLoader('Loading');
 }
 
@@ -9730,7 +9751,7 @@ function loadAnalyticsPage() {
 
 function renderAnalyticsPage(route, companyId) {
   if (analyticsPageModule) return analyticsPageModule.renderAnalyticsPage(route, companyId);
-  loadAnalyticsPage().then(() => render()).catch((error) => console.error('Reports failed to load', error));
+  loadAnalyticsPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Reports could not load', error));
   return questLoader('Loading reports');
 }
 
@@ -9854,7 +9875,7 @@ function loadContactEditor() {
 
 function renderContactEditor(companyId, contact) {
   if (contactEditorModule) return contactEditorModule.renderContactEditor(companyId, contact);
-  loadContactEditor().then(() => render()).catch((error) => console.error('Contact editor failed to load', error));
+  loadContactEditor().then(() => render()).catch((error) => reportLazySurfaceFailure('Contact editor failed to load', error));
   return questLoader('Loading form');
 }
 
@@ -10363,7 +10384,7 @@ function loadContactWorkspacePanel() {
 
 function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities = contactSmsCapabilities(contact.id)) {
   if (contactWorkspacePanelModule) return contactWorkspacePanelModule.renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities = contactSmsCapabilities(contact.id));
-  loadContactWorkspacePanel().then(() => render()).catch((error) => console.error('Contact workspace panel failed to load', error));
+  loadContactWorkspacePanel().then(() => render()).catch((error) => reportLazySurfaceFailure('Contact workspace panel failed to load', error));
   return questLoader('Loading');
 }
 
@@ -12276,7 +12297,7 @@ function openChangeOrderWizard(jobId) {
   state.modal = 'co-wizard';
   render();
   loadChangeOrderWizard().then((wiz) => { state.coWizard = { ...wiz.blankDraft(), jobId }; render(); })
-    .catch((error) => console.error('Change-order wizard failed to load', error));
+    .catch((error) => reportLazySurfaceFailure('Change-order wizard failed to load', error));
 }
 
 
@@ -12285,7 +12306,7 @@ function renderJobFile(companyId, job, tab) {
   // bootstrap, where they would be the largest query the app makes for its least-seen screen.
   if (!ensureDomainLoaded('production')) return questLoader('Loading job');
   if (jobFileModule) return jobFileModule.renderJobFile(companyId, job, tab);
-  loadJobFile().then(() => render()).catch((error) => console.error('Job file failed to load', error));
+  loadJobFile().then(() => render()).catch((error) => reportLazySurfaceFailure('Job file failed to load', error));
   return questLoader('Loading job');
 }
 
@@ -12394,7 +12415,7 @@ function loadJobRecord() {
 
 function renderJobRecord(companyId, job) {
   if (jobRecordModule) return jobRecordModule.renderJobRecord(companyId, job);
-  loadJobRecord().then(() => render()).catch((error) => console.error('Job record failed to load', error));
+  loadJobRecord().then(() => render()).catch((error) => reportLazySurfaceFailure('Job record could not load', error));
   return questLoader('Loading job');
 }
 
@@ -12421,7 +12442,7 @@ function loadJobCalendar() {
 
 function renderJobCalendar(companyId) {
   if (jobCalendarModule) return jobCalendarModule.renderJobCalendar(companyId);
-  loadJobCalendar().then(() => render()).catch((error) => console.error('Jobs calendar failed to load', error));
+  loadJobCalendar().then(() => render()).catch((error) => reportLazySurfaceFailure('Jobs calendar could not load', error));
   return questLoader('Loading calendar');
 }
 
@@ -12456,7 +12477,7 @@ function renderJobList(companyId) {
   // exactly as the job file does.
   if (!ensureDomainLoaded('production')) return questLoader('Loading jobs');
   if (jobListModule) return jobListModule.renderJobList(companyId);
-  loadJobList().then(() => render()).catch((error) => console.error('Job list failed to load', error));
+  loadJobList().then(() => render()).catch((error) => reportLazySurfaceFailure('Jobs could not load', error));
   return questLoader('Loading jobs');
 }
 
@@ -13291,7 +13312,7 @@ function loadJobPhotosModal() {
 
 function renderJobPhotosModal(companyId, job) {
   if (jobPhotosModalModule) return jobPhotosModalModule.renderJobPhotosModal(companyId, job);
-  loadJobPhotosModal().then(() => render()).catch((error) => console.error('Job photos failed to load', error));
+  loadJobPhotosModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Job photos failed to load', error));
   return questLoader('Loading photos');
 }
 
@@ -13323,7 +13344,7 @@ function loadUsersPage() {
 
 function renderUsersPage(route, companyId) {
   if (usersPageModule) return usersPageModule.renderUsersPage(route, companyId);
-  loadUsersPage().then(() => render()).catch((error) => console.error('Users failed to load', error));
+  loadUsersPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Users could not load', error));
   return questLoader('Loading users');
 }
 
@@ -13355,7 +13376,7 @@ function loadAccessRow() {
 
 function renderUserAccessRow(companyId, user, canManageUsers) {
   if (accessRowModule) return accessRowModule.renderUserAccessRow(companyId, user, canManageUsers);
-  loadAccessRow().then(() => render()).catch((error) => console.error('Access row failed to load', error));
+  loadAccessRow().then(() => render()).catch((error) => reportLazySurfaceFailure('Access row failed to load', error));
   return questLoader('Loading');
 }
 
@@ -14302,7 +14323,7 @@ function loadTransferLog() {
 
 function wbViewTransfers(companyId, workspace, app) {
   if (transferLogModule) return transferLogModule.wbViewTransfers(companyId, workspace, app);
-  loadTransferLog().then(() => render()).catch((error) => console.error('transfer log failed to load', error));
+  loadTransferLog().then(() => render()).catch((error) => reportLazySurfaceFailure('transfer log failed to load', error));
   return questLoader('Loading');
 }
 
@@ -14921,7 +14942,7 @@ function wbCalMon(dateKey) { const d = new Date(`${dateKey}T00:00:00`); return N
 function renderJobsFigures(companyId, config) {
   if (!ensureDomainLoaded('production')) return questLoader('Loading');
   if (jobsDashboardModule) return jobsDashboardModule.renderJobsTile(companyId, config, WB_JOBS_DEFAULT_PARTS);
-  loadJobsDashboard().then(() => render()).catch((error) => console.error('Jobs figures failed to load', error));
+  loadJobsDashboard().then(() => render()).catch((error) => reportLazySurfaceFailure('Jobs dashboard could not load', error));
   return questLoader('Loading');
 }
 
@@ -14950,7 +14971,7 @@ function renderDashboardJobsWidget(companyId) {
 
 function renderDashboardJobsConfigModal(companyId) {
   if (dashboardWidgetRegistryModule) return dashboardWidgetRegistryModule.renderJobsConfigModal(companyId);
-  loadDashboardWidgetRegistry().then(() => render()).catch((error) => console.error('Jobs widget settings failed to load', error));
+  loadDashboardWidgetRegistry().then(() => render()).catch((error) => reportLazySurfaceFailure('Jobs widget settings failed to load', error));
   return questLoader('Loading');
 }
 
@@ -15384,7 +15405,7 @@ function loadAppViews() {
 
 function renderAppDashboard(companyId, app, manageMode) {
   if (appViewsModule) return appViewsModule.renderAppDashboard(companyId, app, manageMode);
-  loadAppViews().then(() => render()).catch((error) => console.error('App dashboard failed to load', error));
+  loadAppViews().then(() => render()).catch((error) => reportLazySurfaceFailure('App dashboard failed to load', error));
   return questLoader('Loading');
 }
 
@@ -15402,7 +15423,7 @@ const renderDashModal = (m) => (appViewsModule
 
 function renderAppCalendar(companyId, app, anchorIso, fieldId, view) {
   if (appViewsModule) return appViewsModule.renderAppCalendar(companyId, app, anchorIso, fieldId, view);
-  loadAppViews().then(() => render()).catch((error) => console.error('App calendar failed to load', error));
+  loadAppViews().then(() => render()).catch((error) => reportLazySurfaceFailure('App calendar failed to load', error));
   return questLoader('Loading');
 }
 
@@ -16407,7 +16428,7 @@ function wbBindRelationshipPickers(root) {
   if (relationshipPickerModule) { relationshipPickerModule.wbBindRelationshipPickers(root); return; }
   loadRelationshipPicker()
     .then((mod) => mod.wbBindRelationshipPickers(root))
-    .catch((error) => console.error('relationship picker failed to load', error));
+    .catch((error) => reportLazySurfaceFailure('Relationship picker failed to load', error));
 }
 
 /**
@@ -17333,7 +17354,7 @@ function wbRecordMissing(companyId, app) {
  */
 function wbViewsRail(companyId, app, ui) {
   if (!savedViewsModule) {
-    loadSavedViews().then(() => render()).catch((error) => console.error('Saved views failed to load', error));
+    loadSavedViews().then(() => render()).catch((error) => reportLazySurfaceFailure('Saved views failed to load', error));
     return '';
   }
   return savedViewsModule.renderViewsRail({
@@ -17725,7 +17746,7 @@ function wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectabl
   const field = pipelineField(app, ui.boardFieldId);
   if (!field) return wbBoardSetupPrompt(app, canManage);
   if (!wbBoardModule) {
-    wbLoadBoard().then(() => render()).catch((error) => console.error('Board failed to load', error));
+    wbLoadBoard().then(() => render()).catch((error) => reportLazySurfaceFailure('Board failed to load', error));
     return questLoader('Laying out your pipeline');
   }
   // 'none' is an explicit "stop totalling", distinct from "nothing chosen yet".
@@ -18244,7 +18265,7 @@ function loadRecycleBin() {
 
 function wbViewRecycleBin(companyId, workspace, app) {
   if (recycleBinModule) return recycleBinModule.wbViewRecycleBin(companyId, workspace, app);
-  loadRecycleBin().then(() => render()).catch((error) => console.error('recycle bin failed to load', error));
+  loadRecycleBin().then(() => render()).catch((error) => reportLazySurfaceFailure('recycle bin failed to load', error));
   return questLoader('Loading');
 }
 
@@ -18302,7 +18323,7 @@ function loadAppSettings() {
 
 function wbViewAppSettings(companyId, workspace, app, appLinked) {
   if (appSettingsModule) return appSettingsModule.wbViewAppSettings(companyId, workspace, app, appLinked);
-  loadAppSettings().then(() => render()).catch((error) => console.error('app settings failed to load', error));
+  loadAppSettings().then(() => render()).catch((error) => reportLazySurfaceFailure('app settings failed to load', error));
   return questLoader('Loading');
 }
 
@@ -18336,7 +18357,7 @@ function wbViewReports(companyId, workspace, app) {
   if (wbReportsModule) return wbReportsModule.renderReports(app, wbReportContext(companyId));
   // Render once the chunk arrives. A failure leaves the message in place rather than
   // looping on render(), and clicking the tab again retries.
-  wbLoadReports().then(() => render()).catch((error) => console.error('Reports failed to load', error));
+  wbLoadReports().then(() => render()).catch((error) => reportLazySurfaceFailure('Reports failed to load', error));
   return questLoader('Building your reports');
 }
 
@@ -18782,7 +18803,7 @@ function openWbAppModal(companyId, workspaceId) {
 function wbCollectionsSettings(companyId, app, canManage) {
   const list = childCollectionsModule ? childCollectionsModule.collectionsFor(app) : null;
   if (!list) {
-    loadChildCollections().then(() => render()).catch((error) => console.error('Child collections failed to load', error));
+    loadChildCollections().then(() => render()).catch((error) => reportLazySurfaceFailure('Child collections failed to load', error));
     return '';
   }
   // Every list's builder is in the DOM; only its visibility differs. Expanding one is then a
@@ -18961,7 +18982,7 @@ function wbLoadAutomationsUI() {
 
 function wbViewAutomations(companyId, workspace, app) {
   if (wbAutomationsUI) return wbAutomationsUI.wbViewAutomations(companyId, workspace, app);
-  wbLoadAutomationsUI().then(() => render()).catch((error) => console.error('Automations failed to load', error));
+  wbLoadAutomationsUI().then(() => render()).catch((error) => reportLazySurfaceFailure('Automations failed to load', error));
   return questLoader('Loading automations');
 }
 
@@ -19634,7 +19655,7 @@ function wbCommitOptionChoice(input) {
   if (comboboxMenuModule) { comboboxMenuModule.wbCommitOptionChoice(input); return; }
   loadComboboxMenu()
     .then((mod) => mod.wbCommitOptionChoice(input))
-    .catch((error) => console.error('Option combobox failed to load', error));
+    .catch((error) => reportLazySurfaceFailure('Option picker failed to load', error));
 }
 
 // Category "Choice chips". The behaviour lives in ./workspace/chip-field.js, inside the
@@ -21741,7 +21762,7 @@ function renderWorkspaceSetupModal(companyId, route) {
   const required = state.modal === 'workspace-setup-required';
   const workspace = workspaceSetupModalTarget(companyId, route);
   if (!companySetupPanelModule) {
-    loadCompanySetupPanel().then(() => render()).catch((error) => console.error('Company setup panel failed to load', error));
+    loadCompanySetupPanel().then(() => render()).catch((error) => reportLazySurfaceFailure('Company setup panel failed to load', error));
   }
   if (!workspace || !companySetupPanelModule) {
     const close = required ? '' : '<button class="btn" type="button" data-action="close-modal">Cancel</button>';
@@ -21814,7 +21835,7 @@ function renderSettingsSurface(method, route, companyId) {
       message: settingsSurfacesLoadError?.message || 'The settings files were unavailable.',
     });
   }
-  loadSettingsSurfaces().then(() => render()).catch((error) => console.error(`${method} failed to load`, error));
+  loadSettingsSurfaces().then(() => render()).catch((error) => reportLazySurfaceFailure(`${method} failed to load`, error));
   return questLoader('Loading');
 }
 
@@ -21852,7 +21873,7 @@ function loadBackupsPanel() {
 
 function renderBackupsSettings(companyId) {
   if (backupsPanelModule) return backupsPanelModule.renderBackupsSettings(companyId);
-  loadBackupsPanel().then(() => render()).catch((error) => console.error('Backups panel failed to load', error));
+  loadBackupsPanel().then(() => render()).catch((error) => reportLazySurfaceFailure('Backups panel failed to load', error));
   return questLoader('Loading');
 }
 
@@ -21881,7 +21902,7 @@ function loadRecycleBinPanel() {
 
 function renderRecycleBinSettings(companyId) {
   if (recycleBinPanelModule) return recycleBinPanelModule.renderRecycleBinSettings(companyId);
-  loadRecycleBinPanel().then(() => render()).catch((error) => console.error('Recycle Bin panel failed to load', error));
+  loadRecycleBinPanel().then(() => render()).catch((error) => reportLazySurfaceFailure('Recycle Bin panel failed to load', error));
   return questLoader('Loading Recycle Bin');
 }
 
@@ -21973,7 +21994,7 @@ function loadPortalDeleteModal() {
 
 function renderClientPortalDeleteModal(companyId, portal) {
   if (portalDeleteModalModule) return portalDeleteModalModule.renderClientPortalDeleteModal(companyId, portal);
-  loadPortalDeleteModal().then(() => render()).catch((error) => console.error('Delete portal failed to load', error));
+  loadPortalDeleteModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Delete portal failed to load', error));
   return questLoader('Loading');
 }
 
@@ -22513,7 +22534,7 @@ function loadPortalDetail() {
 
 function renderClientPortalDetail(portal, canManagePortals) {
   if (portalDetailModule) return portalDetailModule.renderClientPortalDetail(portal, canManagePortals);
-  loadPortalDetail().then(() => render()).catch((error) => console.error('Portal failed to load', error));
+  loadPortalDetail().then(() => render()).catch((error) => reportLazySurfaceFailure('Portal failed to load', error));
   return questLoader('Loading portal');
 }
 
@@ -22595,7 +22616,7 @@ function loadPluginsPanel() {
 
 function renderPluginsSettings(companyId) {
   if (pluginsPanelModule) return pluginsPanelModule.renderPluginsSettings(companyId);
-  loadPluginsPanel().then(() => render()).catch((error) => console.error('Plugins panel failed to load', error));
+  loadPluginsPanel().then(() => render()).catch((error) => reportLazySurfaceFailure('Plugins panel failed to load', error));
   return questLoader('Loading');
 }
 
@@ -23376,7 +23397,7 @@ function loadAccountTab() {
 
 function renderAccountTab(companyId, account, tab, data) {
   if (accountTabModule) return accountTabModule.renderAccountTab(companyId, account, tab, data);
-  loadAccountTab().then(() => render()).catch((error) => console.error('Account failed to load', error));
+  loadAccountTab().then(() => render()).catch((error) => reportLazySurfaceFailure('Account failed to load', error));
   return questLoader('Loading account');
 }
 
@@ -23438,7 +23459,7 @@ function loadRenderDealDetail() {
 
 function renderDealDetail(companyId, deal) {
   if (renderDealDetailModule) return renderDealDetailModule.renderDealDetail(companyId, deal);
-  loadRenderDealDetail().then(() => render()).catch((error) => console.error('renderDealDetail failed to load', error));
+  loadRenderDealDetail().then(() => render()).catch((error) => reportLazySurfaceFailure('renderDealDetail failed to load', error));
   return questLoader('Loading');
 }
 
@@ -23550,7 +23571,7 @@ function loadProposalsPage() {
 
 function renderProposalsPage(route, companyId) {
   if (proposalsPageModule) return proposalsPageModule.renderProposalsPage(route, companyId);
-  loadProposalsPage().then(() => render()).catch((error) => console.error('Proposals failed to load', error));
+  loadProposalsPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Proposals failed to load', error));
   return questLoader('Loading proposals');
 }
 
@@ -23703,13 +23724,13 @@ function loadDealBoard() {
 
 function renderDealBoard(companyId) {
   if (dealBoardModule) return dealBoardModule.renderDealBoard(companyId);
-  loadDealBoard().then(() => render()).catch((error) => console.error('Quotes board failed to load', error));
+  loadDealBoard().then(() => render()).catch((error) => reportLazySurfaceFailure('Quotes board failed to load', error));
   return questLoader('Loading');
 }
 
 function renderDealTable(companyId) {
   if (dealBoardModule) return dealBoardModule.renderDealTable(companyId);
-  loadDealBoard().then(() => render()).catch((error) => console.error('Quotes table failed to load', error));
+  loadDealBoard().then(() => render()).catch((error) => reportLazySurfaceFailure('Quotes table failed to load', error));
   return questLoader('Loading');
 }
 
@@ -23843,7 +23864,7 @@ function loadCrmAccountModal() {
 
 function renderCrmAccountModal(companyId, accountKey) {
   if (crmAccountModalModule) return crmAccountModalModule.renderCrmAccountModal(companyId, accountKey);
-  loadCrmAccountModal().then(() => render()).catch((error) => console.error('Account failed to load', error));
+  loadCrmAccountModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Account failed to load', error));
   return questLoader('Loading account');
 }
 
@@ -23852,6 +23873,7 @@ function renderMessagesPage(route, companyId) {
   const conversations = companyMessageConversations(companyId);
   const selected = selectedConversation(companyId);
   if (selected && state.selectedConversationId !== selected.id) state.selectedConversationId = selected.id;
+  if (selected) ensureConversationHistory(selected.id);
   const mobileThread = Boolean(selected && route.params.get('conversation'));
   const visibleCount = conversations.length;
   subscribeToMessageRealtime(companyId, selected?.id || '');
@@ -24002,6 +24024,8 @@ function renderMessageThread(companyId, conversation) {
       </div>
     </div>
     <div class="message-stream">
+      ${state.messageHistoryLoading.has(conversation.id) ? '<div class="message-history-status"><i class="ti ti-loader-2"></i>Loading full conversation history…</div>' : ''}
+      ${state.messageHistoryErrors[conversation.id] ? `<div class="message-history-status error"><span>${h(state.messageHistoryErrors[conversation.id])}</span><button class="btn" type="button" data-action="retry-message-history" data-conversation-id="${h(conversation.id)}">Try again</button></div>` : ''}
       ${messages.map((message) => renderMessageBubble(message)).join('') || emptyState(archived
     ? 'Nothing was said in this chat before you left it.'
     : 'No messages yet. Start the thread with a short update.')}
@@ -24247,7 +24271,7 @@ function renderMessageScenarioButton(companyId) {
 
 function renderMessageGroupModal(companyId) {
   if (chatModalsModule) return chatModalsModule.renderMessageGroupModal(companyId);
-  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  loadChatModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Chat dialogs failed to load', error));
   return questLoader('Loading');
 }
 
@@ -24312,13 +24336,13 @@ async function prepareMessageGroupIconUpload(file) {
 
 function renderLeaveConversationModal(companyId, conversationId) {
   if (chatModalsModule) return chatModalsModule.renderLeaveConversationModal(companyId, conversationId);
-  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  loadChatModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Chat dialogs failed to load', error));
   return questLoader('Loading');
 }
 
 function renderMessageWorkspaceMembersModal(companyId) {
   if (chatModalsModule) return chatModalsModule.renderMessageWorkspaceMembersModal(companyId);
-  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  loadChatModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Chat dialogs failed to load', error));
   return questLoader('Loading');
 }
 
@@ -24453,19 +24477,19 @@ function loadChatModals() {
 
 function renderDirectMessageModal(companyId) {
   if (chatModalsModule) return chatModalsModule.renderDirectMessageModal(companyId);
-  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  loadChatModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Chat dialogs failed to load', error));
   return questLoader('Loading');
 }
 
 function renderMessageDetailsModal(companyId, conversationId) {
   if (chatModalsModule) return chatModalsModule.renderMessageDetailsModal(companyId, conversationId);
-  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  loadChatModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Chat dialogs failed to load', error));
   return questLoader('Loading');
 }
 
 function renderMessageSearchModal(companyId) {
   if (chatModalsModule) return chatModalsModule.renderMessageSearchModal(companyId);
-  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  loadChatModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Chat dialogs failed to load', error));
   return questLoader('Loading');
 }
 
@@ -24497,7 +24521,7 @@ function loadFinancePage() {
 
 function renderFinancePage(route, companyId) {
   if (financePageModule) return financePageModule.renderFinancePage(route, companyId);
-  loadFinancePage().then(() => render()).catch((error) => console.error('Finance failed to load', error));
+  loadFinancePage().then(() => render()).catch((error) => reportLazySurfaceFailure('Finance could not load', error));
   return questLoader('Loading finance');
 }
 
@@ -24744,7 +24768,7 @@ function loadCalendarPage() {
 
 function renderCalendarPage(route, companyId) {
   if (calendarPageModule) return calendarPageModule.renderCalendarPage(route, companyId);
-  loadCalendarPage().then(() => render()).catch((error) => console.error('Calendar failed to load', error));
+  loadCalendarPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Calendar could not load', error));
   return questLoader('Loading calendar');
 }
 
@@ -24846,7 +24870,7 @@ function loadTimePage() {
 
 function renderTimePage(companyId) {
   if (timePageModule) return timePageModule.renderTimePage(companyId);
-  loadTimePage().then(() => render()).catch((error) => console.error('Time failed to load', error));
+  loadTimePage().then(() => render()).catch((error) => reportLazySurfaceFailure('Time could not load', error));
   return questLoader('Loading time');
 }
 
@@ -24882,7 +24906,7 @@ function renderClockDashboardPage(companyId) {
   if (clockDashboardPageError) {
     return workspaceHeader('Clock dashboard could not load', 'The page files did not arrive. Your saved time was not changed.', '<button class="btn btn-primary" type="button" data-action="retry-clock-dashboard"><i class="ti ti-refresh"></i>Try again</button>');
   }
-  loadClockDashboardPage().then(() => render()).catch((error) => console.error('Clock dashboard failed to load', error));
+  loadClockDashboardPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Clock dashboard could not load', error));
   return questLoader('Loading clock');
 }
 
@@ -25140,7 +25164,7 @@ function renderLandingPage(forceAuthModal = false) {
   }
   // Paints into #app itself, so the placeholder has to as well.
   app.innerHTML = questLoader('Loading Questbase');
-  loadLandingPage().then(() => render()).catch((error) => console.error('Landing page failed to load', error));
+  loadLandingPage().then(() => render()).catch((error) => reportLazySurfaceFailure('Landing page failed to load', error));
   return undefined;
 }
 
@@ -25169,7 +25193,7 @@ function loadAuthForm() {
 
 function renderSupabaseAuthForm(returnUrl) {
   if (authFormModule) return authFormModule.renderSupabaseAuthForm(returnUrl);
-  loadAuthForm().then(() => render()).catch((error) => console.error('Auth form failed to load', error));
+  loadAuthForm().then(() => render()).catch((error) => reportLazySurfaceFailure('Auth form failed to load', error));
   return questLoader('Loading');
 }
 
@@ -25270,7 +25294,7 @@ function loadWorkspaceIconModal() {
 
 function renderWorkspaceIconModal(companyId) {
   if (workspaceIconModalModule) return workspaceIconModalModule.renderWorkspaceIconModal(companyId);
-  loadWorkspaceIconModal().then(() => render()).catch((error) => console.error('Workspace icon dialog failed to load', error));
+  loadWorkspaceIconModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Workspace icon dialog failed to load', error));
   return questLoader('Loading');
 }
 
@@ -25395,13 +25419,13 @@ function loadBulkModals() {
 
 function renderContactsDedupeModal() {
   if (bulkModalsModule) return bulkModalsModule.renderContactsDedupeModal();
-  loadBulkModals().then(() => render()).catch((error) => console.error('Dedupe dialog failed to load', error));
+  loadBulkModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Dedupe dialog failed to load', error));
   return questLoader('Loading');
 }
 
 function renderJobsBulkDeleteModal() {
   if (bulkModalsModule) return bulkModalsModule.renderJobsBulkDeleteModal();
-  loadBulkModals().then(() => render()).catch((error) => console.error('Bulk delete dialog failed to load', error));
+  loadBulkModals().then(() => render()).catch((error) => reportLazySurfaceFailure('Bulk delete dialog failed to load', error));
   return questLoader('Loading');
 }
 
@@ -26168,7 +26192,7 @@ function loadEstimateBuilder() {
 
 function renderEstimateBuilderModal(companyId) {
   if (estimateBuilderModule) return estimateBuilderModule.renderEstimateBuilderModal(companyId);
-  loadEstimateBuilder().then(() => render()).catch((error) => console.error('Estimate builder failed to load', error));
+  loadEstimateBuilder().then(() => render()).catch((error) => reportLazySurfaceFailure('Estimate builder failed to load', error));
   return questLoader('Loading estimate builder');
 }
 
@@ -26608,7 +26632,7 @@ function loadProposalBuilderModal() {
 
 function renderProposalBuilderModal(companyId) {
   if (proposalBuilderModalModule) return proposalBuilderModalModule.renderProposalBuilderModal(companyId);
-  loadProposalBuilderModal().then(() => render()).catch((error) => console.error('Proposal builder failed to load', error));
+  loadProposalBuilderModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Proposal builder failed to load', error));
   return questLoader('Loading proposal builder');
 }
 
@@ -26882,7 +26906,7 @@ function loadNewFormModal() {
 
 function renderNewFormModal(companyId) {
   if (newFormModalModule) return newFormModalModule.renderNewFormModal(companyId);
-  loadNewFormModal().then(() => render()).catch((error) => console.error('New form dialog failed to load', error));
+  loadNewFormModal().then(() => render()).catch((error) => reportLazySurfaceFailure('New form dialog failed to load', error));
   return questLoader('Loading');
 }
 
@@ -27143,7 +27167,7 @@ function renderMessageDock() {
     </button>`;
   if (!dock.open) return `<div class="msgdock">${button}</div>`;
   if (!messageDockModule) {
-    loadMessageDock().then(() => render()).catch((error) => console.error('Message dock failed to load', error));
+    loadMessageDock().then(() => render()).catch((error) => reportLazySurfaceFailure('Message dock failed to load', error));
     return `<div class="msgdock"><section class="msgdock-panel msgdock-loading">${questLoader('Opening messages')}</section>${button}</div>`;
   }
   return `<div class="msgdock">${messageDockModule.renderDock(dock, messageDockContext())}${button}</div>`;
@@ -28287,6 +28311,22 @@ function handleAction(event, node) {
   if (action === 'retry-help-center') {
     event.preventDefault();
     renderHelpCenterPageLoad = null;
+    render();
+    return;
+  }
+  if (action === 'retry-lazy-surface') {
+    event.preventDefault();
+    const domain = String(node.dataset.domain || '');
+    if (domain) state.loadedDomains[domain] = '';
+    node.closest('.lazy-surface-error')?.remove();
+    render();
+    return;
+  }
+  if (action === 'retry-message-history') {
+    event.preventDefault();
+    const conversationId = String(node.dataset.conversationId || '');
+    delete state.messageHistoryErrors[conversationId];
+    state.messageHistoryLoaded.delete(conversationId);
     render();
     return;
   }
@@ -34779,7 +34819,7 @@ function onDocumentChange(event) {
       if (checked) visible.forEach((user) => ui.selected.add(user.profile_id));
       else visible.forEach((user) => ui.selected.delete(user.profile_id));
       render();
-    }).catch((error) => console.error('Member directory failed to load', error));
+    }).catch((error) => reportLazySurfaceFailure('Member directory failed to load', error));
     return;
   }
   if (event.target.matches('[data-underwriting-contact]')) {
@@ -35159,7 +35199,7 @@ function wbSyncButtons(root) {
   if (buttonPushModule) { buttonPushModule.syncButtons(root); return; }
   loadButtonPush()
     .then((mod) => mod.syncButtons(root))
-    .catch((error) => console.error('button field failed to load', error));
+    .catch((error) => reportLazySurfaceFailure('Button field failed to load', error));
 }
 
 function wbPressButton(fieldId, seat) {
@@ -35203,7 +35243,7 @@ function takeoffEvent(event, kind) {
 
 function renderUnderwriterPage(route, companyId) {
   if (renderUnderwriterPageModule) return renderUnderwriterPageModule.renderUnderwriterPage(route, companyId);
-  loadRenderUnderwriterPage().then(() => render()).catch((error) => console.error('renderUnderwriterPage failed to load', error));
+  loadRenderUnderwriterPage().then(() => render()).catch((error) => reportLazySurfaceFailure('renderUnderwriterPage failed to load', error));
   return questLoader('Loading');
 }
 
@@ -35285,7 +35325,7 @@ function loadJobDailyModal() {
 
 function renderJobDailyModal() {
   if (jobDailyModalModule) return jobDailyModalModule.renderJobDailyModal();
-  loadJobDailyModal().then(() => render()).catch((error) => console.error('Daily log failed to load', error));
+  loadJobDailyModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Daily log failed to load', error));
   return questLoader('Loading daily');
 }
 
@@ -37118,7 +37158,7 @@ function loadPlacementModal() {
 
 function renderClientPortalPlacementModal(placement) {
   if (placementModalModule) return placementModalModule.renderClientPortalPlacementModal(placement);
-  loadPlacementModal().then(() => render()).catch((error) => console.error('Client portal placement dialog failed to load', error));
+  loadPlacementModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Client portal placement dialog failed to load', error));
   return questLoader('Loading');
 }
 
@@ -39562,7 +39602,7 @@ function loadDockFields() {
 function renderDockedActivityFields(composer, record, config) {
   if (dockFieldsModule) return dockFieldsModule.renderDockedActivityFields(composer, record, config);
   // The composer window itself is already on screen; only its fields arrive a moment later.
-  loadDockFields().then(() => render()).catch((error) => console.error('Composer fields failed to load', error));
+  loadDockFields().then(() => render()).catch((error) => reportLazySurfaceFailure('Composer fields failed to load', error));
   return questLoader('Loading');
 }
 
@@ -42404,7 +42444,7 @@ function loadLocationPickerModal() {
 
 function renderLocationPickerModal() {
   if (locationPickerModalModule) return locationPickerModalModule.renderLocationPickerModal();
-  loadLocationPickerModal().then(() => render()).catch((error) => console.error('Map pin dialog failed to load', error));
+  loadLocationPickerModal().then(() => render()).catch((error) => reportLazySurfaceFailure('Map pin dialog failed to load', error));
   return questLoader('Loading map');
 }
 
@@ -44754,6 +44794,42 @@ function questLoader(text) {
   return renderContentSkeleton({ statusText: text });
 }
 
+function mergeRowsById(current, incoming, transform) {
+  const rows = new Map((current || []).map((row) => [String(row.id), row]));
+  (incoming || []).forEach((row) => rows.set(String(row.id), transform(row)));
+  return [...rows.values()];
+}
+
+async function ensureConversationHistory(conversationId) {
+  const id = String(conversationId || '');
+  if (!id || !isLiveSupabaseSession() || state.messageHistoryLoaded.has(id) || state.messageHistoryLoading.has(id) || state.messageHistoryErrors[id]) return;
+  const client = createSupabaseClient();
+  if (!client) return;
+  state.messageHistoryLoading.add(id);
+  delete state.messageHistoryErrors[id];
+  try {
+    const { loadConversationHistory } = await import('./messaging/history-loader.js');
+    const { messages, attachments, error } = await loadConversationHistory(client, id, safeSupabaseQuery);
+    state.messages = mergeRowsById(state.messages, messages.data || [], normalizeMessage);
+    state.messageAttachments = mergeRowsById(state.messageAttachments, attachments.data || [], normalizeMessageAttachment);
+    if (error) throw error;
+    state.messageHistoryLoaded.add(id);
+  } catch (error) {
+    state.messageHistoryErrors[id] = error?.message || 'Full conversation history could not load.';
+  } finally {
+    state.messageHistoryLoading.delete(id);
+    if (state.selectedConversationId === id) render();
+  }
+}
+
+// A rejected dynamic import used to leave the animated placeholder on screen forever while
+// the only explanation went to DevTools. Replace the exact placeholder the user is looking
+// at and keep the retry local to this route/modal.
+function reportLazySurfaceFailure(label, error, { domain = '' } = {}) {
+  console.error(label, error);
+  showLazySurfaceFailure({ label, error, domain, escapeHtml: h, document, app });
+}
+
 function finishTimedOperation(label, startedAt, thresholdMs = 1000, context = '') {
   const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const durationMs = Math.max(0, Math.round(endedAt - Number(startedAt || endedAt)));
@@ -45283,43 +45359,25 @@ async function loadRealtimeDomain(client, domain) {
   if (domain === 'production') {
     // The five child tables of a job file. Fetched together because opening a job shows all
     // of them: five sequential round trips would be five visible gaps in one screen.
-    const [dailies, buckets, draws, changeOrders, coLines, plans] = await Promise.all([
-      safeSupabaseQuery(client.from('job_dailies').select('*').order('report_date', { ascending: false })),
-      safeSupabaseQuery(client.from('job_cost_buckets').select('*').order('sort_order', { ascending: true })),
-      safeSupabaseQuery(client.from('job_draws').select('*').order('sort_order', { ascending: true })),
-      safeSupabaseQuery(client.from('job_change_orders').select('*').order('created_at', { ascending: false })),
-      safeSupabaseQuery(client.from('job_change_order_lines').select('*').order('sort_order', { ascending: true })),
-      safeSupabaseQuery(client.from('job_plans').select('*').order('created_at', { ascending: false })),
-    ]);
+    const [dailies, buckets, draws, changeOrders, coLines, plans] = await realtimeQueryBatch(client, 'production');
     if (!dailies.error) state.jobDailies = (dailies.data || []).map(normalizeDaily);
     if (!buckets.error) state.jobCostBuckets = (buckets.data || []).map(normalizeCostBucket);
     if (!draws.error) state.jobDraws = (draws.data || []).map(normalizeDraw);
     if (!changeOrders.error) state.jobChangeOrders = (changeOrders.data || []).map(normalizeChangeOrder);
     if (!coLines.error) state.jobChangeOrderLines = (coLines.data || []).map(normalizeChangeOrderLine);
     if (!plans.error) state.jobPlans = (plans.data || []).map(normalizePlan);
+    requireQueries(dailies, buckets, draws, changeOrders, coLines, plans);
     return;
   }
   if (domain === 'operations') {
-    const [jobs, tasks, calendar] = await Promise.all([
-      client.from('jobs').select('*').order('updated_at', { ascending: false }),
-      client.from('tasks').select('*').order('updated_at', { ascending: false }),
-      client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
-    ]);
+    const [jobs, tasks, calendar] = await realtimeQueryBatch(client, 'operations');
     if (!jobs.error) state.jobs = activeRows(jobs.data || []).map(normalizeJob);
     if (!tasks.error) state.tasks = activeRows(tasks.data || []).map(normalizeTask);
     if (!calendar.error) state.calendarEvents = activeRows(calendar.data || []).map(normalizeCalendarEvent);
     return;
   }
   if (domain === 'crm') {
-    const [contacts, stages, accounts, deals, sites, proposals, activities] = await Promise.all([
-      client.from('contacts').select('*').order('updated_at', { ascending: false }),
-      client.from('pipeline_stages').select('*').order('position', { ascending: true }),
-      client.from('accounts').select('*').order('name', { ascending: true }),
-      client.from('deals').select('*').order('updated_at', { ascending: false }),
-      safeSupabaseQuery(client.from('crm_sites').select('*').order('updated_at', { ascending: false })),
-      safeSupabaseQuery(client.from('proposal_documents').select('*').order('updated_at', { ascending: false })),
-      client.from('activities').select('*').order('created_at', { ascending: false }).limit(500),
-    ]);
+    const [contacts, stages, accounts, deals, sites, proposals, activities] = await realtimeQueryBatch(client, 'crm');
     if (!contacts.error) state.contacts = activeRows(contacts.data || []).map(normalizeContact);
     if (!stages.error) { state.pipelineStages = stages.data || []; applyPipelineStagesForCompany(activeCompanyId()); }
     if (!accounts.error) state.accounts = activeRows(accounts.data || []).map(normalizeAccount);
@@ -45330,30 +45388,24 @@ async function loadRealtimeDomain(client, domain) {
     return;
   }
   if (domain === 'files') {
-    const result = await client.from('job_files').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+    const result = await realtimeQueryBatch(client, 'files');
     if (!result.error) { state.files = (result.data || []).map(normalizeFile); wbReconstructAppDriveFolders(); }
     return;
   }
   if (domain === 'forms') {
-    const [forms, responses] = await Promise.all([
-      client.from('forms').select('*').order('updated_at', { ascending: false }),
-      client.from('form_responses').select('*').order('created_at', { ascending: false }).limit(500),
-    ]);
+    const [forms, responses] = await realtimeQueryBatch(client, 'forms');
     if (!forms.error) state.forms = activeRows(forms.data || []).map(normalizeForm);
     if (!responses.error) state.formResponses = activeRows(responses.data || []).map(normalizeFormResponse);
+    requireQueries(forms, responses);
     return;
   }
   if (domain === 'finance') {
-    const [invoices, payments, expenses, vendors] = await Promise.all([
-      client.from('finance_invoices').select('*').order('updated_at', { ascending: false }),
-      client.from('finance_payments').select('*').order('received_at', { ascending: false }),
-      client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
-      client.from('finance_vendors').select('*').order('name', { ascending: true }),
-    ]);
+    const [invoices, payments, expenses, vendors] = await realtimeQueryBatch(client, 'finance');
     if (!invoices.error) state.financeInvoices = activeRows(invoices.data || []).map(normalizeFinanceInvoice);
     if (!payments.error) state.financePayments = activeRows(payments.data || []).map(normalizeFinancePayment);
     if (!expenses.error) state.financeExpenses = activeRows(expenses.data || []).map(normalizeFinanceExpense);
     if (!vendors.error) state.financeVendors = activeRows(vendors.data || []).map(normalizeFinanceVendor);
+    requireQueries(invoices, payments, expenses, vendors);
     return;
   }
   return loadSecondaryRealtimeDomain(client, domain);
@@ -45361,81 +45413,69 @@ async function loadRealtimeDomain(client, domain) {
 
 async function loadSecondaryRealtimeDomain(client, domain) {
   if (domain === 'portals') {
-    const [portals, documents, annotations, events] = await Promise.all([
-      safeSupabaseQuery(client.from('client_portals').select('*').order('updated_at', { ascending: false })),
-      safeSupabaseQuery(client.from('client_portal_documents').select('*').order('created_at', { ascending: false })),
-      safeSupabaseQuery(client.from('client_portal_annotations').select('*').order('created_at', { ascending: true })),
-      safeSupabaseQuery(client.from('client_portal_events').select('*').order('created_at', { ascending: false }).limit(500)),
-    ]);
+    const [portals, documents, annotations, events] = await realtimeQueryBatch(client, 'portals');
     if (!portals.error) state.clientPortals = activeRows(portals.data || []).map(normalizeClientPortal);
     if (!documents.error) state.clientPortalDocuments = activeRows(documents.data || []).map(normalizeClientPortalDocument);
     if (!annotations.error) state.clientPortalAnnotations = (annotations.data || []).map(normalizeClientPortalAnnotation);
     if (!events.error) state.clientPortalEvents = (events.data || []).map(normalizeClientPortalEvent);
+    requireQueries(portals, documents, annotations, events);
     return;
   }
   if (domain === 'pricebook') {
-    const [vendors, materials, prices] = await Promise.all([
-      safeSupabaseQuery(client.from('pricebook_vendors').select('*').order('name', { ascending: true })),
-      safeSupabaseQuery(client.from('pricebook_materials').select('*').order('name', { ascending: true })),
-      safeSupabaseQuery(client.from('pricebook_vendor_prices').select('*').order('updated_at', { ascending: false })),
-    ]);
+    const [vendors, materials, prices] = await realtimeQueryBatch(client, 'pricebook');
     if (!vendors.error) state.pricebookVendors = activeRows(vendors.data || []).map(normalizePricebookVendor);
     if (!materials.error) state.pricebookMaterials = activeRows(materials.data || []).map(normalizePricebookMaterial);
     if (!prices.error) state.pricebookPrices = activeRows(prices.data || []).map(normalizePricebookPrice);
+    requireQueries(vendors, materials, prices);
     return;
   }
   if (domain === 'notifications') {
-    const result = await client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200);
+    const result = await realtimeQueryBatch(client, 'notifications');
     if (!result.error) state.notifications = (result.data || []).map(normalizeNotification);
     return;
   }
   if (domain === 'labels') {
-    const [labels, assignments] = await Promise.all([
-      safeSupabaseQuery(client.from('contact_labels').select('*').order('name', { ascending: true })),
-      safeSupabaseQuery(client.from('contact_label_assignments').select('*')),
-    ]);
+    const [labels, assignments] = await realtimeQueryBatch(client, 'labels');
     if (!labels.error) state.contactLabels = labels.data || [];
     if (!assignments.error) state.contactLabelAssignments = assignments.data || [];
+    requireQueries(labels, assignments);
     return;
   }
   if (domain === 'audit') {
-    const result = await safeSupabaseQuery(client.from('audit_events').select('*').order('created_at', { ascending: false }).limit(100));
+    const result = await realtimeQueryBatch(client, 'audit');
     if (!result.error) state.auditEvents = result.data || [];
+    requireQueries(result);
     return;
   }
   if (domain === 'underwriting') {
-    const [result, calculators] = await Promise.all([
-      safeSupabaseQuery(client.from('underwriting_cases').select('*').order('updated_at', { ascending: false })),
-      safeSupabaseQuery(client.from('underwriting_calculators').select('*').order('position', { ascending: true })),
-    ]);
+    const [result, calculators] = await realtimeQueryBatch(client, 'underwriting');
     if (!result.error) state.underwritingCases = activeRows(result.data || []).map(normalizeUnderwritingCase);
     // Kept as the server sent them: the takeoff module owns this shape and normalizes on read,
     // so the entry bundle does not carry a copy of the calculator's schema for a page most
     // sessions never open.
     if (!calculators.error) state.underwritingCalculators = calculators.data || [];
+    requireQueries(result, calculators);
     return;
   }
   if (domain === 'proposals') {
-    const result = await safeSupabaseQuery(client.from('proposal_documents').select('*').order('updated_at', { ascending: false }));
+    const result = await realtimeQueryBatch(client, 'proposals');
     if (!result.error) state.proposals = activeRows(result.data || []).map(normalizeProposal);
+    requireQueries(result);
     return;
   }
   if (domain === 'recycle') {
-    const result = await safeSupabaseQuery(client.from('recycle_bin_items').select('*').order('deleted_at', { ascending: false }));
+    const result = await realtimeQueryBatch(client, 'recycle');
     if (!result.error) state.recycleBinItems = (result.data || []).map(normalizeRecycleBinItem);
+    requireQueries(result);
     return;
   }
   if (domain === 'workspace') {
     const { WORKSPACE_BACKUP_METADATA_COLUMNS } = await import('./data/workspace-backups.js');
-    const [backups, builder, records, transfers] = await Promise.all([
-      safeSupabaseQuery(client.from('workspace_backups').select(WORKSPACE_BACKUP_METADATA_COLUMNS).order('created_at', { ascending: false })),
-      safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
-      safeSupabaseQuery(client.from('wb_records').select('*')),
-      safeSupabaseQuery(client.from('wb_data_transfers').select('*').order('created_at', { ascending: false }).limit(200)),
-    ]);
+    const [backups, builder, records, transfers] = await realtimeQueryBatch(client, 'workspace', { workspaceBackupColumns: WORKSPACE_BACKUP_METADATA_COLUMNS });
     if (!backups.error) state.workspaceBackups = (backups.data || []).map(normalizeWorkspaceBackup);
     if (!builder.error) applyWorkspaceBuilderRows(builder.data, records.error ? null : (records.data || []));
     if (!transfers.error) state.wbTransfers = transfers.data || [];
+    requireQueries(backups, builder, records, transfers);
     return;
   }
   return loadIdentityRealtimeDomain(client, domain);
@@ -45443,17 +45483,11 @@ async function loadSecondaryRealtimeDomain(client, domain) {
 
 async function loadIdentityRealtimeDomain(client, domain) {
   if (domain === 'messages') {
-    const [conversations, access, messages, attachments, reads] = await Promise.all([
-      client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
-      client.from('message_conversation_access').select('*'),
-      client.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
-      client.from('message_attachments').select('*').order('created_at', { ascending: false }).limit(500),
-      client.from('message_reads').select('*'),
-    ]);
+    const [conversations, access, messages, attachments, reads] = await realtimeQueryBatch(client, 'messages');
     if (!conversations.error) state.messageConversations = (conversations.data || []).map(normalizeMessageConversation);
     if (!access.error) state.messageAccess = (access.data || []).map(normalizeMessageAccess);
-    if (!messages.error) state.messages = (messages.data || []).slice().reverse().map(normalizeMessage);
-    if (!attachments.error) state.messageAttachments = (attachments.data || []).slice().reverse().map(normalizeMessageAttachment);
+    if (!messages.error) state.messages = mergeRowsById(state.messages, (messages.data || []).slice().reverse(), normalizeMessage);
+    if (!attachments.error) state.messageAttachments = mergeRowsById(state.messageAttachments, (attachments.data || []).slice().reverse(), normalizeMessageAttachment);
     if (!reads.error) state.messageReads = (reads.data || []).map(normalizeMessageRead);
     return;
   }
@@ -45475,24 +45509,7 @@ async function loadIdentityRealtimeDomain(client, domain) {
       workspaces,
       workspaceMemberships,
       workspacePlugins,
-    ] = await Promise.all([
-      client.from('companies').select('*').order('name', { ascending: true }),
-      client.from('team_members').select('*').order('name', { ascending: true }),
-      client.from('company_memberships').select('*'),
-      client.from('profiles').select('*'),
-      client.from('company_subscriptions').select('*'),
-      client.from('roles').select('*').order('priority', { ascending: false }),
-      client.from('role_permissions').select('*'),
-      client.from('user_role_assignments').select('*'),
-      client.from('resource_acl').select('*'),
-      client.from('field_permissions').select('*'),
-      client.from('company_invites').select('*').order('created_at', { ascending: false }),
-      client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
-      safeSupabaseQuery(client.from('company_plugins').select('*')),
-      client.from('workspaces').select('*').order('name', { ascending: true }),
-      client.from('workspace_memberships').select('*'),
-      client.from('workspace_plugins').select('*'),
-    ]);
+    ] = await realtimeQueryBatch(client, 'access');
     if (!companies.error) state.companies = (companies.data || []).map(normalizeCompany);
     if (!team.error) state.teamMembers = (team.data || []).map(normalizeTeamMember);
     if (!memberships.error) state.memberships = (memberships.data || []).map(normalizeMembership);

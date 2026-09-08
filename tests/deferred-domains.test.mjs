@@ -122,10 +122,12 @@ test('workspace builder rows are applied through one shared function', () => {
   assert.match(body, /holdLocalWb/, 'in-flight local edits must still be held');
 });
 
-test('a failed deferred load can be retried rather than sticking empty', () => {
+test('a failed deferred load becomes visible and can be retried', () => {
   const fn = main.slice(main.indexOf('function ensureDomainLoaded('));
   const body = fn.slice(0, fn.indexOf('\n}\n'));
-  assert.match(body, /state\.loadedDomains\[domain\] = ''/, 'a failure must clear the marker');
+  assert.match(body, /state\.loadedDomains\[domain\] = 'error'/, 'a failure must remain visible until retry');
+  assert.match(main, /if \(domain\) state\.loadedDomains\[domain\] = ''/, 'retry must clear the failed marker');
+  assert.match(body, /reportLazySurfaceFailure/, 'the user must get a visible failure instead of an endless placeholder');
   assert.match(body, /'loading'/, 'concurrent calls must not stack up duplicate fetches');
   assert.match(body, /isLiveSupabaseSession\(\)/, 'demo sessions have nothing to fetch');
 });

@@ -47,6 +47,34 @@ export function summarizeInitialDataFailures(results = {}) {
     .map(([key]) => initialResultLabel(key));
 }
 
+/**
+ * Read a complete, stably ordered PostgREST list instead of trusting the project's
+ * server-side row cap. The caller supplies a fresh query for every inclusive range;
+ * reusing a settled Supabase builder can repeat filters or abort signals.
+ */
+export async function loadPaginatedDataQuery(makeQuery, safeQuery = safeInitialDataQuery, {
+  pageSize = 500,
+  maxPages = 100,
+  label = 'Paged data',
+} = {}) {
+  const size = Math.max(1, Math.min(1000, Number(pageSize) || 500));
+  const rows = [];
+  const seen = new Set();
+  for (let page = 0; page < maxPages; page += 1) {
+    const from = page * size;
+    const query = makeQuery().range(from, from + size - 1);
+    const result = await safeQuery(query, { label: page === 0 ? label : `${label} page ${page + 1}` });
+    if (result?.error) return { data: rows.length ? rows : null, error: result.error };
+    const batch = Array.isArray(result?.data) ? result.data : [];
+    batch.forEach((row) => {
+      const key = row && row.id != null ? `id:${row.id}` : `row:${JSON.stringify(row)}`;
+      if (!seen.has(key)) { seen.add(key); rows.push(row); }
+    });
+    if (batch.length < size) return { data: rows, error: null };
+  }
+  return { data: rows, error: new Error(`${label} exceeded the ${maxPages * size} row safety limit.`) };
+}
+
 export async function loadInitialDataQueries(client, safeQuery = safeInitialDataQuery) {
   const queries = {
     companiesResult: client.from('companies').select('*').order('name', { ascending: true }),
@@ -104,7 +132,54 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     // This used to start only after every query above settled, adding a full round trip.
     automationsResult: client.from('automations').select('*'),
   };
+  // These are the core record lists whose sidebar counts, search and cross-links must be
+  // complete. Every factory has a deterministic secondary id order, so adjacent ranges do
+  // not overlap merely because two rows share the same updated/name value.
+  const pagedQueries = {
+    companiesResult: () => client.from('companies').select('*').order('name', { ascending: true }).order('id', { ascending: true }),
+    jobsResult: () => client.from('jobs').select('*').order('updated_at', { ascending: false }).order('id', { ascending: true }),
+    tasksResult: () => client.from('tasks').select('*').order('updated_at', { ascending: false }).order('id', { ascending: true }),
+    filesResult: () => client.from('job_files').select('*').is('deleted_at', null).order('created_at', { ascending: false }).order('id', { ascending: true }),
+    teamResult: () => client.from('team_members').select('*').order('name', { ascending: true }).order('id', { ascending: true }),
+    membershipsResult: () => client.from('company_memberships').select('*').order('company_id', { ascending: true }).order('profile_id', { ascending: true }),
+    profilesResult: () => client.from('profiles').select('*').order('id', { ascending: true }),
+    subscriptionsResult: () => client.from('company_subscriptions').select('*').order('company_id', { ascending: true }),
+    rolesResult: () => client.from('roles').select('*').order('priority', { ascending: false }).order('id', { ascending: true }),
+    rolePermissionsResult: () => client.from('role_permissions').select('*').order('role_id', { ascending: true }).order('permission_key', { ascending: true }),
+    roleAssignmentsResult: () => client.from('user_role_assignments').select('*').order('company_id', { ascending: true }).order('profile_id', { ascending: true }).order('role_id', { ascending: true }),
+    resourceAclResult: () => client.from('resource_acl').select('*').order('id', { ascending: true }),
+    fieldPermissionsResult: () => client.from('field_permissions').select('*').order('id', { ascending: true }),
+    invitesResult: () => client.from('company_invites').select('*').order('created_at', { ascending: false }).order('id', { ascending: true }),
+    joinRequestsResult: () => client.from('company_join_requests').select('*').order('created_at', { ascending: false }).order('id', { ascending: true }),
+    messageConversationsResult: () => client.from('message_conversations').select('*').order('last_message_at', { ascending: false }).order('id', { ascending: true }),
+    messageAccessResult: () => client.from('message_conversation_access').select('*').order('id', { ascending: true }),
+    messageReadsResult: () => client.from('message_reads').select('*').order('conversation_id', { ascending: true }).order('profile_id', { ascending: true }),
+    calendarEventsResult: () => client.from('calendar_events').select('*').order('starts_at', { ascending: true }).order('id', { ascending: true }),
+    contactsResult: () => client.from('contacts').select('*').order('updated_at', { ascending: false }).order('id', { ascending: true }),
+    companyContactsResult: () => client.from('company_contacts').select('*').order('name', { ascending: true }).order('id', { ascending: true }),
+    companyContactFieldsResult: () => client.from('company_contact_fields').select('*').order('position', { ascending: true }).order('id', { ascending: true }),
+    pipelineStagesResult: () => client.from('pipeline_stages').select('*').order('position', { ascending: true }).order('id', { ascending: true }),
+    accountsResult: () => client.from('accounts').select('*').order('name', { ascending: true }).order('id', { ascending: true }),
+    dealsResult: () => client.from('deals').select('*').order('updated_at', { ascending: false }).order('id', { ascending: true }),
+    sitesResult: () => client.from('crm_sites').select('*').order('updated_at', { ascending: false }).order('id', { ascending: true }),
+    workspacesResult: () => client.from('workspaces').select('*').order('name', { ascending: true }).order('id', { ascending: true }),
+    companyPluginsResult: () => client.from('company_plugins').select('*').order('company_id', { ascending: true }).order('plugin_id', { ascending: true }),
+    workspaceMembershipsResult: () => client.from('workspace_memberships').select('*').order('workspace_id', { ascending: true }).order('profile_id', { ascending: true }),
+    workspacePluginsResult: () => client.from('workspace_plugins').select('*').order('workspace_id', { ascending: true }).order('plugin_id', { ascending: true }),
+    activeTimerResult: () => client.from('company_active_timers').select('*').order('profile_id', { ascending: true }),
+    timeEntriesResult: () => client.from('company_time_entries').select('*').order('started_at', { ascending: false }).order('id', { ascending: true }),
+    automationsResult: () => client.from('automations').select('*').order('id', { ascending: true }),
+    wbRecordsResult: () => client.from('wb_records').select('*').order('id', { ascending: true }),
+  };
+  Object.keys(pagedQueries).forEach((key) => delete queries[key]);
   const keys = Object.keys(queries);
-  const values = await Promise.all(keys.map((key) => safeQuery(queries[key], { label: initialResultLabel(key) })));
-  return Object.fromEntries(keys.map((key, index) => [key, values[index]]));
+  const pagedKeys = Object.keys(pagedQueries);
+  const [values, pagedValues] = await Promise.all([
+    Promise.all(keys.map((key) => safeQuery(queries[key], { label: initialResultLabel(key) }))),
+    Promise.all(pagedKeys.map((key) => loadPaginatedDataQuery(pagedQueries[key], safeQuery, { label: initialResultLabel(key) }))),
+  ]);
+  return {
+    ...Object.fromEntries(keys.map((key, index) => [key, values[index]])),
+    ...Object.fromEntries(pagedKeys.map((key, index) => [key, pagedValues[index]])),
+  };
 }

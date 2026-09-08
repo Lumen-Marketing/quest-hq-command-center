@@ -1,6 +1,6 @@
 # Public functions
 
-Captured through 2026-09-04T22:01:56.717525Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured through 2026-09-08T18:27:01.140981Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -75,6 +75,7 @@ Captured through 2026-09-04T22:01:56.717525Z from the live catalog. Execute gran
 | `set_workspace_member(target_workspace_id uuid, target_profile_id uuid, target_role_id uuid, next_status text)` | workspace_memberships | yes | no | yes | yes |
 | `set_workspace_plugin(target_workspace_id uuid, target_plugin_id text, next_status text)` | text | yes | no | yes | yes |
 | `slugify_member_id(input text)` | text | no | no | no | yes |
+| `submit_public_form_response(p_response_id text, p_company_id text, p_form_id text, p_submitted_by text, p_submitter_email text, p_answers jsonb, p_upload_intent_ids uuid[])` | jsonb | yes | no | no | yes |
 | `sync_team_member_from_profile()` | trigger | yes | no | no | yes |
 | `touch_eod_report_updated_at()` | trigger | yes | no | no | yes |
 | `update_company_appearance(target_company_id text, p_prefs jsonb)` | companies | yes | no | yes | yes |

@@ -1,6 +1,9 @@
 # Public relationships
 
-Captured through 2026-09-01T20:02:47.185039Z. Composite foreign keys appear as one row per paired column.
+Captured through 2026-09-08T18:27:01.140981Z. Composite foreign keys appear as one row per paired column.
+
+The current catalog adds three server-only form intent links: company and form deletions cascade
+to `form_upload_intents`, while deleting a submitted response clears its optional `response_id`.
 
 | Constraint | From | To | Update | Delete |
 | --- | --- | --- | --- | --- |

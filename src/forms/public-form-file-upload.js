@@ -1,6 +1,6 @@
 import { contentTypeFor, validateUpload } from '../security/upload-policy.js';
 
-function uploadedFileMetadata(file, bucketId, objectPath, uploadedAt) {
+function uploadedFileMetadata(file, bucketId, objectPath, uploadIntentId, uploadedAt) {
   return {
     kind: 'file',
     name: file.name,
@@ -10,6 +10,7 @@ function uploadedFileMetadata(file, bucketId, objectPath, uploadedAt) {
     data_url: '',
     bucket_id: bucketId,
     object_path: objectPath,
+    upload_intent_id: uploadIntentId,
     uploaded_at: uploadedAt,
   };
 }
@@ -47,5 +48,5 @@ export async function uploadPublicFormFile({
     .uploadToSignedUrl(payload.object_path, payload.token, file, { contentType });
   if (upload.error) throw upload.error;
 
-  return uploadedFileMetadata(file, payload.bucket_id, payload.object_path, now());
+  return uploadedFileMetadata(file, payload.bucket_id, payload.object_path, payload.upload_intent_id, now());
 }

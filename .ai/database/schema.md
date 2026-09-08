@@ -242,6 +242,12 @@ Captured through 2026-09-01T20:02:47.185039Z from the live Supabase catalog. Nul
 - Primary key: id
 - Columns: `id text`; `company_id text`; `form_id text`; `submitted_by text`; `submitter_email text`; `answers jsonb`; `created_at timestamptz`; `deleted_at timestamptz?`; `deleted_by uuid?`
 
+## public.form_upload_intents
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id uuid`; `company_id text`; `form_id text`; `question_id text`; `object_path text`; `expected_name text`; `expected_type text`; `expected_size int8`; `created_at timestamptz`; `expires_at timestamptz`; `claimed_at timestamptz?`; `response_id text?`
+
 ## public.forms
 
 - RLS: enabled

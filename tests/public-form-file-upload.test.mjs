@@ -38,12 +38,15 @@ const FORM = {
 };
 
 function makeDb({ form = FORM } = {}) {
-  const db = async (path) => {
+  const calls = [];
+  const db = async (path, options = {}) => {
+    calls.push({ path, ...options });
     if (path.startsWith('/rest/v1/forms?')) {
       return { ok: true, async json() { return form ? [form] : []; } };
     }
     return { ok: true, async json() { return []; } };
   };
+  db.calls = calls;
   return db;
 }
 
@@ -71,13 +74,18 @@ const VALID = { form_id: 'form-1', question_id: 'q1', file_name: 'plan.pdf', fil
 test('happy path: returns a signed upload URL scoped to company/form/question', async () => {
   baseEnv();
   const storage = makeStorage();
+  const db = makeDb();
   const r = res();
-  await handler(req(VALID), r, { db: makeDb(), storage });
+  await handler(req(VALID), r, { db, storage });
   assert.equal(r.statusCode, 200);
   const payload = r.json();
   assert.equal(payload.bucket_id, 'quest-form-response-files');
   assert.equal(payload.signed_upload_url, 'https://signed.example/upload');
   assert.ok(payload.object_path.startsWith('co1/form-1/q1/'), `unexpected path ${payload.object_path}`);
+  assert.match(payload.upload_intent_id, /^[0-9a-f-]{36}$/i);
+  const intent = db.calls.find((call) => call.path === '/rest/v1/form_upload_intents');
+  assert.ok(intent, 'the upload must create a durable intent before returning the signed URL');
+  assert.equal(JSON.parse(intent.body).object_path, payload.object_path);
 });
 
 test('rejects a disallowed origin', async () => {

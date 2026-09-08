@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const queries = readFileSync(new URL('../src/data/realtime-query-batches.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202607020930_proposal_documents.sql', import.meta.url), 'utf8');
 const smoke = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
@@ -24,7 +25,7 @@ assert.match(main, /function submitPublicProposalDecision\(/);
 assert.match(main, /async function persistProposal\(/);
 assert.match(main, /async function exportProposalPdf\(/);
 
-assert.ok(main.includes("client.from('proposal_documents').select('*')"));
+assert.ok(queries.includes("client.from('proposal_documents').select('*')"));
 assert.match(main, /PROPOSAL_COLS/);
 assert.match(main, /persistProposal\(proposalRecordFromDraft\(ctx, draft, existing\)/);
 assert.match(main, /data-action="copy-proposal-link"/);

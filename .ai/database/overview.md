@@ -1,8 +1,16 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-09-03T18:03:13.925881Z.
+The full machine-readable Supabase catalog was refreshed through 2026-09-08T18:27:01.140981Z.
 The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## 2026-09-09 public form response hardening
+
+Migration `20260908174615_harden_public_form_submissions.sql` is live. The service-only
+`form_upload_intents` ledger binds an approved private upload to one company, published form,
+file question, object path, size and MIME type. `submit_public_form_response` inserts a response
+and claims its verified intents in one transaction; anon and authenticated roles have neither
+table access nor function execution.
 
 ## 2026-09-04 profile and notification boundary hardening
 

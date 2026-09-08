@@ -1,5 +1,34 @@
 # Durable decisions
 
+## Public form uploads are capabilities that must be claimed atomically
+
+Decided 2026-09-09. A private object path is not proof that the anonymous respondent actually
+received permission to upload it. The server now issues a short-lived upload-intent id bound to
+one company, published form, file question, object path, size and MIME type. Submission verifies
+both that intent and the real Storage metadata, then one service-role-only transaction inserts the
+response and claims every intent. If any claim fails, the response rolls back. Anonymous and
+authenticated browser roles cannot read or write the intent ledger or call the transaction.
+
+## Complete directories page; recency feeds stay deliberately bounded
+
+Decided 2026-09-09. Record directories, permissions, workspace records and selected conversation
+history must not trust the server's row cap. They use stable multi-column ordering and inclusive
+ranges until the final short page. Activity/audit/notification surfaces that are explicitly recent
+feeds keep their named caps; turning one into a historical archive requires a cursor UI rather than
+adding that archive to first paint.
+
+## A failed lazy screen is an actionable state
+
+Decided 2026-09-09. Dynamic route/import or deferred-domain failure replaces the active skeleton
+with a visible explanation and Try again button. Logging alone is diagnostic, not recovery, and an
+animated placeholder must never imply that a rejected request is still progressing.
+
+## Embedded Tasks keeps one browsing context
+
+Decided 2026-09-09. A host render may update the shell around Tasks but may not remove, reparent or
+recreate its iframe. The browsing context owns unsaved interaction, internal navigation and scroll;
+preserving markup while detaching the frame is not equivalent to preserving that context.
+
 ## A contact merge moves every reference in one transaction, or it moves none
 
 Decided 2026-09-05. Merging used to be a sequence of independent updates from the browser:

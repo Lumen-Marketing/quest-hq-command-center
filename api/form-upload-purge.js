@@ -33,6 +33,14 @@ export default async function handler(request, response) {
 
   try {
     const client = serverClient();
+    // Some upload URLs are requested but never used, so there is no Storage object for the
+    // abandoned-object sweep to discover. Expired unclaimed approvals are safe to remove on
+    // their own and would otherwise accumulate forever.
+    const expiredIntents = await client.from('form_upload_intents')
+      .delete()
+      .is('claimed_at', null)
+      .lt('expires_at', new Date().toISOString());
+    if (expiredIntents.error) throw expiredIntents.error;
     const abandoned = await client.rpc('abandoned_form_uploads', {
       p_older_than_hours: ABANDONED_AFTER_HOURS,
       p_limit: BATCH_SIZE,
@@ -46,7 +54,16 @@ export default async function handler(request, response) {
     const removed = await client.storage.from(FORM_FILE_BUCKET).remove(paths);
     if (removed.error) throw removed.error;
 
-    return response.status(200).json({ removed_uploads: (removed.data || []).length });
+    const removedCount = (removed.data || []).length;
+    if (removedCount) {
+      const cleared = await client.from('form_upload_intents')
+        .delete()
+        .is('claimed_at', null)
+        .in('object_path', paths);
+      if (cleared.error) throw cleared.error;
+    }
+
+    return response.status(200).json({ removed_uploads: removedCount });
   } catch {
     return response.status(500).json({ error: 'Form upload purge failed.' });
   }

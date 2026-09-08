@@ -6,7 +6,8 @@ import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8')
   // The Settings tab is fetched on demand now; what it renders is unchanged.
-  + readFileSync(new URL('../src/workspace/app-settings.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/workspace/app-settings.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/data/realtime-query-batches.js', import.meta.url), 'utf8');
 const styles = (readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8') + '\n' + readFileSync(new URL('../src/workspace/builder.css', import.meta.url), 'utf8'));
 const migrationUrl = new URL('../supabase/migrations/202606270800_workspace_builder_plugin.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';

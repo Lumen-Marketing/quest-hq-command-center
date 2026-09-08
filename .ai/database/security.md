@@ -1,6 +1,6 @@
 # Database security catalog
 
-Captured through 2026-09-01T20:02:47.185039Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
+Captured through 2026-09-08T18:27:01.140981Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
 
 ## RLS coverage
 
@@ -46,6 +46,7 @@ Captured through 2026-09-01T20:02:47.185039Z. Policy expressions are intentional
 | finance_payments | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | finance_vendors | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | form_responses | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| form_upload_intents | enabled | 0 |  |
 | forms | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | job_activity | enabled | 1 | ALL |
 | job_change_order_lines | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
@@ -439,13 +440,14 @@ Derived from live state on 2026-07-31, not from reading migrations. A table is
 DEFINER RPC, an API route, or the service role â€” which is a design decision and should be
 recorded rather than rediscovered.
 
-**Totals: 77 tables in `public` â€” 75 browser-reachable, 2 server-only, 0 with RLS off.**
+**Totals: 78 tables in `public` — 75 browser-reachable, 3 server-only, 0 with RLS off.**
 
 ### Server-only tables
 
 | Table | Why it is unreachable | Intent |
 | --- | --- | --- |
 | `checkin_log` | RLS on, zero policies | Written by server-side check-in processing; never read by the client |
+| `form_upload_intents` | RLS on, zero policies; browser grants revoked | Short-lived service-only approvals that bind private form uploads to one response |
 | `reminder_log` | RLS on, zero policies | Written by server-side reminder dispatch; never read by the client |
 
 RLS enabled with no policy denies every row to every non-owner role, so these fail closed

@@ -35084,3 +35084,27 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 }
 .sh-sug:hover { background: var(--surface-2, #f6efe2); }
 .sh-sug.on { background: var(--orange, #e0552d); color: #fff; }
+/* Recoverable lazy/data failures replace the skeleton in-place instead of leaving a spinner. */
+.lazy-surface-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 20px;
+  padding: 20px;
+  border-color: color-mix(in srgb, var(--danger, #b42318) 30%, var(--border, #ded8ce));
+}
+.lazy-surface-error p { margin: 5px 0 0; color: var(--muted, #6d675e); }
+.message-history-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: var(--muted, #6d675e);
+  font-size: 12px;
+}
+.message-history-status.error { color: var(--danger, #b42318); }
+@media (max-width: 640px) {
+  .lazy-surface-error { align-items: flex-start; flex-direction: column; margin: 12px; }
+}

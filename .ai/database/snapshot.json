@@ -4327,6 +4327,112 @@
    "rls_enabled": true
   },
   {
+   "name": "form_upload_intents",
+   "schema": "public",
+   "columns": [
+    {
+     "name": "id",
+     "default": "gen_random_uuid()",
+     "nullable": false,
+     "position": 1,
+     "udt_name": "uuid",
+     "data_type": "uuid"
+    },
+    {
+     "name": "company_id",
+     "default": null,
+     "nullable": false,
+     "position": 2,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "form_id",
+     "default": null,
+     "nullable": false,
+     "position": 3,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "question_id",
+     "default": null,
+     "nullable": false,
+     "position": 4,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "object_path",
+     "default": null,
+     "nullable": false,
+     "position": 5,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "expected_name",
+     "default": null,
+     "nullable": false,
+     "position": 6,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "expected_type",
+     "default": null,
+     "nullable": false,
+     "position": 7,
+     "udt_name": "text",
+     "data_type": "text"
+    },
+    {
+     "name": "expected_size",
+     "default": null,
+     "nullable": false,
+     "position": 8,
+     "udt_name": "int8",
+     "data_type": "bigint"
+    },
+    {
+     "name": "created_at",
+     "default": "now()",
+     "nullable": false,
+     "position": 9,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    },
+    {
+     "name": "expires_at",
+     "default": "(now() + '00:30:00'::interval)",
+     "nullable": false,
+     "position": 10,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    },
+    {
+     "name": "claimed_at",
+     "default": null,
+     "nullable": true,
+     "position": 11,
+     "udt_name": "timestamptz",
+     "data_type": "timestamp with time zone"
+    },
+    {
+     "name": "response_id",
+     "default": null,
+     "nullable": true,
+     "position": 12,
+     "udt_name": "text",
+     "data_type": "text"
+    }
+   ],
+   "primary_key": [
+    "id"
+   ],
+   "rls_enabled": true
+  },
+  {
    "name": "forms",
    "schema": "public",
    "columns": [
@@ -14238,6 +14344,16 @@
    "authenticated_execute": false
   },
   {
+   "name": "submit_public_form_response",
+   "returns": "jsonb",
+   "arguments": "p_response_id text, p_company_id text, p_form_id text, p_submitted_by text, p_submitter_email text, p_answers jsonb, p_upload_intent_ids uuid[]",
+   "volatility": "v",
+   "anon_execute": false,
+   "security_definer": true,
+   "service_role_execute": true,
+   "authenticated_execute": false
+  },
+  {
    "name": "sync_team_member_from_profile",
    "returns": "trigger",
    "arguments": "",
@@ -15124,15 +15240,23 @@
    "version": "20260904013449"
   },
   {
-   "version": "20260904215926",
-   "name": "merge_contact_references"
+   "name": "merge_contact_references",
+   "version": "20260904215926"
   },
   {
-   "version": "20260904215937",
-   "name": "purge_abandoned_form_uploads"
+   "name": "purge_abandoned_form_uploads",
+   "version": "20260904215937"
+  },
+  {
+   "name": "harden_public_form_submissions",
+   "version": "20260908182126"
+  },
+  {
+   "name": "add_form_upload_intent_company_index",
+   "version": "20260908185007"
   }
  ],
- "captured_at": "2026-09-04T22:01:56.717525+00:00",
+ "captured_at": "2026-09-08T18:50:43.354578+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",
@@ -16134,6 +16258,33 @@
    "update_rule": "NO ACTION"
   },
   {
+   "name": "form_upload_intents_company_id_fkey",
+   "to_table": "companies",
+   "to_column": "id",
+   "from_table": "form_upload_intents",
+   "delete_rule": "CASCADE",
+   "from_column": "company_id",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "form_upload_intents_form_id_fkey",
+   "to_table": "forms",
+   "to_column": "id",
+   "from_table": "form_upload_intents",
+   "delete_rule": "CASCADE",
+   "from_column": "form_id",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "form_upload_intents_response_id_fkey",
+   "to_table": "form_responses",
+   "to_column": "id",
+   "from_table": "form_upload_intents",
+   "delete_rule": "SET NULL",
+   "from_column": "response_id",
+   "update_rule": "NO ACTION"
+  },
+  {
    "name": "forms_company_id_fkey",
    "to_table": "companies",
    "to_column": "id",
@@ -16901,6 +17052,15 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
+   "to_column": "company_id",
+   "from_table": "tasks",
+   "delete_rule": "NO ACTION",
+   "from_column": "company_id",
+   "update_rule": "NO ACTION"
+  },
+  {
+   "name": "tasks_company_deal_id_fkey",
+   "to_table": "deals",
    "to_column": "id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
@@ -16910,16 +17070,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "company_id",
-   "from_table": "tasks",
-   "delete_rule": "NO ACTION",
-   "from_column": "company_id",
-   "update_rule": "NO ACTION"
-  },
-  {
-   "name": "tasks_company_deal_id_fkey",
-   "to_table": "deals",
-   "to_column": "company_id",
+   "to_column": "id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "deal_id",
@@ -16928,7 +17079,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "id",
+   "to_column": "company_id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "deal_id",

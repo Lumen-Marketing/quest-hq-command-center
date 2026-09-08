@@ -609,6 +609,7 @@ test('public form upload capability is isolated and returns metadata without lea
           return {
             bucket_id: 'server-issued-bucket',
             object_path: 'company/form/question/proof.pdf',
+            upload_intent_id: '8ca8140e-8d18-46bd-a8cc-8e2c80bb5a11',
             token: 'server-issued-secret',
           };
         },
@@ -653,6 +654,7 @@ test('public form upload capability is isolated and returns metadata without lea
     data_url: '',
     bucket_id: 'server-issued-bucket',
     object_path: 'company/form/question/proof.pdf',
+    upload_intent_id: '8ca8140e-8d18-46bd-a8cc-8e2c80bb5a11',
     uploaded_at: '2026-07-31T00:00:00.000Z',
   });
   assert.equal('token' in result, false);

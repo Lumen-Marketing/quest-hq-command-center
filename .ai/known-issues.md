@@ -13,14 +13,13 @@ already been purged, cascading rows in `contact_label_assignments`, `crm_sites` 
 `underwriting_cases` are gone. Where it is still in the recycle bin, the rows can still be
 re-pointed. No audit of affected contacts has been run.
 
-## Most list queries are still capped without pagination
+## Recent-activity feeds remain intentionally bounded
 
-The chat window now takes the newest rows rather than the oldest, which was the reported
-defect. The caps themselves remain: `activities` and `form_responses` at 500,
-`client_portal_events` at 500, `notifications` and `wb_data_transfers` at 200,
-`audit_events` at 100, `company_time_entries` at 500. There is no cursor or load-more on any
-of them, so a large account still cannot reach past the window. Real pagination is a
-larger change than this pass covered.
+Full record directories and selected chat history now page beyond the API row cap. The feeds
+that explicitly present recent activity remain bounded: activities and client-portal events at
+500, notifications and workspace-transfer history at 200, and audit events at 100. If any of
+those surfaces becomes an archive rather than a recency feed, it needs a dated/cursor history
+view rather than silently raising the global startup cost.
 
 Only confirmed, actionable items belong here. Resolved findings live in `current-state.md` and
 `decisions.md`, not in this list.
@@ -46,15 +45,6 @@ workspace-scoped. It self-heals: give a leftover a fresh id and it becomes a row
 
 Deciding what they are is a person's job, not a migration's. The stale-duplicate cases can be
 purged from their bins; the two that are distinct records need new ids if they are worth keeping.
-
-## The client release is not deployed
-
-The migration copies rather than moves, so production is running the old client against the new
-schema and behaving exactly as before. The bin still reads from the document there. Deploying
-`fix/workspace-apps-defect-pass` is what starts writing `deleted_at` and stripping `app.trash`.
-
-Until then the 30-day sweep has nothing to destroy that the old client can still see: every
-backfilled row carries `purge_after` 2026-10-04, and `purge_expired_wb_records` returns 0.
 
 ## SECURITY DEFINER advisor findings moved from 59 to 61
 
@@ -95,8 +85,9 @@ extractions and keep the bundle guard; do not trade a smaller entry for an eager
 
 ## Native Tasks remains feature-flagged and the vendored app has separate work
 
-The host now preserves the same embedded Tasks iframe through full Questbase shell renders, so
-host notifications, clocks and preference changes no longer reboot it. The feature-flagged native
+The host preserves the same embedded Tasks iframe through full Questbase shell renders without
+removing or reparenting it, so host notifications, clocks and preference changes do not reboot
+its browsing context. The feature-flagged native
 store is still not wired as the default. The AI assistant endpoint and any draft loss caused by a
 reload inside the vendored Tasks application must be fixed in that separate application.
 

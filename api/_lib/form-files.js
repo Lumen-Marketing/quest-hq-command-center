@@ -3,6 +3,7 @@
 
 export const FORM_FILE_BUCKET = 'quest-form-response-files';
 export const FORM_FILE_MAX_BYTES = 15 * 1024 * 1024;
+export const FORM_UPLOAD_INTENT_TTL_MS = 30 * 60 * 1000;
 
 // Kept in lockstep with the client `formfile` policy (src/security/upload-policy.js).
 // ZIP-based office formats are intentionally excluded ("drop anything ZIP") — do
