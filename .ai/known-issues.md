@@ -46,6 +46,22 @@ workspace-scoped. It self-heals: give a leftover a fresh id and it becomes a row
 Deciding what they are is a person's job, not a migration's. The stale-duplicate cases can be
 purged from their bins; the two that are distinct records need new ids if they are worth keeping.
 
+## Leaked-password protection cannot be enabled on the free plan
+
+The security advisor reports `auth_leaked_password_protection` as a WARN, and it cannot be cleared
+from where the project is today. Supabase gates the setting behind Pro ("Leaked password
+protection is available on the Pro Plan and above"), and the `Lumen` organization is on `free`, so
+it is absent from the dashboard and rejected by the Management API alike. Confirmed 2026-09-09.
+
+Nothing in the repository can fix it and no migration will. Either upgrade the organization, in
+which case enable it under Authentication and the advisor clears, or accept the finding knowingly.
+It is recorded here so the next person auditing production does not spend time hunting for a
+toggle that is not there.
+
+Worth noting alongside it: a production tenant on the free plan has no point-in-time recovery and
+a shorter backup retention than a paid one. That is a bigger operational exposure than the
+password check itself, and the same upgrade addresses both.
+
 ## SECURITY DEFINER advisor findings moved from 59 to 61
 
 `wb_trash_records(text[])` and `wb_restore_records(text[])` are executable by `authenticated` by

@@ -15,10 +15,12 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
 
 - Database-only, so no redeploy: production stays on `15e5bd9`.
 
-- Not fixed, and not fixable from here: Supabase Auth leaked-password protection is still
-  disabled. It is a project Auth setting with no migration or MCP surface -- it has to be enabled
-  in the dashboard under Authentication, and it is the one remaining WARN-level security advisor
-  finding that is actually actionable.
+- Not fixed, and not fixable at all on the current plan: Supabase Auth leaked-password protection
+  is still disabled. It is gated behind Pro ("Leaked password protection is available on the Pro
+  Plan and above", Supabase password-security guide) and the `Lumen` organization is on `free`, so
+  the setting is not available to toggle -- in the dashboard or through the Management API. The
+  advisor will keep reporting it until the organization is upgraded. See [known
+  issues](known-issues.md).
 
 ## 2026-09-09 clearing a workspace log reaches the import & export rows
 
