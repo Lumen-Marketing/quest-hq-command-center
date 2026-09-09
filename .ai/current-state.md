@@ -27,8 +27,16 @@ Latest review: 2026-09-10 (local time). Read the newest dated section first; old
   evidence from historical release sections. Latest database advisors show no performance WARN
   or ERROR and no unindexed foreign keys. The existing plan-gated password warning remains.
 
-Database changes are applied and verified. Application release evidence will be added below
-after the combined checks and commit-pinned production verification.
+Application release `7349574c9409dff2b6c5bdbb65a1d8f026ad12c0` is READY in deployment
+`dpl_FEVnQG1QYgwo7zTrzeWiVUr765xx`, aliased to `https://www.questbase.io`. All three database
+migrations are applied. The full `npm run check` passed: 4,699 tests, AI documentation validation,
+tenancy checks, production build, unchanged bundle ceiling and boot sanity. Commit-pinned
+production smoke passed 36/36 routes and 4/4 entry assets.
+
+Authenticated browser checks on this release confirmed Clock renders and Configure workspace
+opens the server-backed Clear log preview. Cancel and Close return cleanly; no console errors
+were observed in this walkthrough. No clear was submitted and no customer activity was deleted.
+This is targeted release verification, not all-role/device QA or a large-workspace latency study.
 
 ## 2026-09-09 the last unindexed foreign key
 
