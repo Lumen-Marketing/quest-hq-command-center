@@ -4,6 +4,12 @@ Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time opera
 
 ## 2026-09-09 clearing a workspace log reaches the import & export rows
 
+- Released as `15e5bd9` in deployment `dpl_GxMDMnou5RPXnedoYzjthfJZupAj`, READY on
+  `https://www.questbase.io`. The commit-pinned smoke check passed 36/36 production routes with
+  4/4 entry assets, and the lazily-imported `transfer-clear` chunk was fetched from production and
+  confirmed to carry the tombstone write and both `wb_data_transfers` calls. Security advisors are
+  unchanged from before the release.
+
 - `20260909120000_wb_data_transfers_clearable.sql` is applied to live as version
   `20260909000308`, verified against the catalog: `wb_data_transfers` carries a DELETE policy
   (`wb transfers clear`), RLS on, and still no UPDATE policy. The snapshot was refreshed from live

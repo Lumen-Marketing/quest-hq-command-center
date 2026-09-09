@@ -18,13 +18,13 @@
       "version": "20260909000308",
       "name": "wb_data_transfers_clearable"
     },
-    "vercel_verified_at": "2026-09-09T02:54:49.9924892+08:00",
+    "vercel_verified_at": "2026-09-09T02:08:19.000Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
-    "vercel_deployment_id": "dpl_3HpnJX4DCSSaUN75oEGfFbpf1aoo",
+    "vercel_deployment_id": "dpl_GxMDMnou5RPXnedoYzjthfJZupAj",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "285d133bd39fd9271f5420030395a486a3f3c9b5",
-    "github_verified_at": "2026-09-09T02:54:49.9924892+08:00",
+    "vercel_deployed_commit": "15e5bd91df58b383fbd9d463c35978f31e223f16",
+    "github_verified_at": "2026-09-09T02:08:19.000Z",
     "github_production_guardian_run": null
   },
   "refresh_commands": {
