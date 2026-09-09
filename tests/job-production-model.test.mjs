@@ -175,8 +175,8 @@ test('accepted change orders raise what the job is worth', () => {
 test('the records load on demand, not at bootstrap', () => {
   // Every daily for every job is the largest query the app could make, for its least-seen
   // screen. It waits until a job is opened.
-  assert.match(main, /'labels', 'production'\]/);
-  assert.match(main, /if \(domain === 'production'\) \{/);
+  assert.match(main, /'labels', 'production', 'time'\]/);
+  assert.match(readFileSync(new URL('../src/data/realtime-deferred-loader.js', import.meta.url), 'utf8'), /if \(domain === 'production'\) \{/);
   assert.match(main, /if \(!ensureDomainLoaded\('production'\)\) return questLoader\('Loading job'\)/);
 });
 

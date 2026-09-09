@@ -1,39 +1,11 @@
-// Working out what a "Clear log" would take out of public.wb_data_transfers, and the tombstones
-// it leaves in their place.
-//
-// Split from ./activity-log.js purely to keep it out of the entry chunk. activity-log.js is
-// statically imported by main.js -- `clearedActivity` and `matchBuilderWorkspace` are needed on
-// paths that run before any click -- and a statically imported module is bundled into the same
-// chunk, so anything added there is downloaded by every session. Nothing here is needed until
-// somebody opens Configure workspace, so main.js reaches it through `await import(...)` and the
-// App Builder modal (already its own lazy chunk) imports it directly.
-//
-// The rule these functions encode: clearing removes export and import rows and can never remove
-// a tombstone. The DELETE policy in 20260909120000 enforces the same thing one level down, so a
-// mistake here is a display bug rather than a hole.
-//
-// The Supabase round trip lives here too, not just the arithmetic. main.js keeps only the four
-// lines that decide there is a live session to talk to, because every byte it holds is a byte
-// downloaded before anyone has clicked anything.
+// Server-prepared App Builder transfer-log clears. A browser cache is useful for rendering,
+// but is not an authority for a destructive count: the preview RPC snapshots exact row ids.
 
 import { opsWorkspaceId } from './ops-workspace-id.js';
 
-/**
- * The workspace's clearable export and import rows, grouped by the app they belong to.
- *
- * Grouped rather than counted flat because the tombstones are written per app: the Import &
- * Export tab is a tab of ONE app, so a single workspace-level tombstone would leave every one
- * of those tabs reading "Nothing has moved yet" — indistinguishable from an app nobody has ever
- * exported, which is the exact ambiguity the tombstone exists to remove.
- *
- * Tombstones are excluded. They are not transfers, they are not deletable, and counting them
- * would make each clear report the previous ones as though they were new.
- */
 export function clearableTransfers(transfers, workspaceId) {
   const wanted = String(workspaceId || '');
   const byApp = new Map();
-  // '' is a legacy `ws-<companyId>` document with no workspace row to point at. It must not be
-  // read as "rows whose workspace_id is falsy", and certainly not as a wildcard.
   if (!wanted || !Array.isArray(transfers)) return byApp;
   for (const row of transfers) {
     if (String(row?.workspace_id) !== wanted) continue;
@@ -44,76 +16,79 @@ export function clearableTransfers(transfers, workspaceId) {
   return byApp;
 }
 
-/** How many export/import rows a clear would remove across the whole workspace. */
 export function clearableTransferCount(transfers, workspaceId) {
   let total = 0;
   for (const count of clearableTransfers(transfers, workspaceId).values()) total += count;
   return total;
 }
 
-/**
- * The tombstone rows to insert in place of the rows being deleted.
- *
- * `record_count` carries how many ROWS went for that app, not a record count — the column is
- * reused rather than added to, and the reader labels it by direction so nothing claims that
- * records were removed from the app. `file_name` and `format` stay empty: nothing was
- * transferred, so there is no file and no format to name.
- */
-export function clearedTransferRows(transfers, { companyId, workspaceId, actorId }) {
-  return [...clearableTransfers(transfers, workspaceId).entries()].map(([appId, removed]) => ({
-    company_id: companyId,
-    workspace_id: workspaceId,
-    app_id: appId,
-    direction: 'cleared',
-    format: '',
-    record_count: removed,
-    // Omitted rather than sent as null: the column is a nullable FK to profiles, and a key that
-    // is absent is easier to read back than one explicitly set to nothing.
-    ...(actorId ? { created_by: actorId } : {}),
-  }));
+function localPreview(state, workspace) {
+  const workspaceId = opsWorkspaceId(workspace?.id);
+  const rows = (state.wbTransfers || []).filter((row) => (
+    String(row.workspace_id) === workspaceId
+    && (row.direction === 'export' || row.direction === 'import')
+  ));
+  const perApp = {};
+  rows.forEach((row) => { perApp[String(row.app_id || '')] = (perApp[String(row.app_id || '')] || 0) + 1; });
+  return {
+    request_id: 'local', transfer_count: rows.length, per_app: perApp, expires_at: null,
+    // Demo data has no server to snapshot. Keep ids only so newer local rows survive.
+    snapshot_ids: rows.map((row) => row.id).filter(Boolean), local: true,
+  };
 }
 
-/**
- * Delete a workspace's export and import rows, leaving one tombstone per app.
- *
- * Returns how many rows went, or `null` if the database refused. The caller treats null as
- * "clear nothing at all", so a refusal cannot leave the activity array emptied with the transfer
- * rows still standing — which is the very inconsistency this whole change exists to remove,
- * arrived at by a second route.
- *
- * Returns 0 rather than null when there is simply nothing to do: a legacy `ws-<companyId>`
- * document with no workspace row to point at, or a workspace nobody has ever imported to or
- * exported from. Nothing failed in either case.
- *
- * `state` is passed in and mutated on success so the Import & Export tab and the activity feed
- * stop painting rows that are gone, without waiting for a reload.
- */
-export async function clearWorkspaceTransfers({ client, state, companyId, workspace, actorId }) {
-  const opsId = opsWorkspaceId(workspace?.id);
-  if (!opsId) return 0;
+/** Prepare an immutable server snapshot. No table select/insert/delete happens in the browser. */
+export async function previewWorkspaceTransferClear({ client, liveSession = false, state, workspace }) {
+  // A live session without a usable client is not a demo. Falling back to cached rows here
+  // would turn a database authorization/outage failure into an unsafe local clear preview.
+  if (liveSession && !client) throw new Error('The live transfer log is unavailable. Try again.');
+  if (!client) return localPreview(state, workspace);
+  const workspaceId = opsWorkspaceId(workspace?.id);
+  if (!workspaceId) {
+    if (liveSession) throw new Error('This workspace cannot clear a live transfer log.');
+    return localPreview(state, workspace);
+  }
+  const { data, error } = await client.rpc('preview_wb_transfer_clear', { p_workspace_id: workspaceId });
+  if (error) throw new Error(error.message || 'Could not prepare the transfer-log clear.');
+  if (!data || !data.request_id || !Number.isFinite(Number(data.transfer_count))) {
+    throw new Error('The transfer-log preview was incomplete. Try again.');
+  }
+  return data;
+}
 
-  const removed = clearableTransferCount(state.wbTransfers, opsId);
-  if (!removed) return 0;
+/** Consume one snapshot. Repeating the request id returns its stored result safely. */
+export async function clearWorkspaceTransfers({ client, liveSession = false, state, workspace, preview, isCurrentContext = () => true }) {
+  if (!preview) throw new Error('Prepare the transfer-log clear before confirming it.');
+  if (!isCurrentContext()) throw new Error('This clear action is no longer active. No cached transfer rows were changed.');
+  let result;
+  if (liveSession && (!client || preview.local)) {
+    throw new Error('The live transfer log is unavailable. Preview it again before clearing.');
+  }
+  if (preview.local || !client) {
+    const ids = new Set(preview.snapshot_ids || []);
+    const now = new Date().toISOString();
+    const tombstones = Object.entries(preview.per_app || {}).map(([app_id, removed]) => ({
+      id: `local-clear-${app_id}-${Date.now()}`, workspace_id: opsWorkspaceId(workspace?.id), app_id,
+      direction: 'cleared', format: '', file_name: '', record_count: removed, created_at: now,
+    }));
+    result = { request_id: preview.request_id, removed: ids.size, removed_ids: [...ids], tombstones, local: true };
+  } else {
+    const { data, error } = await client.rpc('clear_wb_transfer_log', { p_request_id: preview.request_id });
+    if (error) throw new Error(error.message || 'The transfer log could not be cleared.');
+    if (!data || !Number.isFinite(Number(data.removed)) || !Array.isArray(data.tombstones)) {
+      throw new Error('The transfer-log clear returned an incomplete result.');
+    }
+    result = data;
+  }
 
-  // The tombstones are written BEFORE the delete. If the insert succeeds and the delete then
-  // fails, the log over-reports: it claims a clear that did not happen, and the rows are still
-  // there to contradict it — a state somebody can see and correct. The other order fails
-  // silently: rows gone, nothing saying why, indistinguishable from an app nobody ever used.
-  const wrote = await client.from('wb_data_transfers').insert(clearedTransferRows(state.wbTransfers, {
-    companyId, workspaceId: opsId, actorId,
-  })).select();
-  if (wrote.error) return null;
+  // The RPC may have taken long enough for logout, a company switch or modal replacement. Do
+  // not let its response mutate the cache that now belongs to that newer context.
+  if (!isCurrentContext()) throw new Error('This clear action is no longer active. No cached transfer rows were changed.');
 
-  // `direction` is named here even though the DELETE policy enforces it anyway. The policy is
-  // what makes it true; this is what makes it legible, and it keeps the request honest about
-  // what it is asking for rather than asking for everything and relying on being refused.
-  const cleared = await client.from('wb_data_transfers').delete()
-    .eq('workspace_id', opsId)
-    .in('direction', ['export', 'import']);
-  if (cleared.error) return null;
-
-  state.wbTransfers = (state.wbTransfers || [])
-    .filter((row) => String(row.workspace_id) !== opsId || row.direction === 'cleared')
-    .concat(wrote.data || []);
-  return removed;
+  // Only server-deleted ids leave the cache. New arrivals after preview remain visible.
+  const removed = new Set(result.removed_ids || []);
+  const known = new Set((state.wbTransfers || []).map((row) => row.id));
+  state.wbTransfers = (state.wbTransfers || []).filter((row) => !removed.has(row.id))
+    .concat((result.tombstones || []).filter((row) => row?.id && !known.has(row.id)));
+  return result;
 }

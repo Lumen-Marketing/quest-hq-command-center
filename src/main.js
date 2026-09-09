@@ -2642,6 +2642,9 @@ const state = {
   wbRecordBase: {},
   // Which deferred domains have been fetched this session: '' | 'loading' | 'loaded'.
   loadedDomains: {},
+  // Bumped whenever identity-scoped rows are cleared. Async loaders retain the value they
+  // began with, so an old session cannot paint its rows into the next session.
+  workspaceLoadEpoch: 0,
   // Selector for whatever opened the current modal, so focus can go back there
   // when it closes. A selector rather than a node reference: the app re-renders
   // wholesale, so the original element is gone by the time the modal is dismissed.
@@ -4825,13 +4828,16 @@ function renderAuthLoading() {
 
 function ensureDataLoad() {
   if (state.dataLoaded || state.dataLoading) return;
+  const loadEpoch = state.workspaceLoadEpoch;
   state.dataLoading = true;
-  loadSupabaseData()
+  loadSupabaseData(loadEpoch)
     .catch(async (error) => {
+      if (state.workspaceLoadEpoch !== loadEpoch) return;
       console.warn('Workspace data load failed', error);
       if (state.session?.auth === 'supabase') {
         await loadSupabaseBootstrapData().catch((bootstrapError) => console.warn('Workspace bootstrap load failed', bootstrapError));
       }
+      if (state.workspaceLoadEpoch !== loadEpoch) return;
       if (state.sync.mode === 'loading') state.sync = { label: 'Local fallback', mode: 'local' };
       // A total failure never reaches summarizeInitialDataFailures, so the partial-load
       // banner -- the one that carries the Retry -- never appeared. Without this the
@@ -4842,6 +4848,7 @@ function ensureDataLoad() {
       }
     })
     .finally(async () => {
+      if (state.workspaceLoadEpoch !== loadEpoch) return;
       state.dataLoaded = true;
       state.everLoaded = true;
       state.dataLoading = false;
@@ -4904,7 +4911,7 @@ function applyWorkspaceBuilderRows(rows, recordRows = null) {
 // of change produces empty screens: some widget on an unrelated page reads the data,
 // nobody remembers to list that route, and the screen renders blank with no error.
 // Every read goes through these accessors, so hooking them cannot miss a caller.
-const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels', 'production'];
+const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels', 'production', 'time'];
 
 // Deliberately NOT deferred, having checked: company_invites and company_join_requests
 // feed the dashboard's pending-invite widget, which renders on first paint. Deferring
@@ -4920,24 +4927,27 @@ function ensureDomainLoaded(domain) {
   if (state.loadedDomains[domain] === 'loading' || state.loadedDomains[domain] === 'error') return false;
   const client = createSupabaseClient();
   if (!client) return true;
+  const loadEpoch = state.workspaceLoadEpoch;
   state.loadedDomains[domain] = 'loading';
   (async () => {
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     try {
-      await loadRealtimeDomain(client, domain);
+      await loadRealtimeDomain(client, domain, loadEpoch);
+      if (state.workspaceLoadEpoch !== loadEpoch) return;
       state.loadedDomains[domain] = 'loaded';
     } catch (error) {
+      if (state.workspaceLoadEpoch !== loadEpoch) return;
       state.loadedDomains[domain] = 'error';
       reportLazySurfaceFailure(`Could not load ${domain}`, error, { domain });
     } finally {
       finishTimedOperation('Deferred data load', startedAt, 1500, domain);
     }
-    if (state.loadedDomains[domain] === 'loaded') render();
+    if (state.workspaceLoadEpoch === loadEpoch && state.loadedDomains[domain] === 'loaded') render();
   })();
   return false;
 }
 
-async function loadSupabaseData() {
+async function loadSupabaseData(loadEpoch = state.workspaceLoadEpoch) {
   if (state.session?.auth === 'local-basic' || state.session?.auth === 'demo-readonly') {
     state.sync = { label: isReadOnlyDemo() ? 'Read-only demo' : 'Demo mode', mode: 'local' };
     return;
@@ -4955,6 +4965,9 @@ async function loadSupabaseData() {
   } = await import('./data/initial-data-queries.js');
   const initialQueriesStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const initialResults = await loadInitialDataQueries(client);
+  // A sign-out, account change or workspace reset while pages were in flight makes every
+  // result obsolete. Never hydrate those rows into the fresh context.
+  if (state.workspaceLoadEpoch !== loadEpoch) return false;
   finishTimedOperation('Initial workspace data', initialQueriesStartedAt, 2000, 'bootstrap');
   state.initialLoadFailures = summarizeInitialDataFailures(initialResults);
   const recordInitialFailures = (results) => {
@@ -5004,7 +5017,6 @@ async function loadSupabaseData() {
     wbTransfersResult,
     platformAdminResult,
     activeTimerResult,
-    timeEntriesResult,
     automationsResult,
   } = initialResults;
 
@@ -5062,7 +5074,6 @@ async function loadSupabaseData() {
   // RLS already narrows both of these to the signed-in person, so there is nothing to filter
   // here. The accessors filter anyway, because a local or demo session has no RLS behind it.
   if (!activeTimerResult.error) state.activeTimer = normalizeActiveTimer((activeTimerResult.data || [])[0]);
-  if (!timeEntriesResult.error) state.timeEntries = (timeEntriesResult.data || []).map(normalizeTimeEntry);
   if (!contactsResult.error) {
     state.contacts = activeRows(contactsResult.data || []).map(normalizeContact);
     liveTables += 1;
@@ -5123,6 +5134,7 @@ async function loadSupabaseData() {
       safeInitialDataQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
       safeInitialDataQuery(client.rpc('list_platform_backup_copies', { filter_company_id: null, filter_status: null, filter_kind: null })),
     ]);
+    if (state.workspaceLoadEpoch !== loadEpoch) return false;
     recordInitialFailures({ platformCompaniesResult, platformMembersResult, platformBackupCopiesResult });
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
@@ -5148,6 +5160,7 @@ async function loadSupabaseData() {
 
   if (isQuestDeveloper() && !state.platformCompanies.length) {
     const reviewsResult = await safeInitialDataQuery(client.rpc('list_workspace_reviews_v2'));
+    if (state.workspaceLoadEpoch !== loadEpoch) return false;
     recordInitialFailures({ workspaceReviewsResult: reviewsResult });
     if (!reviewsResult.error) {
       state.workspaceReviews = (reviewsResult.data || []).map(normalizeWorkspaceReview);
@@ -5330,9 +5343,11 @@ function requireQueries(...results) {
   if (failed) throw failed.error;
 }
 
-async function pagedSupabaseQuery(makeQuery, label) {
-  const { loadPaginatedDataQuery } = await import('./data/initial-data-queries.js');
-  return loadPaginatedDataQuery(makeQuery, safeSupabaseQuery, { label });
+async function pagedSupabaseQuery(makeQuery, label, options = {}) {
+  const { loadPaginatedDataQuery, safeInitialDataQuery } = await import('./data/initial-data-queries.js');
+  // Realtime uses the same abortable page wrapper as first paint. Keeping it here rather
+  // than changing safeSupabaseQuery preserves the established write/single-read behaviour.
+  return loadPaginatedDataQuery(makeQuery, safeInitialDataQuery, { label, ...options });
 }
 
 async function realtimeQueryBatch(client, domain, options) {
@@ -5341,6 +5356,10 @@ async function realtimeQueryBatch(client, domain, options) {
 }
 
 function resetLiveWorkspaceData() {
+  state.workspaceLoadEpoch += 1;
+  // The prior loader's finally block is deliberately ignored once its context is obsolete.
+  // Clear this here so the newly authenticated context can immediately start its own load.
+  state.dataLoading = false;
   state.everLoaded = false;
   state.jobs = [];
   state.contacts = [];
@@ -18718,7 +18737,24 @@ function wbGuard() { return requirePermission('workspaces.manage', activeCompany
 
 /* ---- Modal launchers (set state.builderModal, then render) ------------------ */
 function openWbModal(modal) { state.builderModal = modal; render(); }
-function closeWbModal() { state.builderModal = null; render(); }
+function wbClearSessionEpoch() {
+  // A password reauthentication legitimately refreshes the access token. Bind this action to
+  // stable identities and the data-load epoch instead, which changes on logout/account change
+  // but not a normal token refresh. Neither value is a credential.
+  const session = activeSession();
+  return `${session?.user?.id || ''}:${session?.profile?.id || ''}:${state.workspaceLoadEpoch}`;
+}
+function wbClearActionPending(modal = state.builderModal) {
+  return modal?.kind === 'clear-activity' && modal.actionPending === true;
+}
+function closeWbModal() {
+  // The header close button, Cancel, Escape and topmost-modal dismissal all land here. Do not
+  // let any of them replace a live clear modal while its async result still owns this state.
+  if (wbClearActionPending()) return false;
+  state.builderModal = null;
+  render();
+  return true;
+}
 
 /**
  * Clear a workspace's activity log, after confirming the person's password.
@@ -18763,9 +18799,56 @@ async function confirmAccountPassword(password) {
   return { ok: true, error: '' };
 }
 
+function openWbClearWorkspaceActivity({ companyId, workspaceId, returnTo = null }) {
+  const modal = {
+    kind: 'clear-activity', companyId, workspaceId, returnTo, error: '',
+    preview: { status: 'loading', error: '', data: null }, actionPending: false, transferResult: null,
+    // The stable identity + load epoch makes logout/account switches stale without letting
+    // password reauthentication's normal token refresh cancel this clear action.
+    sessionEpoch: wbClearSessionEpoch(),
+  };
+  openWbModal(modal);
+  wbPreviewWorkspaceTransfers(companyId, workspaceId)
+    .then((data) => {
+      if (!wbClearActionContextCurrent(modal)) return;
+      modal.preview = { status: 'ready', error: '', data };
+      render();
+    })
+    .catch((error) => {
+      if (!wbClearActionContextCurrent(modal)) return;
+      modal.preview = { status: 'error', error: error?.message || 'Could not check the transfer log.', data: null };
+      render();
+    });
+}
+
+function wbClearActionContextCurrent(modal) {
+  return state.builderModal === modal
+    && modal.companyId === activeCompanyId()
+    && modal.sessionEpoch === wbClearSessionEpoch();
+}
+
+function wbRetryClearWorkspacePreview() {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'clear-activity' || m.actionPending || m.transferResult) return;
+  m.preview = { status: 'loading', error: '', data: null };
+  m.error = '';
+  render();
+  wbPreviewWorkspaceTransfers(m.companyId, m.workspaceId)
+    .then((data) => {
+      if (!wbClearActionContextCurrent(m)) return;
+      m.preview = { status: 'ready', error: '', data };
+      render();
+    })
+    .catch((error) => {
+      if (!wbClearActionContextCurrent(m)) return;
+      m.preview = { status: 'error', error: error?.message || 'Could not check the transfer log.', data: null };
+      render();
+    });
+}
+
 async function wbClearWorkspaceActivity(button) {
   const m = state.builderModal;
-  if (!m || m.kind !== 'clear-activity') return;
+  if (!m || m.kind !== 'clear-activity' || m.actionPending) return;
   if (!can('workspaces.manage', m.companyId)) {
     m.error = 'Your role cannot clear this log.';
     render();
@@ -18774,63 +18857,106 @@ async function wbClearWorkspaceActivity(button) {
   const { workspace } = wbFind(m.companyId, m.workspaceId);
   if (!workspace) { state.builderModal = null; render(); return; }
 
-  if (isLiveSupabaseSession()) {
-    if (button) button.disabled = true;
-    const auth = await confirmAccountPassword(document.getElementById('wbClearPw')?.value || '');
-    if (button) button.disabled = false;
-    if (!auth.ok) { m.error = auth.error; render(); return; }
-  }
-
-  // The import & export rows go first, and a failure here abandons the whole clear.
-  //
-  // Deliberately NOT fire-and-forget, unlike logTransfer: an export is already done by the time
-  // its row is written, so losing the note is the lesser harm, but a clear that half-succeeded
-  // leaves the activity array empty and the transfer rows in place -- which is precisely the
-  // state this whole change exists to fix, arrived at a second way. Better to clear nothing and
-  // say so.
-  const transfersRemoved = await wbClearWorkspaceTransfers(m.companyId, workspace);
-  if (transfersRemoved === null) {
-    m.error = 'The import & export log could not be cleared, so nothing was cleared. Try again.';
+  if (!m.transferResult && m.preview?.status !== 'ready') {
+    m.error = 'Wait for the transfer-log check, then try again.';
     render();
     return;
   }
 
-  workspace.activity = clearedActivity(workspace, {
-    actorName: actorName(),
-    at: new Date().toISOString(),
-    id: wbUid(),
-    transfersRemoved,
-  });
-  wbSave(m.companyId);
-  // Back to the workspace modal the clear was started from, with its draft intact.
-  state.builderModal = m.returnTo ? { ...m.returnTo } : null;
-  showToast(
-    transfersRemoved
-      ? `Log cleared, including ${transfersRemoved} import & export ${transfersRemoved === 1 ? 'entry' : 'entries'}.`
-      : 'Activity log cleared.',
-    isLiveSupabaseSession() ? 'live' : 'local',
-    'Workspaces',
-  );
+  // Read it before the pending render replaces the password input. It stays in this stack
+  // variable only; the modal state is intentionally never allowed to retain a password.
+  const password = !m.transferResult && isLiveSupabaseSession()
+    ? (document.getElementById('wbClearPw')?.value || '')
+    : '';
+  m.actionPending = true;
+  if (button) button.disabled = true;
   render();
+  let originalActivity;
+  let nextActivity;
+  try {
+    if (!m.transferResult && isLiveSupabaseSession()) {
+      const auth = await confirmAccountPassword(password);
+      if (!wbClearActionContextCurrent(m)) return;
+      if (!auth.ok) { m.error = auth.error; render(); return; }
+    }
+
+    // The atomic transfer RPC goes first. If it rejects, the activity document is untouched.
+    const transferResult = m.transferResult || await wbClearWorkspaceTransfers(workspace, m.preview.data, m);
+    if (!wbClearActionContextCurrent(m)) return;
+    m.transferResult = transferResult;
+    const transfersRemoved = Number(transferResult.removed) || 0;
+    originalActivity = workspace.activity;
+    nextActivity = clearedActivity(workspace, {
+      actorName: actorName(), at: new Date().toISOString(), id: wbUid(), transfersRemoved,
+    });
+    workspace.activity = nextActivity;
+    const saved = await wbSave(m.companyId);
+    if (!wbClearActionContextCurrent(m) || !saved) {
+      // Only undo our own in-memory replacement; do not overwrite an intervening update.
+      if (workspace.activity === nextActivity) workspace.activity = originalActivity;
+      if (!wbClearActionContextCurrent(m)) return;
+      m.error = `Import & export history cleared: ${transfersRemoved} ${transfersRemoved === 1 ? 'entry' : 'entries'}. The activity-log audit entry was not saved; retry to finish it.`;
+      render();
+      return;
+    }
+
+    // Back to the workspace modal the clear was started from, with its draft intact.
+    state.builderModal = m.returnTo ? { ...m.returnTo } : null;
+    showToast(
+      transfersRemoved
+        ? `Log cleared, including ${transfersRemoved} import & export ${transfersRemoved === 1 ? 'entry' : 'entries'}.`
+        : 'Activity log cleared.',
+      isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces',
+    );
+    render();
+  } catch (error) {
+    // `wbSave` may reject rather than resolve false. It has the same partial result: transfers
+    // are already atomically cleared, so restore only our activity replacement and offer retry.
+    if (typeof nextActivity !== 'undefined' && workspace.activity === nextActivity) workspace.activity = originalActivity;
+    if (wbClearActionContextCurrent(m)) {
+      m.error = m.transferResult
+        ? `Import & export history cleared: ${Number(m.transferResult.removed) || 0} ${Number(m.transferResult.removed) === 1 ? 'entry' : 'entries'}. The activity-log audit entry was not saved; retry to finish it.`
+        : (error?.message || 'The import & export log could not be cleared. Nothing in the activity log was changed.');
+      render();
+    }
+  } finally {
+    if (state.builderModal === m) {
+      m.actionPending = false;
+      if (button) button.disabled = false;
+      render();
+    }
+  }
 }
 
 /**
- * Delete this workspace's export and import rows and leave a tombstone per app.
+ * Prepare/consume the server's immutable transfer snapshot and merge only its exact response.
  *
- * Returns how many rows went, or null if the database refused; the caller treats null as "clear
- * nothing", so the two logs cannot drift apart. A local demo session has no table to clear and
- * returns 0 -- nothing failed, there was simply nothing there.
+ * Live calls reject if the session changes while the lazy module or RPC is pending, so an old
+ * response cannot be reinterpreted as a demo action or mutate a newer session's transfer cache.
  *
  * The body is in ./workspace/transfer-clear.js and fetched on demand. Only these lines are in the
  * entry chunk, because nothing here is reachable until somebody presses Clear log in a dialog.
  */
-async function wbClearWorkspaceTransfers(companyId, workspace) {
-  const client = isLiveSupabaseSession() ? createSupabaseClient() : null;
-  if (!client) return 0;
+async function wbPreviewWorkspaceTransfers(companyId, workspaceId) {
+  const { workspace } = wbFind(companyId, workspaceId);
+  const liveSession = isLiveSupabaseSession();
+  const sessionEpoch = wbClearSessionEpoch();
+  const client = liveSession ? createSupabaseClient() : null;
+  const { previewWorkspaceTransferClear } = await import('./workspace/transfer-clear.js');
+  if (sessionEpoch !== wbClearSessionEpoch()) throw new Error('This clear action is no longer active.');
+  return previewWorkspaceTransferClear({ client, liveSession, state, workspace });
+}
+
+async function wbClearWorkspaceTransfers(workspace, preview, modal = state.builderModal) {
+  const liveSession = isLiveSupabaseSession();
+  const sessionEpoch = wbClearSessionEpoch();
+  const client = liveSession ? createSupabaseClient() : null;
   const { clearWorkspaceTransfers } = await import('./workspace/transfer-clear.js');
-  return clearWorkspaceTransfers({
-    client, state, companyId, workspace, actorId: activeSession()?.profile?.id || null,
-  });
+  const isCurrentContext = () => modal?.kind === 'clear-activity'
+    ? wbClearActionContextCurrent(modal)
+    : sessionEpoch === wbClearSessionEpoch();
+  if (!isCurrentContext()) throw new Error('This clear action is no longer active.');
+  return clearWorkspaceTransfers({ client, liveSession, state, workspace, preview, isCurrentContext });
 }
 
 function openWbWorkspaceModal(companyId, editId) {
@@ -21419,10 +21545,12 @@ function wbMountModal() {
     // Opened from inside the workspace modal, so the draft is collected first: cancelling
     // the clear must not also throw away a rename typed a moment earlier.
     wbCollectModalDraft();
-    openWbModal({ kind: 'clear-activity', companyId: m.companyId, workspaceId: m.editId, returnTo: { ...m }, error: '' });
+    openWbClearWorkspaceActivity({ companyId: m.companyId, workspaceId: m.editId, returnTo: { ...m } });
   };
   const confirmClear = overlay.querySelector('[data-wb-confirm-clear-activity]');
   if (confirmClear) confirmClear.onclick = () => wbClearWorkspaceActivity(confirmClear);
+  const retryClearPreview = overlay.querySelector('[data-wb-retry-clear-preview]');
+  if (retryClearPreview) retryClearPreview.onclick = () => wbRetryClearWorkspacePreview();
   const wbAddStop = overlay.querySelector('[data-wb-add-stop]');
   if (wbAddStop) wbAddStop.onclick = () => { wbCollectModalDraft(); const cur = (m.draft.config.stops && m.draft.config.stops.length) ? m.draft.config.stops : WB_PROGRESS_STOPS_DEFAULT.slice(); m.draft.config.stops = cur.concat({ upto: 100, color: '#16a34a' }); render(); };
   overlay.querySelectorAll('[data-wb-del-stop]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); const row = b.closest('.wb-stop-item'); const idx = [...row.parentElement.children].indexOf(row); m.draft.config.stops = (m.draft.config.stops || []).filter((_, i) => i !== idx); render(); }; });
@@ -24951,6 +25079,9 @@ function loadClockDashboardPage() {
 }
 
 function renderClockDashboardPage(companyId) {
+  // The active timer is eager because its badge is visible on first paint. The potentially
+  // large personal history waits for the Clock route, which must not report a false zero.
+  if (!ensureDomainLoaded('time')) return questLoader('Loading clock');
   if (clockDashboardPageModule) return clockDashboardPageModule.renderClockDashboardPage(companyId);
   if (clockDashboardPageError) {
     return workspaceHeader('Clock dashboard could not load', 'The page files did not arrive. Your saved time was not changed.', '<button class="btn btn-primary" type="button" data-action="retry-clock-dashboard"><i class="ti ti-refresh"></i>Try again</button>');
@@ -25416,9 +25547,8 @@ function renderOperationalWorkspaceEditModal(companyId) {
   const builderWs = canManage
     ? matchBuilderWorkspace(loadWorkspaceBuilderState(companyId).workspaces, workspace.name)
     : null;
-  const clearCount = clearableCount(builderWs);
   const headerActions = `
-    ${builderWs ? `<button class="btn danger" type="button" data-action="open-clear-workspace-activity" data-workspace-id="${h(builderWs.id)}" ${clearCount ? '' : 'disabled'} title="${clearCount ? `Clear ${clearCount} logged action${clearCount === 1 ? '' : 's'}` : 'Nothing logged yet'}"><i class="ti ti-eraser"></i>Clear log</button>` : ''}
+    ${builderWs ? `<button class="btn danger" type="button" data-action="open-clear-workspace-activity" data-workspace-id="${h(builderWs.id)}"><i class="ti ti-eraser"></i>Clear log</button>` : ''}
     ${canManage ? `<button class="btn btn-primary" type="submit" form="operationalWorkspaceForm"><i class="ti ti-device-floppy"></i>Save workspace</button>` : ''}
   `;
   return renderModalShell('Workspaces', 'Configure workspace', `
@@ -27071,7 +27201,12 @@ function activeModalOverlay() {
 }
 // Dismiss the topmost open modal (builder modal wins if both somehow exist).
 function dismissTopModal() {
-  if (state.builderModal) { closeWbModal(); return true; }
+  // Consume Escape while an atomic clear is pending. Returning true makes the key handler
+  // prevent its default without replacing the modal that the in-flight action still references.
+  if (state.builderModal) {
+    if (wbClearActionPending()) return true;
+    return closeWbModal();
+  }
   if (state.modal) return closeActiveModal() !== false;
   return false;
 }
@@ -29264,7 +29399,7 @@ function handleAction(event, node) {
     // state.builderModal renders ahead of state.modal, so the confirm sits on top of the
     // Configure workspace dialog and cancelling drops straight back into it -- no returnTo
     // needed, because the dialog underneath was never closed.
-    openWbModal({ kind: 'clear-activity', companyId: activeCompanyId(), workspaceId: node.dataset.workspaceId, error: '' });
+    openWbClearWorkspaceActivity({ companyId: activeCompanyId(), workspaceId: node.dataset.workspaceId });
     return;
   }
   if (action === 'set-operational-workspace-modal-icon') {
@@ -41291,6 +41426,7 @@ function activeTimerForCompany(companyId = activeCompanyId()) {
 }
 
 function timeEntriesForCompany(companyId = activeCompanyId()) {
+  ensureDomainLoaded('time');
   return state.timeEntries
     .filter((entry) => entry.company_id === companyId && isMyClockRow(entry))
     .sort((a, b) => Date.parse(b.started_at || 0) - Date.parse(a.started_at || 0));
@@ -45404,180 +45540,23 @@ function subscribeToMessageRealtime(companyId, conversationId) {
     .subscribe();
 }
 
-async function loadRealtimeDomain(client, domain) {
-  if (domain === 'production') {
-    // The five child tables of a job file. Fetched together because opening a job shows all
-    // of them: five sequential round trips would be five visible gaps in one screen.
-    const [dailies, buckets, draws, changeOrders, coLines, plans] = await realtimeQueryBatch(client, 'production');
-    if (!dailies.error) state.jobDailies = (dailies.data || []).map(normalizeDaily);
-    if (!buckets.error) state.jobCostBuckets = (buckets.data || []).map(normalizeCostBucket);
-    if (!draws.error) state.jobDraws = (draws.data || []).map(normalizeDraw);
-    if (!changeOrders.error) state.jobChangeOrders = (changeOrders.data || []).map(normalizeChangeOrder);
-    if (!coLines.error) state.jobChangeOrderLines = (coLines.data || []).map(normalizeChangeOrderLine);
-    if (!plans.error) state.jobPlans = (plans.data || []).map(normalizePlan);
-    requireQueries(dailies, buckets, draws, changeOrders, coLines, plans);
-    return;
-  }
-  if (domain === 'operations') {
-    const [jobs, tasks, calendar] = await realtimeQueryBatch(client, 'operations');
-    if (!jobs.error) state.jobs = activeRows(jobs.data || []).map(normalizeJob);
-    if (!tasks.error) state.tasks = activeRows(tasks.data || []).map(normalizeTask);
-    if (!calendar.error) state.calendarEvents = activeRows(calendar.data || []).map(normalizeCalendarEvent);
-    return;
-  }
-  if (domain === 'crm') {
-    const [contacts, stages, accounts, deals, sites, proposals, activities] = await realtimeQueryBatch(client, 'crm');
-    if (!contacts.error) state.contacts = activeRows(contacts.data || []).map(normalizeContact);
-    if (!stages.error) { state.pipelineStages = stages.data || []; applyPipelineStagesForCompany(activeCompanyId()); }
-    if (!accounts.error) state.accounts = activeRows(accounts.data || []).map(normalizeAccount);
-    if (!deals.error) state.deals = activeRows(deals.data || []).map(normalizeDeal);
-    if (!sites.error) state.sites = (sites.data || []).map(normalizeCrmSite);
-    if (!proposals.error) state.proposals = activeRows(proposals.data || []).map(normalizeProposal);
-    if (!activities.error) state.activities = activeRows(activities.data || []).map(normalizeActivity);
-    return;
-  }
-  if (domain === 'files') {
-    const result = await realtimeQueryBatch(client, 'files');
-    if (!result.error) { state.files = (result.data || []).map(normalizeFile); wbReconstructAppDriveFolders(); }
-    return;
-  }
-  if (domain === 'forms') {
-    const [forms, responses] = await realtimeQueryBatch(client, 'forms');
-    if (!forms.error) state.forms = activeRows(forms.data || []).map(normalizeForm);
-    if (!responses.error) state.formResponses = activeRows(responses.data || []).map(normalizeFormResponse);
-    requireQueries(forms, responses);
-    return;
-  }
-  if (domain === 'finance') {
-    const [invoices, payments, expenses, vendors] = await realtimeQueryBatch(client, 'finance');
-    if (!invoices.error) state.financeInvoices = activeRows(invoices.data || []).map(normalizeFinanceInvoice);
-    if (!payments.error) state.financePayments = activeRows(payments.data || []).map(normalizeFinancePayment);
-    if (!expenses.error) state.financeExpenses = activeRows(expenses.data || []).map(normalizeFinanceExpense);
-    if (!vendors.error) state.financeVendors = activeRows(vendors.data || []).map(normalizeFinanceVendor);
-    requireQueries(invoices, payments, expenses, vendors);
-    return;
-  }
-  return loadSecondaryRealtimeDomain(client, domain);
+async function loadRealtimeDomain(client, domain, loadEpoch = state.workspaceLoadEpoch) {
+  const { loadDeferredRealtimeDomain } = await import('./data/realtime-deferred-loader.js');
+  return loadDeferredRealtimeDomain([
+    client, domain, loadEpoch, state, realtimeQueryBatch, requireQueries, activeRows, applyWorkspaceBuilderRows,
+    mergeRowsById, activeCompanyId, applyPipelineStagesForCompany, wbReconstructAppDriveFolders,
+    normalizeDaily, normalizeCostBucket, normalizeDraw, normalizeChangeOrder, normalizeChangeOrderLine, normalizePlan,
+    normalizeJob, normalizeTask, normalizeCalendarEvent, normalizeContact, normalizeAccount, normalizeDeal, normalizeCrmSite,
+    normalizeActivity, normalizeFile, normalizeForm, normalizeFormResponse, normalizeFinanceInvoice, normalizeFinancePayment,
+    normalizeFinanceExpense, normalizeFinanceVendor, normalizeClientPortal, normalizeClientPortalDocument, normalizeClientPortalAnnotation,
+    normalizeClientPortalEvent, normalizePricebookVendor, normalizePricebookMaterial, normalizePricebookPrice, normalizeNotification,
+    normalizeTimeEntry, normalizeProposal, normalizeRecycleBinItem, normalizeUnderwritingCase, normalizeWorkspaceBackup,
+    normalizeMessageConversation, normalizeMessageAccess, normalizeMessage, normalizeMessageAttachment, normalizeMessageRead,
+    normalizeCompany, normalizeTeamMember, normalizeMembership, normalizeProfile, normalizeSubscription, normalizeRole,
+    normalizeRolePermission, normalizeRoleAssignment, normalizeResourceAcl, normalizeFieldPermission, normalizeCompanyInvite, normalizeJoinRequest,
+    normalizeCompanyPlugin, normalizeOperationalWorkspace, normalizeWorkspaceMembership, normalizeWorkspacePlugin,
+  ]);
 }
-
-async function loadSecondaryRealtimeDomain(client, domain) {
-  if (domain === 'portals') {
-    const [portals, documents, annotations, events] = await realtimeQueryBatch(client, 'portals');
-    if (!portals.error) state.clientPortals = activeRows(portals.data || []).map(normalizeClientPortal);
-    if (!documents.error) state.clientPortalDocuments = activeRows(documents.data || []).map(normalizeClientPortalDocument);
-    if (!annotations.error) state.clientPortalAnnotations = (annotations.data || []).map(normalizeClientPortalAnnotation);
-    if (!events.error) state.clientPortalEvents = (events.data || []).map(normalizeClientPortalEvent);
-    requireQueries(portals, documents, annotations, events);
-    return;
-  }
-  if (domain === 'pricebook') {
-    const [vendors, materials, prices] = await realtimeQueryBatch(client, 'pricebook');
-    if (!vendors.error) state.pricebookVendors = activeRows(vendors.data || []).map(normalizePricebookVendor);
-    if (!materials.error) state.pricebookMaterials = activeRows(materials.data || []).map(normalizePricebookMaterial);
-    if (!prices.error) state.pricebookPrices = activeRows(prices.data || []).map(normalizePricebookPrice);
-    requireQueries(vendors, materials, prices);
-    return;
-  }
-  if (domain === 'notifications') {
-    const result = await realtimeQueryBatch(client, 'notifications');
-    if (!result.error) state.notifications = (result.data || []).map(normalizeNotification);
-    return;
-  }
-  if (domain === 'labels') {
-    const [labels, assignments] = await realtimeQueryBatch(client, 'labels');
-    if (!labels.error) state.contactLabels = labels.data || [];
-    if (!assignments.error) state.contactLabelAssignments = assignments.data || [];
-    requireQueries(labels, assignments);
-    return;
-  }
-  if (domain === 'audit') {
-    const result = await realtimeQueryBatch(client, 'audit');
-    if (!result.error) state.auditEvents = result.data || [];
-    requireQueries(result);
-    return;
-  }
-  if (domain === 'underwriting') {
-    const [result, calculators] = await realtimeQueryBatch(client, 'underwriting');
-    if (!result.error) state.underwritingCases = activeRows(result.data || []).map(normalizeUnderwritingCase);
-    // Kept as the server sent them: the takeoff module owns this shape and normalizes on read,
-    // so the entry bundle does not carry a copy of the calculator's schema for a page most
-    // sessions never open.
-    if (!calculators.error) state.underwritingCalculators = calculators.data || [];
-    requireQueries(result, calculators);
-    return;
-  }
-  if (domain === 'proposals') {
-    const result = await realtimeQueryBatch(client, 'proposals');
-    if (!result.error) state.proposals = activeRows(result.data || []).map(normalizeProposal);
-    requireQueries(result);
-    return;
-  }
-  if (domain === 'recycle') {
-    const result = await realtimeQueryBatch(client, 'recycle');
-    if (!result.error) state.recycleBinItems = (result.data || []).map(normalizeRecycleBinItem);
-    requireQueries(result);
-    return;
-  }
-  if (domain === 'workspace') {
-    const { WORKSPACE_BACKUP_METADATA_COLUMNS } = await import('./data/workspace-backups.js');
-    const [backups, builder, records, transfers] = await realtimeQueryBatch(client, 'workspace', { workspaceBackupColumns: WORKSPACE_BACKUP_METADATA_COLUMNS });
-    if (!backups.error) state.workspaceBackups = (backups.data || []).map(normalizeWorkspaceBackup);
-    if (!builder.error) applyWorkspaceBuilderRows(builder.data, records.error ? null : (records.data || []));
-    if (!transfers.error) state.wbTransfers = transfers.data || [];
-    requireQueries(backups, builder, records, transfers);
-    return;
-  }
-  return loadIdentityRealtimeDomain(client, domain);
-}
-
-async function loadIdentityRealtimeDomain(client, domain) {
-  if (domain === 'messages') {
-    const [conversations, access, messages, attachments, reads] = await realtimeQueryBatch(client, 'messages');
-    if (!conversations.error) state.messageConversations = (conversations.data || []).map(normalizeMessageConversation);
-    if (!access.error) state.messageAccess = (access.data || []).map(normalizeMessageAccess);
-    if (!messages.error) state.messages = mergeRowsById(state.messages, (messages.data || []).slice().reverse(), normalizeMessage);
-    if (!attachments.error) state.messageAttachments = mergeRowsById(state.messageAttachments, (attachments.data || []).slice().reverse(), normalizeMessageAttachment);
-    if (!reads.error) state.messageReads = (reads.data || []).map(normalizeMessageRead);
-    return;
-  }
-  if (domain === 'access') {
-    const [
-      companies,
-      team,
-      memberships,
-      profiles,
-      subscriptions,
-      roles,
-      permissions,
-      assignments,
-      acl,
-      fields,
-      invites,
-      requests,
-      plugins,
-      workspaces,
-      workspaceMemberships,
-      workspacePlugins,
-    ] = await realtimeQueryBatch(client, 'access');
-    if (!companies.error) state.companies = (companies.data || []).map(normalizeCompany);
-    if (!team.error) state.teamMembers = (team.data || []).map(normalizeTeamMember);
-    if (!memberships.error) state.memberships = (memberships.data || []).map(normalizeMembership);
-    if (!profiles.error) state.profiles = (profiles.data || []).map((profile) => normalizeProfile(profile));
-    if (!subscriptions.error) state.subscriptions = (subscriptions.data || []).map(normalizeSubscription);
-    if (!roles.error) state.roles = (roles.data || []).map(normalizeRole);
-    if (!permissions.error) state.rolePermissions = (permissions.data || []).map(normalizeRolePermission);
-    if (!assignments.error) state.roleAssignments = (assignments.data || []).map(normalizeRoleAssignment);
-    if (!acl.error) state.resourceAcl = (acl.data || []).map(normalizeResourceAcl);
-    if (!fields.error) state.fieldPermissions = (fields.data || []).map(normalizeFieldPermission);
-    if (!invites.error) state.companyInvites = (invites.data || []).map(normalizeCompanyInvite);
-    if (!requests.error) state.joinRequests = (requests.data || []).map(normalizeJoinRequest);
-    if (!plugins.error) { state.companyPlugins = (plugins.data || []).map(normalizeCompanyPlugin); state.pluginLoadFailed = false; }
-    if (!workspaces.error) state.operationalWorkspaces = (workspaces.data || []).map(normalizeOperationalWorkspace);
-    if (!workspaceMemberships.error) state.workspaceMemberships = (workspaceMemberships.data || []).map(normalizeWorkspaceMembership);
-    if (!workspacePlugins.error) state.workspacePlugins = (workspacePlugins.data || []).map(normalizeWorkspacePlugin);
-  }
-}
-
 async function refreshRealtimeDomains(domains) {
   if (state.backgroundRefreshing || state.dataLoading) return;
   const client = createSupabaseClient();

@@ -115,6 +115,8 @@ function ownBindings(raw) {
   // never received, leaving the EOD screen stuck on its loading placeholder. Function
   // parameters -- the other place a pattern legitimately appears -- are collected below.
   for (const m of raw.matchAll(/\{([^{}]*)\}\s*=[^=>]/g)) add(m[1]);
+  // Array declarations bind their entries too; array literals passed to a call do not.
+  for (const m of raw.matchAll(/(?:const|let|var)\s*\[([^\[\]]*)\]\s*=/g)) add(m[1]);
   // Parameter lists of every function shape in use.
   for (const m of raw.matchAll(/function\s*[\w$]*\s*\(([\s\S]*?)\)\s*\{/g)) add(m[1]);
   for (const m of raw.matchAll(/\(([^()]*)\)\s*=>/g)) add(m[1]);

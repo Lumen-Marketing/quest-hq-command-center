@@ -1,9 +1,12 @@
 import { WORKSPACE_BACKUP_METADATA_COLUMNS } from './workspace-backups.js';
 
-export function safeInitialDataQuery(query, { timeoutMs = 15000, label = '' } = {}) {
+export function safeInitialDataQuery(query, { timeoutMs = 15000, label = '', signal: parentSignal = null } = {}) {
   const waitMs = Math.max(1, Number(timeoutMs) || 15000);
   const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const abort = () => controller?.abort();
+  if (parentSignal?.aborted) abort();
+  parentSignal?.addEventListener?.('abort', abort, { once: true });
   const abortableQuery = controller && typeof query?.abortSignal === 'function'
     ? query.abortSignal(controller.signal)
     : query;
@@ -16,12 +19,13 @@ export function safeInitialDataQuery(query, { timeoutMs = 15000, label = '' } = 
   const timeout = new Promise((resolve) => {
     timer = setTimeout(() => {
       timeoutError = new Error(`Initial workspace request timed out after ${waitMs}ms.`);
-      controller?.abort();
+      abort();
       resolve({ data: null, error: timeoutError });
     }, waitMs);
   });
   return Promise.race([settledQuery, timeout]).finally(() => {
     clearTimeout(timer);
+    parentSignal?.removeEventListener?.('abort', abort);
     const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const durationMs = Math.max(0, Math.round(endedAt - startedAt));
     if (label && durationMs >= 2000 && typeof window !== 'undefined' && typeof CustomEvent === 'function') {
@@ -56,23 +60,60 @@ export async function loadPaginatedDataQuery(makeQuery, safeQuery = safeInitialD
   pageSize = 500,
   maxPages = 100,
   label = 'Paged data',
+  deadlineMs = 15000,
 } = {}) {
   const size = Math.max(1, Math.min(1000, Number(pageSize) || 500));
+  const waitMs = Math.max(1, Number(deadlineMs) || 15000);
   const rows = [];
   const seen = new Set();
-  for (let page = 0; page < maxPages; page += 1) {
-    const from = page * size;
-    const query = makeQuery().range(from, from + size - 1);
-    const result = await safeQuery(query, { label: page === 0 ? label : `${label} page ${page + 1}` });
-    if (result?.error) return { data: rows.length ? rows : null, error: result.error };
-    const batch = Array.isArray(result?.data) ? result.data : [];
-    batch.forEach((row) => {
-      const key = row && row.id != null ? `id:${row.id}` : `row:${JSON.stringify(row)}`;
-      if (!seen.has(key)) { seen.add(key); rows.push(row); }
-    });
-    if (batch.length < size) return { data: rows, error: null };
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  let deadlineError = null;
+  let timeout = null;
+  const deadline = new Promise((resolve) => {
+    timeout = setTimeout(() => {
+      deadlineError = new Error(`${label} did not complete within ${waitMs}ms.`);
+      controller?.abort();
+      resolve({ data: null, error: deadlineError });
+    }, waitMs);
+  });
+  const remainingMs = () => Math.max(1, waitMs - ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt));
+  try {
+    for (let page = 0; page < maxPages; page += 1) {
+      const from = page * size;
+      const query = makeQuery().range(from, from + size - 1);
+    // Each page gets only the time left in the one operation-wide budget. Racing here also
+    // protects callers that provide a lightweight custom safeQuery: an ignored abort signal
+    // cannot keep the next page (or the caller) alive after the overall deadline.
+      const result = await Promise.race([
+        Promise.resolve().then(() => safeQuery(query, {
+          label: page === 0 ? label : `${label} page ${page + 1}`,
+          timeoutMs: remainingMs(),
+          signal: controller?.signal,
+        })),
+        deadline,
+      ]);
+      if (result?.error) {
+        if (!deadlineError && /timed out/i.test(String(result.error?.message || ''))) {
+          deadlineError = new Error(`${label} did not complete within ${waitMs}ms.`);
+          controller?.abort();
+        }
+        return { data: rows.length ? rows : null, error: deadlineError || result.error };
+      }
+      const batch = Array.isArray(result?.data) ? result.data : [];
+      batch.forEach((row) => {
+        const key = row && row.id != null ? `id:${row.id}` : `row:${JSON.stringify(row)}`;
+        if (!seen.has(key)) { seen.add(key); rows.push(row); }
+      });
+      if (batch.length < size) return { data: rows, error: null };
+    }
+    return { data: rows, error: new Error(`${label} exceeded the ${maxPages * size} row safety limit.`) };
+  } catch (error) {
+    controller?.abort();
+    return { data: rows.length ? rows : null, error };
+  } finally {
+    clearTimeout(timeout);
   }
-  return { data: rows, error: new Error(`${label} exceeded the ${maxPages * size} row safety limit.`) };
 }
 
 export async function loadInitialDataQueries(client, safeQuery = safeInitialDataQuery) {
@@ -128,7 +169,6 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     platformAdminResult: client.rpc('is_platform_admin'),
     // The shell paints an active-clock badge on first render.
     activeTimerResult: client.from('company_active_timers').select('*'),
-    timeEntriesResult: client.from('company_time_entries').select('*').order('started_at', { ascending: false }).limit(500),
     // This used to start only after every query above settled, adding a full round trip.
     automationsResult: client.from('automations').select('*'),
   };
@@ -167,7 +207,6 @@ export async function loadInitialDataQueries(client, safeQuery = safeInitialData
     workspaceMembershipsResult: () => client.from('workspace_memberships').select('*').order('workspace_id', { ascending: true }).order('profile_id', { ascending: true }),
     workspacePluginsResult: () => client.from('workspace_plugins').select('*').order('workspace_id', { ascending: true }).order('plugin_id', { ascending: true }),
     activeTimerResult: () => client.from('company_active_timers').select('*').order('profile_id', { ascending: true }),
-    timeEntriesResult: () => client.from('company_time_entries').select('*').order('started_at', { ascending: false }).order('id', { ascending: true }),
     automationsResult: () => client.from('automations').select('*').order('id', { ascending: true }),
     wbRecordsResult: () => client.from('wb_records').select('*').order('id', { ascending: true }),
   };

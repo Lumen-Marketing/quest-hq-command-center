@@ -52,6 +52,7 @@ const declaredIn = (text) => {
     }
   };
   for (const m of code.matchAll(/(?:const|let|var)\s*\{([^}]+)\}\s*=/g)) addAll(m[1]);
+  for (const m of code.matchAll(/(?:const|let|var)\s*\[([^\]]+)\]\s*=/g)) addAll(m[1]);
   for (const m of code.matchAll(/\(\s*\{([^}]+)\}\s*\)\s*=>/g)) addAll(m[1]);
   // …or straight into a function parameter, which is how the support controller takes its
   // context: `export function createSupportController({ state, CONFIG, … })`.

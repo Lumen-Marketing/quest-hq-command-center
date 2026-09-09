@@ -5,8 +5,8 @@
 // Export and wants to know it was recorded should not have to leave the app to find out. That
 // was the first version, and "where is the log" was the reaction to it.
 //
-// Reads public.wb_data_transfers, which is append-only: it has no UPDATE and no DELETE policy
-// at all, so nothing on this screen can be edited away, including by whoever caused it.
+// Reads public.wb_data_transfers. Browser roles cannot UPDATE or DELETE its rows; a manager's
+// server-prepared, atomic clear RPC is the sole exception and leaves a tombstone per app.
 //
 // A factory, because every store, permission check and formatter it reads belongs to main.js.
 

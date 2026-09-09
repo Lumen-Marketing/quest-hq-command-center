@@ -19,6 +19,10 @@ const clearable = readFileSync(
   new URL('../supabase/migrations/20260909120000_wb_data_transfers_clearable.sql', import.meta.url),
   'utf8',
 ).replace(/\r\n/g, '\n');
+const atomicClear = readFileSync(
+  new URL('../supabase/migrations/20260909181650_wb_transfer_clear_atomic.sql', import.meta.url),
+  'utf8',
+).replace(/\r\n/g, '\n');
 
 test('the two transfer permissions are offered in the roles picker', () => {
   assert.match(main, /\['workspaces\.records\.export', 'Export app records'\]/);
@@ -92,29 +96,23 @@ test('TRUNCATE is revoked, because it is the one command RLS cannot see', () => 
   assert.match(clearable, /bypasses row\n-- level security/);
 });
 
-test('erasing is possible now, but only downwards and only with a manager', () => {
-  // 20260829005613 had no DELETE policy at all. That changed: clearing a workspace log has to
-  // reach these rows, because the activity view merges them in and clearing around them left the
-  // screen looking untouched. What did NOT change is that a removal has to announce itself.
-  assert.match(clearable, /create policy "wb transfers clear" on public\.wb_data_transfers\nfor delete to authenticated/);
-  assert.match(clearable, /app_private\.has_workspace_permission\(workspace_id, 'workspaces\.manage'\)/);
-  assert.match(clearable, /grant delete on public\.wb_data_transfers to authenticated;/);
+test('the newer atomic clear revokes browser DELETE and uses a manager-authorized RPC', () => {
+  assert.match(atomicClear, /drop policy if exists "wb transfers clear"/);
+  assert.match(atomicClear, /revoke delete, update, truncate on public\.wb_data_transfers from authenticated/);
+  assert.match(atomicClear, /create or replace function public\.clear_wb_transfer_log/);
+  assert.match(atomicClear, /app_private\.has_workspace_permission\(v_request\.workspace_id, 'workspaces\.manage'\)/);
 });
 
-test('a tombstone cannot be deleted by the thing that writes it', () => {
-  // The whole safety property. Without this clause, clearing twice would erase the evidence of
-  // the first clear, and a table cleared n times would be indistinguishable from an unused one.
-  const policy = clearable.slice(clearable.indexOf('create policy "wb transfers clear"'));
-  assert.match(policy.slice(0, policy.indexOf(');')), /direction <> 'cleared'/);
+test('a browser cannot forge a tombstone', () => {
+  const insertPolicy = atomicClear.slice(atomicClear.indexOf('create policy "wb transfers insert"'));
+  assert.doesNotMatch(insertPolicy.slice(0, insertPolicy.indexOf(');')), /direction = 'cleared'/);
+  assert.match(atomicClear, /insert into public\.wb_data_transfers[\s\S]*'cleared'/);
 });
 
-test('writing a tombstone needs manage, not merely export', () => {
-  // Otherwise a role allowed to export could declare the log cleared, which is an administrative
-  // claim rather than a transfer.
-  assert.match(clearable, /direction = 'cleared' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.manage'\)/);
-  // And the original two branches survive the policy being replaced.
-  assert.match(clearable, /direction = 'export' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.records\.export'\)/);
-  assert.match(clearable, /direction = 'import' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.records\.import'\)/);
+test('ordinary transfer logging survives but binds created_by to the caller', () => {
+  assert.match(atomicClear, /created_by = \(select auth\.uid\(\)\)/);
+  assert.match(atomicClear, /direction = 'export' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.records\.export'\)/);
+  assert.match(atomicClear, /direction = 'import' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.records\.import'\)/);
 });
 
 test('the direction constraint admits the tombstone, or every insert would fail', () => {

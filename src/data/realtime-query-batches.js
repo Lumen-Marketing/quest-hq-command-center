@@ -54,6 +54,7 @@ export function loadRealtimeQueryBatch(client, domain, paged, safe, options = {}
   if (domain === 'proposals') return paged(() => client.from('proposal_documents').select('*').order('updated_at', { ascending: false }).order('id', { ascending: true }), 'Proposals');
   if (domain === 'recycle') return paged(() => client.from('recycle_bin_items').select('*').order('deleted_at', { ascending: false }).order('id', { ascending: true }), 'Recycle Bin');
   if (domain === 'notifications') return client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200);
+  if (domain === 'time') return paged(() => client.from('company_time_entries').select('*').order('started_at', { ascending: false }).order('id', { ascending: true }), 'Time entries');
   if (domain === 'audit') return safe(client.from('audit_events').select('*').order('created_at', { ascending: false }).limit(100));
   if (domain === 'workspace') return Promise.all([
     paged(() => client.from('workspace_backups').select(options.workspaceBackupColumns).order('created_at', { ascending: false }).order('id', { ascending: true }), 'Workspace backups'),

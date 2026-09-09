@@ -1,17 +1,27 @@
 # Known issues and risks
 
-## The form upload sweep has never run against real data
+## Physical form-upload removal still needs a controlled fixture
 
-`/api/form-upload-purge` is deployed and scheduled, and `abandoned_form_uploads` returned zero
-candidates on 2026-09-04 -- correct for a bucket with nothing older than 48 hours, but it means
-the delete path has not yet removed a real object. Check `removed_uploads` on the first runs.
+Rechecked 2026-09-10 (QB-RV-07): Vercel runtime logs confirm a scheduled GET returned 200.
+The bucket, upload-intent ledger and 48-hour candidate query currently contain zero entries.
+The new service-only maintenance ledger provides selected/deleted counts and sanitized outcomes;
+its grants and bounded retention, including interrupted runs, passed rollback-only live probes.
+Nine runtime tests exercise exact-path, partial-result and error behavior. Production credential
+exports were empty in this session, so the opt-in physical Storage fixture could not run. Do not
+describe an empty-bucket run as proof of real removal. The scoped fixture script is
+`scripts/verify-form-upload-purge-storage-fixture.mjs`; it requires `--live-storage-fixture`, the
+verified project and a server-only key. No customer object is a test fixture.
 
 ## Contacts merged before 2026-09-05 may have stranded rows
 
-The old merge left references on duplicates that were then archived. Where the duplicate has
-already been purged, cascading rows in `contact_label_assignments`, `crm_sites` and
-`underwriting_cases` are gone. Where it is still in the recycle bin, the rows can still be
-re-pointed. No audit of affected contacts has been run.
+Rechecked on 2026-09-10: eight contacts archived before September 5 still exist. References
+include nine jobs, one task, five deals, three proposals, six sites and two underwriting cases;
+activities have 98 contact-column references and 18 related-record references (these may overlap).
+These counts do not prove that the contacts were merged rather than intentionally archived.
+No merge event identifies their intended survivors. Only two archived contacts have a current
+same-workspace email/phone candidate, which is not enough to authorize relinking history.
+The rows remain intact. Repair requires an explicit survivor mapping; do not choose by name,
+email or phone alone. Previously purged cascading data cannot be reconstructed from this audit.
 
 ## Recent-activity feeds remain intentionally bounded
 
@@ -24,27 +34,18 @@ view rather than silently raising the global startup cost.
 Only confirmed, actionable items belong here. Resolved findings live in `current-state.md` and
 `decisions.md`, not in this list.
 
-## Eight bin entries could not become rows, and are still in the company document
+## Legacy trash recovery is complete; stale clients may reintroduce old copies
 
-The soft-delete migration was applied on 2026-09-04 and backfilled 206 of the 214 entries the
-company documents held. Eight could not be inserted, because `wb_records.id` is a primary key and
-a jsonb array is not:
+QB-RV-06 recovery applied 2026-09-10: 91 document entries were proved before removal: 86 exact
+archived-row copies and five distinct snapshots. The five received new recoverable IDs, raw
+source-stamp provenance and at least 30 more days in the bin. All 156 existing records remained
+byte-for-byte unchanged, including 62 live records; trash rows increased from 94 to 99. The
+repeat dry-run found no remaining eligible document entries. No record was purged.
 
-- **Seven** share an id with another binned record. Some are the same record deleted, restored,
-  edited and deleted again inside half an hour -- `wb-2976bd40-c8f` three times on 16 August with
-  near-identical values. Others are genuinely different records that share an id because a Button
-  move carried it across: `wb-bf665740-875` exists in two apps with different field sets
-  entirely, and `wb-f92a20aa-b44` in two workspaces, 10 fields against 15, deleted eleven days
-  apart. The migration kept the newest deletion per id.
-- **One** shares an id with a record that is still live. The live record wins.
-
-Nothing was destroyed. `hydrateDocRecords` marks any bin entry the table has no row for as
-`unmigrated`, and both strip paths keep exactly those -- so the invariant is that THE DOCUMENT
-HOLDS ONLY WHAT THE TABLE DOES NOT, and eight entries remain readable company-wide rather than
-workspace-scoped. It self-heals: give a leftover a fresh id and it becomes a row on the next save.
-
-Deciding what they are is a person's job, not a migration's. The stale-duplicate cases can be
-purged from their bins; the two that are distinct records need new ids if they are worth keeping.
+An older open client can later resave a stale document. The service-only reconciliation function
+can safely recheck it using exact payloads and the recovery map; it is not an automatic trigger.
+If a mapped recovered row has subsequently changed, been restored or been purged, reconciliation
+preserves the unmatched document entry for review instead of guessing or creating another copy.
 
 ## Leaked-password protection cannot be enabled on the free plan
 
@@ -58,25 +59,8 @@ which case enable it under Authentication and the advisor clears, or accept the 
 It is recorded here so the next person auditing production does not spend time hunting for a
 toggle that is not there.
 
-Worth noting alongside it: a production tenant on the free plan has no point-in-time recovery and
-a shorter backup retention than a paid one. That is a bigger operational exposure than the
-password check itself, and the same upgrade addresses both.
-
-## SECURITY DEFINER advisor findings moved from 59 to 61
-
-`wb_trash_records(text[])` and `wb_restore_records(text[])` are executable by `authenticated` by
-design -- the browser calls them -- and each checks `workspaces.records.delete` per row with a
-pinned empty search path. `purge_expired_wb_records` is service-role only and is not among them.
-The category remains deliberate and individually reviewed; see the entry below.
-
-## Supabase leaked-password protection still needs an owner session
-
-The security advisor still reports `auth_leaked_password_protection`. Questbase already checks
-new passwords against Have I Been Pwned with the k-anonymity range API, but the Supabase platform
-control is separate and cannot be changed by a database migration. The connected Supabase tools
-do not expose Auth configuration, and the available dashboard browser is signed out. A project
-owner must enable the control under Authentication → Attack Protection, then rerun the security
-advisor.
+Backup and restore coverage is a separate operational check. A plan change alone is not proof
+that point-in-time recovery has been enabled or that a restore has been tested.
 
 ## A schema-current staging database does not exist
 
@@ -86,6 +70,8 @@ Supabase branch costs $0.01344/hour at the value quoted on 2026-09-03 and requir
 confirmation before creation. Until then, preview deployments prove the build artifact only.
 
 ## Production email delivery still needs controlled inbox UAT
+
+Deferred by the user on 2026-09-10 (QB-RV-08); no test emails were sent in that pass.
 
 The invite/support Edge Functions, database delivery ledger, authorization, CORS, retry and copy
 fallbacks are live. Supabase Auth registration/recovery mail is a separate channel. Final inbox
@@ -117,7 +103,7 @@ both endpoints remain fail-closed.
 
 ## Authenticated SECURITY DEFINER advisor findings are deliberate but sensitive
 
-The security advisor reports 59 authenticated SECURITY DEFINER routines. Reviewed Questbase RPCs
+The security advisor reports authenticated SECURITY DEFINER routines. Reviewed Questbase RPCs
 pin their search paths, revoke anonymous/public execution where appropriate and perform server-side
 company/workspace checks. Do not silence this broad advisor category by removing required app
 execution. Any new or changed routine still needs an individual owner, grant, search-path and

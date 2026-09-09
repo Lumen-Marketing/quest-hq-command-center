@@ -14,10 +14,11 @@ const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') 
 test('forms load from Supabase, on demand rather than at bootstrap', () => {
   assert.match(queries, /client\.from\('forms'\)\.select\('\*'\)\.order\('updated_at'/);
   assert.match(queries, /client\.from\('form_responses'\)\.select\('\*'\)\.order\('created_at'/);
-  assert.match(source, /state\.forms = activeRows\(forms\.data \|\| \[\]\)\.map\(normalizeForm\)/);
-  assert.match(source, /state\.formResponses = activeRows\(responses\.data \|\| \[\]\)\.map\(normalizeFormResponse\)/);
+  const deferredLoader = readFileSync(new URL('../src/data/realtime-deferred-loader.js', import.meta.url), 'utf8');
+  assert.match(deferredLoader, /replaceRows\(forms, 'forms', normalizeForm, true\)/);
+  assert.match(deferredLoader, /replaceRows\(responses, 'formResponses', normalizeFormResponse, true\)/);
   // Reachable: the domain loader exists and the accessors trigger it.
-  assert.match(source, /domain === 'forms'/);
+  assert.match(deferredLoader, /domain === 'forms'/);
   // \s* rather than \n: this file reads main.js raw, and the working tree is CRLF.
   assert.match(source, /function companyForms\(.*\) \{\s*ensureDomainLoaded\('forms'\);/);
 });

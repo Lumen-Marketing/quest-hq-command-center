@@ -6,21 +6,11 @@ import { acceptAttr } from '../security/upload-policy.js';
 import { JOB_TILE_PARTS } from '../jobs/dashboard-model.js';
 
 import { WB_APP_ICONS, WB_WS_ICONS, iconLabel } from './icon-sets.js';
-// Imported rather than threaded through ctx like clearableCount is: this module is already
-// fetched on demand, both of these are pure, and they live in the same folder.
-import { clearableTransferCount } from './transfer-clear.js';
-import { opsWorkspaceId } from './ops-workspace-id.js';
-
 export function createBuilderModal(ctx) {
   const {
     WB_FIELD_TYPES, WB_PALETTE, clearableCount,
     can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAvatar, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
   } = ctx;
-
-// How many export/import rows a clear would take with it, for the two places that say so before
-// you press the button. Zero for a local demo session and for a legacy `ws-<companyId>` document,
-// and in both cases the sentence simply leaves the clause out rather than reading "and 0 entries".
-const wbClearableTransfers = (workspace) => clearableTransferCount(state.wbTransfers, opsWorkspaceId(workspace?.id));
 
 // Preset swatches plus a trailing custom-color picker. `selected` may be any hex
 // string; if it isn't one of the presets the custom swatch shows it as active.
@@ -301,10 +291,10 @@ function wbAppReportOptions(app) {
         ${editing && can('workspaces.manage', m.companyId) ? `
           <div class="wb-field wb-danger-field">
             <label>Activity log</label>
-            <div class="wb-sub">This workspace has ${clearableCount(editing)} logged ${clearableCount(editing) === 1 ? 'action' : 'actions'}${wbClearableTransfers(editing) ? ` and ${wbClearableTransfers(editing)} import &amp; export ${wbClearableTransfers(editing) === 1 ? 'entry' : 'entries'}` : ''}. Clearing removes them and leaves one entry recording that you did it.</div>
+            <div class="wb-sub">This workspace has ${clearableCount(editing)} logged ${clearableCount(editing) === 1 ? 'action' : 'actions'}. Clearing also checks all import &amp; export history on the server, including entries not yet loaded here.</div>
             <div class="wb-sub wb-danger-note"><i class="ti ti-info-circle" aria-hidden="true"></i> Posts and files in the feed are kept, and so is the company audit trail — this clears this workspace's action log and its import &amp; export history.</div>
             <div class="wb-settings-actions" style="margin-top:10px">
-              <button class="btn danger" type="button" data-wb-clear-activity ${clearableCount(editing) ? '' : 'disabled'}><i class="ti ti-eraser"></i>Clear activity log</button>
+              <button class="btn danger" type="button" data-wb-clear-activity><i class="ti ti-eraser"></i>Clear activity log</button>
             </div>
           </div>
         ` : ''}
@@ -314,14 +304,22 @@ function wbAppReportOptions(app) {
     if (m.kind === 'clear-activity') {
       const ws = wbFind(m.companyId, m.workspaceId).workspace;
       const count = clearableCount(ws);
-      const transfers = wbClearableTransfers(ws);
+      const preview = m.preview || { status: 'loading' };
+      const transferCount = Number(m.transferResult?.removed ?? preview.data?.transfer_count ?? 0);
+      const ready = preview.status === 'ready' || !!m.transferResult;
+      const previewNote = preview.status === 'loading'
+        ? '<p class="wb-sub">Checking the complete import &amp; export log…</p>'
+        : preview.status === 'error'
+          ? `<p class="wb-modal-error" role="alert">${h(preview.error || 'Could not check the transfer log.')}</p><button class="btn btn-sm" type="button" data-wb-retry-clear-preview>Retry check</button>`
+          : `<p class="wb-sub">The server prepared ${transferCount} import &amp; export ${transferCount === 1 ? 'entry' : 'entries'} for this clear. Entries created after that check stay in the log.</p>`;
       return wbModalShell('Workspace', 'wb-modal-sm',
         `<div class="wb-modal-ic danger"><i class="ti ti-eraser"></i></div><h3>Clear activity log</h3>`,
         `${m.error ? `<div class="wb-modal-error" role="alert">${h(m.error)}</div>` : ''}
-        <p class="wb-sub">This removes <b>${count}</b> logged ${count === 1 ? 'action' : 'actions'}${transfers ? ` and <b>${transfers}</b> import &amp; export ${transfers === 1 ? 'entry' : 'entries'}` : ''} from <b>${h(ws?.name || 'this workspace')}</b>. It cannot be undone.</p>
-        <p class="wb-sub">One entry is kept, recording that you cleared the log and how many entries went${transfers ? ', and each app keeps a line in its Import &amp; Export tab saying how many of its rows went' : ''}. Posts and files in the feed are not touched, and neither is the company audit trail.</p>
+        <p class="wb-sub">This removes <b>${count}</b> logged ${count === 1 ? 'action' : 'actions'}${ready ? ` and <b>${transferCount}</b> import &amp; export ${transferCount === 1 ? 'entry' : 'entries'}` : ''} from <b>${h(ws?.name || 'this workspace')}</b>. It cannot be undone.</p>
+        ${previewNote}
+        <p class="wb-sub">One entry is kept, recording that you cleared the log and how many entries went. Posts and files in the feed are not touched, and neither is the company audit trail.</p>
         ${isLiveSupabaseSession() ? reauthPasswordField('wbClearPw') : ''}`,
-        `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" type="button" data-wb-confirm-clear-activity><i class="ti ti-eraser"></i>Clear log</button>`);
+        `<button class="btn" data-action="wb-modal-close" ${m.actionPending ? 'disabled' : ''}>Cancel</button><button class="btn danger" type="button" data-wb-confirm-clear-activity ${(!ready || m.actionPending) ? 'disabled' : ''}><i class="ti ti-eraser"></i>${m.actionPending ? 'Clearing…' : (m.transferResult ? 'Retry activity save' : 'Clear log')}</button>`);
     }
     if (m.kind === 'app-chooser') {
       if (m.step === 'detail') {

@@ -2,445 +2,293 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { clearableCount, clearedActivity, logStamp, matchBuilderWorkspace } from '../src/workspace/activity-log.js';
-// Its own module so that main.js can reach it lazily: activity-log.js is a static import of
-// main.js, so anything living there is downloaded by every session whether or not a log is
-// ever cleared.
 import {
-  clearWorkspaceTransfers, clearableTransferCount, clearableTransfers, clearedTransferRows,
+  clearWorkspaceTransfers, clearableTransferCount, clearableTransfers, previewWorkspaceTransferClear,
 } from '../src/workspace/transfer-clear.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
-const log = readFileSync(new URL('../src/workspace/activity-log.js', import.meta.url), 'utf8');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const modal = readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const transferClear = readFileSync(new URL('../src/workspace/transfer-clear.js', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../supabase/migrations/20260909181650_wb_transfer_clear_atomic.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fn = (name) => {
   const at = main.indexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} should exist`);
   return main.slice(at, main.indexOf('\n}\n', at));
 };
-
-// --- the model ------------------------------------------------------------------------
-
-test('clearing leaves a trace of itself', () => {
-  // The whole point. An empty log and a log that was never written look the same, so the
-  // clear has to say it happened.
-  const next = clearedActivity({ activity: [{ id: '1' }, { id: '2' }, { id: '3' }] }, {
-    actorName: 'Rom', at: '2026-08-03T10:00:00.000Z', id: 'new',
-  });
-  assert.equal(next.length, 1);
-  assert.match(next[0].text, /Rom cleared the activity log \(3 entries removed\)/);
-  assert.equal(next[0].removed, 3);
-  assert.equal(next[0].ts, '2026-08-03T10:00:00.000Z');
-});
-
-test('one entry reads as "entry", not "1 entries"', () => {
-  assert.match(clearedActivity({ activity: [{ id: '1' }] }, { actorName: 'Rom', at: 'x', id: 'y' })[0].text, /\(1 entry removed\)/);
-});
-
-test('clearing an already-empty log is harmless and still honest', () => {
-  const next = clearedActivity({}, { actorName: 'Rom', at: 'x', id: 'y' });
-  assert.equal(next.length, 1);
-  assert.equal(next[0].removed, 0);
-});
-
-test('the original array is not mutated, so a failed save cannot half-erase it', () => {
-  const workspace = { activity: [{ id: '1' }, { id: '2' }] };
-  clearedActivity(workspace, { actorName: 'Rom', at: 'x', id: 'y' });
-  assert.equal(workspace.activity.length, 2);
-});
-
-test('the count survives a workspace with no log at all', () => {
-  assert.equal(clearableCount(undefined), 0);
-  assert.equal(clearableCount({}), 0);
-  assert.equal(clearableCount({ activity: 'nonsense' }), 0);
-  assert.equal(clearableCount({ activity: [1, 2] }), 2);
-});
-
-// --- the import & export rows -------------------------------------------------------------
-//
-// "Clear log" used to empty workspace.activity and stop. The activity view merges three sources
-// -- feed posts, that array, and wb_data_transfers rows -- so every "Exported 12 records from
-// Prospecting" line survived the clear and the screen looked barely touched.
-
-const TRANSFERS = [
-  { id: 'r1', workspace_id: 'ws-uuid', app_id: 'app-a', direction: 'export' },
-  { id: 'r2', workspace_id: 'ws-uuid', app_id: 'app-a', direction: 'import' },
-  { id: 'r3', workspace_id: 'ws-uuid', app_id: 'app-b', direction: 'export' },
-  { id: 'r4', workspace_id: 'other', app_id: 'app-c', direction: 'export' },
-];
-
-test('only this workspace’s rows are counted', () => {
-  assert.equal(clearableTransferCount(TRANSFERS, 'ws-uuid'), 3);
-  assert.equal(clearableTransferCount(TRANSFERS, 'other'), 1);
-  assert.equal(clearableTransferCount(TRANSFERS, 'nobody'), 0);
-});
-
-test('a workspace with no database id clears nothing rather than everything', () => {
-  // A legacy `ws-<companyId>` document maps to '' -- which must not be read as "match rows whose
-  // workspace_id is falsy" or as a wildcard.
-  assert.equal(clearableTransferCount(TRANSFERS, ''), 0);
-  assert.equal(clearableTransferCount(TRANSFERS, null), 0);
-  assert.equal(clearableTransferCount(undefined, 'ws-uuid'), 0);
-});
-
-test('tombstones are not counted, so clearing twice does not re-report the first clear', () => {
-  const withTomb = [...TRANSFERS, { id: 'r5', workspace_id: 'ws-uuid', app_id: 'app-a', direction: 'cleared', record_count: 3 }];
-  assert.equal(clearableTransferCount(withTomb, 'ws-uuid'), 3, 'still the three real transfers');
-});
-
-test('rows are grouped by app, because the tab that shows them belongs to one app', () => {
-  const byApp = clearableTransfers(TRANSFERS, 'ws-uuid');
-  assert.deepEqual([...byApp.entries()].sort(), [['app-a', 2], ['app-b', 1]]);
-});
-
-test('one tombstone per app, carrying that app’s own count', () => {
-  // A single workspace-level tombstone would leave every app's Import & Export tab reading
-  // "Nothing has moved yet" -- indistinguishable from an app nobody ever exported.
-  const rows = clearedTransferRows(TRANSFERS, { companyId: 'c1', workspaceId: 'ws-uuid', actorId: 'u1' });
-  assert.equal(rows.length, 2);
-  assert.deepEqual(rows.map((r) => r.app_id).sort(), ['app-a', 'app-b']);
-  assert.ok(rows.every((r) => r.direction === 'cleared' && r.company_id === 'c1' && r.workspace_id === 'ws-uuid'));
-  assert.equal(rows.find((r) => r.app_id === 'app-a').record_count, 2);
-  assert.equal(rows.find((r) => r.app_id === 'app-b').record_count, 1);
-});
-
-test('an unknown actor is omitted rather than written as null over the FK', () => {
-  const [row] = clearedTransferRows(TRANSFERS, { companyId: 'c1', workspaceId: 'ws-uuid', actorId: null });
-  assert.ok(!('created_by' in row));
-});
-
-test('the clear entry names both counts, and stays short when there are no transfers', () => {
-  const both = clearedActivity({ activity: [1, 2, 3] }, { actorName: 'Rom', at: 'x', id: 'y', transfersRemoved: 4 });
-  assert.match(both[0].text, /Rom cleared the log \(3 entries and 4 entries of import & export history removed\)\./);
-  assert.equal(both[0].transfersRemoved, 4);
-  // Unchanged wording when nothing was transferred, which is the common case.
-  const only = clearedActivity({ activity: [1, 2, 3] }, { actorName: 'Rom', at: 'x', id: 'y' });
-  assert.match(only[0].text, /Rom cleared the activity log \(3 entries removed\)\./);
-});
-
-test('a half-done clear is refused rather than left half-done', () => {
-  // The exact state this change exists to remove, reachable a second way: activity emptied,
-  // transfer rows still there. So a database refusal abandons the whole thing.
-  const body = fn('wbClearWorkspaceActivity');
-  assert.match(body, /const transfersRemoved = await wbClearWorkspaceTransfers\(m\.companyId, workspace\);/);
-  assert.match(body, /if \(transfersRemoved === null\) \{/);
-  assert.ok(
-    body.indexOf('transfersRemoved === null') < body.indexOf('workspace.activity = clearedActivity'),
-    'the transfer clear must gate the activity clear, not follow it',
-  );
-});
-
-// The clear itself is now runnable rather than only readable: it takes its client and its state
-// as arguments, so these drive it instead of scanning main.js for the shape of it.
-
-const OPS = '11111111-2222-3333-4444-555555555555';
-const LIVE = [
-  { id: 'r1', workspace_id: OPS, app_id: 'app-a', direction: 'export' },
-  { id: 'r2', workspace_id: OPS, app_id: 'app-a', direction: 'import' },
-  { id: 'r3', workspace_id: OPS, app_id: 'app-b', direction: 'export' },
-  { id: 'r4', workspace_id: 'other-ws', app_id: 'app-c', direction: 'export' },
-  { id: 'r5', workspace_id: OPS, app_id: 'app-a', direction: 'cleared', record_count: 9 },
-];
-
-// Records what was asked of it and answers with whatever the test wants.
-function fakeClient({ insertError = null, deleteError = null } = {}) {
-  const calls = { inserted: null, deleteFilters: {} };
-  return {
-    calls,
-    from() {
-      const q = {
-        insert(rows) { calls.inserted = rows; return q; },
-        select: () => Promise.resolve(insertError
-          ? { error: insertError, data: null }
-          : { error: null, data: (calls.inserted || []).map((row, i) => ({ ...row, id: `t${i}` })) }),
-        delete() { calls.deleted = true; return q; },
-        eq(col, val) { calls.deleteFilters[col] = val; return q; },
-        in(col, val) { calls.deleteFilters[col] = val; return Promise.resolve({ error: deleteError }); },
-      };
-      return q;
-    },
+const clearHandlerSource = main.slice(
+  main.indexOf('async function wbClearWorkspaceActivity(button) {'),
+  main.indexOf('\n/**\n * Prepare/consume the server', main.indexOf('async function wbClearWorkspaceActivity(button) {')),
+);
+const makeClearHandler = (deps) => new Function(
+  ...Object.keys(deps),
+  `return (${clearHandlerSource});`,
+)(...Object.values(deps));
+const clearHarness = ({ save, clear = async () => ({ removed: 2 }), live = false, password = '' } = {}) => {
+  const workspace = { activity: [{ id: 'before' }] };
+  const modalState = {
+    kind: 'clear-activity', companyId: 'company', workspaceId: 'workspace', actionPending: false,
+    transferResult: null, preview: { status: 'ready', data: { request_id: 'request' } },
+    sessionEpoch: 'u:profile:7', returnTo: null, error: '',
   };
-}
+  const state = { builderModal: modalState };
+  let passwordSeen = null;
+  let clearCalls = 0;
+  const deps = {
+    state,
+    can: () => true,
+    render: () => {},
+    wbFind: () => ({ workspace }),
+    isLiveSupabaseSession: () => live,
+    document: { getElementById: () => ({ value: password }) },
+    confirmAccountPassword: async (value) => { passwordSeen = value; return { ok: true }; },
+    wbClearActionContextCurrent: (modal) => state.builderModal === modal,
+    wbClearWorkspaceTransfers: async (...args) => { clearCalls += 1; return clear(...args); },
+    clearedActivity: () => [{ id: 'clear-marker' }],
+    actorName: () => 'Rom',
+    wbUid: () => 'clear-marker',
+    wbSave: save,
+    showToast: () => {},
+    activeCompanyId: () => 'company',
+  };
+  return { handler: makeClearHandler(deps), workspace, modalState, state, passwordSeen: () => passwordSeen, clearCalls: () => clearCalls };
+};
+const OPS = '11111111-2222-3333-4444-555555555555';
 
-test('it removes this workspace’s transfers and reports the count', async () => {
-  const state = { wbTransfers: [...LIVE] };
-  const client = fakeClient();
-  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
-  assert.equal(removed, 3, 'the three export/import rows, not the tombstone and not another workspace');
+test('activity clearing leaves one honest trace and never mutates before save', () => {
+  const workspace = { activity: [{ id: '1' }, { id: '2' }] };
+  const result = clearedActivity(workspace, { actorName: 'Rom', at: '2026-09-10T00:00:00Z', id: 'clear', transfersRemoved: 3 });
+  assert.equal(workspace.activity.length, 2);
+  assert.equal(result.length, 1);
+  assert.match(result[0].text, /2 entries and 3 entries of import & export history removed/);
+  assert.equal(clearableCount(undefined), 0);
+  assert.match(logStamp('2026-09-10T00:00:00Z'), /2026/);
 });
 
-test('the delete is scoped to the workspace and never aimed at a tombstone', async () => {
-  const state = { wbTransfers: [...LIVE] };
-  const client = fakeClient();
-  await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
-  assert.equal(client.calls.deleteFilters.workspace_id, OPS);
-  assert.deepEqual(client.calls.deleteFilters.direction, ['export', 'import']);
+test('the server preview, not the cached 200 rows, supplies the destructive count', async () => {
+  const calls = [];
+  const client = { rpc(name, args) {
+    calls.push([name, args]);
+    return Promise.resolve({ data: { request_id: 'request-1', transfer_count: 201, per_app: { leads: 201 }, expires_at: '2026-09-10T00:05:00Z' }, error: null });
+  } };
+  const preview = await previewWorkspaceTransferClear({ client, state: { wbTransfers: [] }, workspace: { id: `ws-${OPS}` } });
+  assert.equal(preview.transfer_count, 201);
+  assert.deepEqual(calls, [['preview_wb_transfer_clear', { p_workspace_id: OPS }]]);
+  assert.doesNotMatch(transferClear, /client\.from\(/, 'a manager without record-view uses RPC, never a direct table select/insert');
 });
 
-test('the tombstone is written before the rows are deleted', async () => {
-  // This order over-reports on failure -- a clear that claims more than it did, with the rows
-  // still present to contradict it. The other order loses the rows silently.
-  const state = { wbTransfers: [...LIVE] };
-  const client = fakeClient({ deleteError: { message: 'refused' } });
-  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
-  assert.equal(removed, null, 'a refused delete is a refused clear');
-  assert.ok(client.calls.inserted, 'and the tombstone was already attempted');
-  assert.equal(state.wbTransfers.length, LIVE.length, 'nothing was removed locally either');
+test('clear consumes only returned snapshot ids and preserves new cached arrivals', async () => {
+  const state = { wbTransfers: [
+    { id: 'old-1', workspace_id: OPS, app_id: 'leads', direction: 'export' },
+    { id: 'new-after-preview', workspace_id: OPS, app_id: 'leads', direction: 'import' },
+    { id: 'other', workspace_id: 'other', app_id: 'other', direction: 'export' },
+  ] };
+  const calls = [];
+  const response = {
+    request_id: 'request-1', removed: 1, removed_ids: ['old-1'],
+    tombstones: [{ id: 't1', workspace_id: OPS, app_id: 'leads', direction: 'cleared', record_count: 1, created_at: '2026-09-10T00:00:00Z' }],
+  };
+  const client = { rpc(name, args) { calls.push([name, args]); return Promise.resolve({ data: response, error: null }); } };
+  const result = await clearWorkspaceTransfers({ client, state, workspace: { id: `ws-${OPS}` }, preview: { request_id: 'request-1' } });
+  assert.equal(result.removed, 1);
+  assert.deepEqual(calls, [['clear_wb_transfer_log', { p_request_id: 'request-1' }]]);
+  assert.deepEqual(state.wbTransfers.map((row) => row.id).sort(), ['new-after-preview', 'other', 't1']);
 });
 
-test('a refused insert clears nothing at all', async () => {
-  const state = { wbTransfers: [...LIVE] };
-  const client = fakeClient({ insertError: { message: 'refused' } });
-  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
-  assert.equal(removed, null);
-  assert.ok(!client.calls.deleted, 'and it never reached the delete');
-});
-
-test('the visible state keeps the tombstones and drops the rest', async () => {
-  const state = { wbTransfers: [...LIVE] };
-  const client = fakeClient();
-  await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
-  const ids = state.wbTransfers.map((r) => r.id).sort();
-  assert.ok(ids.includes('r4'), 'another workspace is untouched');
-  assert.ok(ids.includes('r5'), 'the existing tombstone survives');
-  assert.ok(!ids.some((id) => ['r1', 'r2', 'r3'].includes(id)), 'the cleared rows are gone without a reload');
-  assert.equal(state.wbTransfers.filter((r) => r.direction === 'cleared').length, 3, 'one new tombstone per app, plus the old one');
-});
-
-test('a legacy ws-<companyId> document clears nothing and reports no failure', async () => {
-  // It maps to '', so there is no workspace row its rows could belong to.
-  const state = { wbTransfers: [...LIVE] };
-  const client = fakeClient();
-  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: 'ws-acme-co' }, actorId: 'u1' });
-  assert.equal(removed, 0, '0 means nothing to do; null would abandon the activity clear too');
-  assert.ok(!client.calls.inserted, 'and it wrote no tombstone for a workspace that does not exist');
-});
-
-test('a workspace that has never transferred anything writes no tombstone', async () => {
-  const state = { wbTransfers: [{ id: 'r5', workspace_id: OPS, app_id: 'app-a', direction: 'cleared' }] };
-  const client = fakeClient();
-  assert.equal(await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' }), 0);
-  assert.ok(!client.calls.inserted, 'clearing an already-cleared log is a no-op, not a second tombstone');
-});
-
-test('the round trip is fetched on demand, not carried in the entry chunk', () => {
-  // The bundle budget refuses a raise, so this has to stay out of main.js. Only the four lines
-  // that decide whether there is a live session to talk to live there.
-  const body = fn('wbClearWorkspaceTransfers');
-  assert.match(body, /await import\('\.\/workspace\/transfer-clear\.js'\)/);
-  const entry = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(entry, /^import .*transfer-clear\.js';$/m, 'a static import would defeat the point');
-  assert.doesNotMatch(entry, /^import .*ops-workspace-id\.js';$/m);
-  assert.match(body, /if \(!client\) return 0;/, 'a local session never loads it at all');
-});
-
-test('the feed shows the clear once, not once per app', () => {
-  // wbTransferActivity renders transfer rows into the workspace feed. Tombstones there would
-  // report one clear as N lines, on top of the activity entry that already says it.
-  const body = fn('wbTransferActivity');
-  assert.match(body, /\.filter\(\(row\) => row\.direction !== 'cleared'\)/);
-});
-
-test('the Import & Export tab renders a tombstone as a clear, not as an import', () => {
-  const tab = readFileSync(new URL('../src/workspace/transfer-log.js', import.meta.url), 'utf8');
-  // Without this branch `out = direction === 'export'` is false for a tombstone and it paints
-  // as an Import of N records -- the opposite of what happened.
-  assert.match(tab, /if \(row\.direction === 'cleared'\) \{/);
-  assert.match(tab, /Earlier import &amp; export history was cleared/);
-  // A row count, deliberately not labelled "records": no records were removed from the app.
-  assert.match(tab, /\$\{count\} \$\{count === 1 \? 'entry' : 'entries'\}/);
-  assert.doesNotMatch(tab, /This log cannot be edited or removed/, 'the note has to stop claiming that');
-});
-
-// --- what it must not reach -------------------------------------------------------------
-
-test('the feed and the audit trail are out of scope, in code and in writing', () => {
-  const body = fn('wbClearWorkspaceActivity');
-  assert.ok(!/\.feed\b/.test(body), 'clearing the log must not touch posts and files');
-  assert.ok(!/audit_events|logAudit|recordAudit/.test(body), 'the company audit trail is not a workspace admin\'s to erase');
-  assert.match(log, /audit_events\s+KEPT/, 'the module says what it deliberately leaves alone');
-  assert.match(log, /workspace\.feed\s+KEPT/);
-});
-
-test('only workspace.activity is replaced', () => {
-  assert.match(fn('wbClearWorkspaceActivity'), /workspace\.activity = clearedActivity\(workspace, \{/);
-});
-
-// --- the password gate ------------------------------------------------------------------
-
-test('a live session must re-enter its password', () => {
-  const body = fn('wbClearWorkspaceActivity');
-  assert.match(body, /if \(isLiveSupabaseSession\(\)\) \{/);
-  assert.match(body, /await confirmAccountPassword\(document\.getElementById\('wbClearPw'\)\?\.value \|\| ''\)/);
-  assert.match(body, /if \(!auth\.ok\) \{ m\.error = auth\.error;/);
-  // Refused before anything is written.
-  assert.ok(
-    body.indexOf('!auth.ok') < body.indexOf('workspace.activity = clearedActivity'),
-    'the password check must gate the clear, not follow it',
+test('a rejected atomic clear leaves the local activity/transfer state alone', async () => {
+  const state = { wbTransfers: [{ id: 'old-1', workspace_id: OPS, app_id: 'leads', direction: 'export' }] };
+  const client = { rpc: () => Promise.resolve({ data: null, error: { message: 'request expired' } }) };
+  await assert.rejects(
+    clearWorkspaceTransfers({ client, state, workspace: { id: `ws-${OPS}` }, preview: { request_id: 'expired' } }),
+    /request expired/,
   );
+  assert.equal(state.wbTransfers.length, 1);
 });
 
-test('the shared re-auth actually checks the password against the account', () => {
-  // Two destructive actions use it now, so it is worth pinning down in one place.
-  const body = fn('confirmAccountPassword');
-  assert.match(body, /if \(!password\) return \{ ok: false, error: 'Enter your password to confirm\.' \};/, 'no round trip for a blank field');
-  assert.match(body, /client\.auth\.signInWithPassword\(\{ email, password \}\)/);
-  assert.match(body, /if \(reauth\.error\) return \{ ok: false, error: 'Incorrect password\.' \};/);
-  // Falls back to the auth user when the cached profile has no email.
-  assert.match(body, /await client\.auth\.getUser\(\)/);
-  assert.match(body, /if \(!client \|\| !email\) return \{ ok: false, error: 'Could not verify your account\. Try again\.' \};/);
+test('repeated completed results do not duplicate tombstones', async () => {
+  const state = { wbTransfers: [{ id: 'old-1', workspace_id: OPS, app_id: 'leads', direction: 'export' }] };
+  const result = { request_id: 'request-1', removed: 1, removed_ids: ['old-1'], tombstones: [{ id: 't1', workspace_id: OPS, app_id: 'leads', direction: 'cleared' }] };
+  const client = { rpc: () => Promise.resolve({ data: result, error: null }) };
+  const input = { client, state, workspace: { id: `ws-${OPS}` }, preview: { request_id: 'request-1' } };
+  await clearWorkspaceTransfers(input);
+  await clearWorkspaceTransfers(input);
+  assert.deepEqual(state.wbTransfers.map((row) => row.id), ['t1']);
 });
 
-test('the permission is checked too, not just the password', () => {
-  // A password proves who you are, not that you are allowed.
+test('a stale clear RPC result never changes a newer context transfer cache', async () => {
+  const state = { wbTransfers: [{ id: 'old-1', workspace_id: OPS, app_id: 'leads', direction: 'export' }] };
+  let current = true;
+  const client = { rpc: async () => {
+    current = false;
+    return { data: { request_id: 'request-1', removed: 1, removed_ids: ['old-1'], tombstones: [{ id: 't1', direction: 'cleared' }] }, error: null };
+  } };
+  await assert.rejects(
+    clearWorkspaceTransfers({ client, state, workspace: { id: `ws-${OPS}` }, preview: { request_id: 'request-1' }, isCurrentContext: () => current }),
+    /no longer active/,
+  );
+  assert.deepEqual(state.wbTransfers.map((row) => row.id), ['old-1']);
+  const wrapper = main.slice(
+    main.indexOf('async function wbClearWorkspaceTransfers('),
+    main.indexOf('\nfunction openWbWorkspaceModal', main.indexOf('async function wbClearWorkspaceTransfers(')),
+  );
+  assert.match(wrapper, /const liveSession = isLiveSupabaseSession\(\);[\s\S]*const sessionEpoch = wbClearSessionEpoch\(\);[\s\S]*const client = liveSession \? createSupabaseClient\(\) : null;[\s\S]*await import/);
+  assert.match(wrapper, /isCurrentContext/);
+});
+
+test('clear epoch survives a same-account token refresh but rejects logout or an account switch', () => {
+  const epochStart = main.indexOf('function wbClearSessionEpoch(');
+  const epochEnd = main.indexOf('\n}\n', epochStart);
+  const epochSource = main.slice(epochStart, epochEnd + 2);
+  const state = { workspaceLoadEpoch: 7 };
+  let session = { user: { id: 'auth-a' }, profile: { id: 'profile-a' }, access_token: 'before-reauth' };
+  const epoch = new Function('state', 'activeSession', `return (${epochSource});`)(state, () => session);
+  const before = epoch();
+  session = { ...session, access_token: 'after-reauth' };
+  assert.equal(epoch(), before, 'a password reauthentication may rotate the token without cancelling itself');
+  state.workspaceLoadEpoch += 1;
+  assert.notEqual(epoch(), before, 'logout/reset advances the data context');
+  state.workspaceLoadEpoch = 7;
+  session = { user: { id: 'auth-b' }, profile: { id: 'profile-b' }, access_token: 'other-user-token' };
+  assert.notEqual(epoch(), before, 'a different signed-in identity is never the same clear action');
+  assert.doesNotMatch(epochSource, /access_token/);
+  assert.match(epochSource, /state\.workspaceLoadEpoch/);
+});
+
+test('offline demo retains local clear behavior without an RPC', async () => {
+  const state = { wbTransfers: [{ id: 'old', workspace_id: OPS, app_id: 'leads', direction: 'export' }] };
+  const preview = await previewWorkspaceTransferClear({ client: null, state, workspace: { id: `ws-${OPS}` } });
+  const result = await clearWorkspaceTransfers({ client: null, state, workspace: { id: `ws-${OPS}` }, preview });
+  assert.equal(result.removed, 1);
+  assert.equal(state.wbTransfers[0].direction, 'cleared');
+});
+
+test('a live session fails closed instead of using the demo cache', async () => {
+  const state = { wbTransfers: [{ id: 'cached', workspace_id: OPS, app_id: 'leads', direction: 'export' }] };
+  await assert.rejects(
+    previewWorkspaceTransferClear({ client: null, liveSession: true, state, workspace: { id: `ws-${OPS}` } }),
+    /live transfer log is unavailable/,
+  );
+  await assert.rejects(
+    previewWorkspaceTransferClear({ client: { rpc: () => { throw new Error('must not call'); } }, liveSession: true, state, workspace: { id: '' } }),
+    /cannot clear a live transfer log/,
+  );
+  await assert.rejects(
+    clearWorkspaceTransfers({ client: null, liveSession: true, state, workspace: { id: `ws-${OPS}` }, preview: { request_id: 'local', local: true } }),
+    /live transfer log is unavailable/,
+  );
+  assert.deepEqual(state.wbTransfers.map((row) => row.id), ['cached']);
+});
+
+test('legacy cache helpers still exclude tombstones, but live UI does not rely on them', () => {
+  const rows = [{ id: '1', workspace_id: OPS, app_id: 'a', direction: 'export' }, { id: '2', workspace_id: OPS, app_id: 'a', direction: 'cleared' }];
+  assert.equal(clearableTransferCount(rows, OPS), 1);
+  assert.deepEqual([...clearableTransfers(rows, OPS)], [['a', 1]]);
+});
+
+test('the migration keeps the request ledger private and snapshots bounded exact ids', () => {
+  assert.match(migration, /create table public\.wb_transfer_clear_requests/);
+  assert.match(migration, /transfer_ids uuid\[\] not null/);
+  assert.match(migration, /alter table public\.wb_transfer_clear_requests enable row level security/);
+  assert.match(migration, /revoke all on table public\.wb_transfer_clear_requests from public, anon, authenticated/);
+  assert.match(migration, /v_snapshot_limit constant integer := 10000/);
+  assert.match(migration, /This transfer log is too large to clear at once/);
+  assert.match(migration, /and t\.id = any\(v_request\.transfer_ids\)/);
+  assert.match(migration, /completed_result/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /limit 100/);
+  assert.match(migration, /completed_at < now\(\) - interval '30 days'/);
+  assert.match(migration, /wb_transfer_clear_requests_completed_at_idx/);
+  assert.match(migration, /set statement_timeout = '1500ms'/);
+});
+
+test('both RPCs are authenticated, actor-bound, permission-rechecked and non-public', () => {
+  for (const name of ['preview_wb_transfer_clear', 'clear_wb_transfer_log']) {
+    assert.match(migration, new RegExp(`create or replace function public\\.${name}`));
+    assert.match(migration, new RegExp(`revoke all on function public\\.${name}\\(uuid\\) from public, anon`));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${name}\\(uuid\\) to authenticated`));
+  }
+  assert.match(migration, /v_actor uuid := auth\.uid\(\)/);
+  assert.match(migration, /v_request\.actor_id <> v_actor/);
+  assert.match(migration, /app_private\.has_workspace_permission\(v_request\.workspace_id, 'workspaces\.manage'\)/);
+  assert.match(migration, /created_by = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /where w\.id = wb_data_transfers\.workspace_id\s+and w\.company_id = wb_data_transfers\.company_id/);
+  assert.match(migration, /drop policy if exists "wb transfers clear"/);
+  assert.match(migration, /revoke delete, update, truncate on public\.wb_data_transfers from authenticated/);
+  assert.doesNotMatch(migration, /direction = 'cleared' and app_private/, 'cleared rows have no browser INSERT branch');
+});
+
+test('the dialog loads/retries a server preview, disables confirm, and retains partial success for retry', () => {
+  const dialog = modal.slice(modal.indexOf("if (m.kind === 'clear-activity')"));
+  assert.match(dialog, /Checking the complete import &amp; export log/);
+  assert.match(dialog, /data-wb-retry-clear-preview/);
+  assert.match(dialog, /preview\.status === 'ready' \|\| !!m\.transferResult/);
+  assert.match(dialog, /\(!ready \|\| m\.actionPending\) \? 'disabled' : ''/);
+  assert.match(dialog, /Retry activity save/);
+  assert.match(fn('wbClearWorkspaceActivity'), /const saved = await wbSave\(m\.companyId\);/);
+  assert.match(fn('wbClearWorkspaceActivity'), /!wbClearActionContextCurrent\(m\) \|\| !saved/);
+  assert.match(fn('wbClearWorkspaceActivity'), /if \(workspace\.activity === nextActivity\) workspace\.activity = originalActivity;/);
+  assert.match(fn('wbClearWorkspaceActivity'), /m\.transferResult \|\| await wbClearWorkspaceTransfers/);
+});
+
+test('pending clear cannot be dismissed by header, Cancel, Escape, or backdrop', () => {
+  assert.match(fn('closeWbModal'), /if \(wbClearActionPending\(\)\) return false/);
+  assert.match(fn('dismissTopModal'), /if \(wbClearActionPending\(\)\) return true/);
+  assert.match(main, /if \(action === 'wb-modal-close'\)[\s\S]{0,300}closeWbModal\(\)/);
+  assert.match(main, /<div class="modal-overlay wb-modal-overlay"><div class="wb-modal/);
+  assert.match(fn('wbClearWorkspaceActivity'), /if \(!wbClearActionContextCurrent\(m\)\) return;/);
+});
+
+test('saved=false restores activity while retaining the completed transfer result for retry', async () => {
+  const h = clearHarness({ save: async () => false });
+  await h.handler();
+  assert.deepEqual(h.workspace.activity, [{ id: 'before' }]);
+  assert.equal(h.modalState.transferResult.removed, 2);
+  assert.equal(h.modalState.actionPending, false);
+  assert.match(h.modalState.error, /Import & export history cleared: 2 entries/);
+});
+
+test('a rejected final save has the same safe partial-result behavior', async () => {
+  const h = clearHarness({ save: async () => { throw new Error('network failed'); } });
+  await h.handler();
+  assert.deepEqual(h.workspace.activity, [{ id: 'before' }]);
+  assert.equal(h.modalState.transferResult.removed, 2);
+  assert.match(h.modalState.error, /activity-log audit entry was not saved/);
+});
+
+test('a second click while the transfer RPC is pending is ignored', async () => {
+  let release;
+  const h = clearHarness({
+    clear: () => new Promise((resolve) => { release = () => resolve({ removed: 2 }); }),
+    save: async () => true,
+  });
+  const first = h.handler();
+  await Promise.resolve();
+  await h.handler();
+  assert.equal(h.clearCalls(), 1);
+  release();
+  await first;
+  assert.equal(h.clearCalls(), 1);
+});
+
+test('the password is read before pending render can replace its DOM input and is never stateful', async () => {
+  const h = clearHarness({ live: true, password: 'typed-secret', save: async () => true });
+  await h.handler();
+  assert.equal(h.passwordSeen(), 'typed-secret');
+  assert.doesNotMatch(JSON.stringify(h.modalState), /typed-secret/);
+});
+
+test('both entry points stay available when activity is zero because transfer rows may be uncached', () => {
+  assert.match(modal, /data-wb-clear-activity><i class="ti ti-eraser"><\/i>Clear activity log/);
+  assert.doesNotMatch(modal, /data-wb-clear-activity \$\{clearableCount\(editing\) \? '' : 'disabled'\}/);
+  const operational = main.slice(main.indexOf('function renderOperationalWorkspaceEditModal('));
+  assert.match(operational, /data-action="open-clear-workspace-activity"/);
+  assert.doesNotMatch(operational.slice(0, 3500), /clearCount/);
+  assert.match(main, /openWbClearWorkspaceActivity\(\{ companyId: activeCompanyId\(\), workspaceId: node\.dataset\.workspaceId \}\)/);
+});
+
+test('matching a sidebar workspace is strict and an activity clear remains scoped', () => {
+  assert.equal(matchBuilderWorkspace([{ id: 'a', name: 'Main' }], ' main ').id, 'a');
+  assert.equal(matchBuilderWorkspace([{ id: 'a', name: 'Main' }, { id: 'b', name: 'main' }], 'main'), null);
   const body = fn('wbClearWorkspaceActivity');
   assert.match(body, /if \(!can\('workspaces\.manage', m\.companyId\)\)/);
-  assert.ok(
-    body.indexOf("can('workspaces.manage'") < body.indexOf('isLiveSupabaseSession()'),
-    'the cheap check comes first',
-  );
-});
-
-test('the button is only rendered for someone who may use it', () => {
-  assert.match(main, /\$\{editing && can\('workspaces\.manage', m\.companyId\) \? `/);
-  assert.match(main, /data-wb-clear-activity \$\{clearableCount\(editing\) \? '' : 'disabled'\}/);
-});
-
-// --- the dialog ---------------------------------------------------------------------------
-
-test('the confirm dialog states the count before you agree to it', () => {
-  const modal = main.slice(main.indexOf("if (m.kind === 'clear-activity') {"));
-  const body = modal.slice(0, modal.indexOf("if (m.kind === 'app-chooser')"));
-  assert.match(body, /const count = clearableCount\(ws\);/);
-  assert.match(body, /It cannot be undone/);
-  assert.match(body, /One entry is kept/);
-  assert.match(body, /Posts and files in the feed are not touched/);
-  // Local demo sessions have no password to check, so they are not asked for one.
-  assert.match(body, /\$\{isLiveSupabaseSession\(\) \? reauthPasswordField\('wbClearPw'\) : ''\}/);
-});
-
-test('opening the dialog keeps the workspace edits typed behind it', () => {
-  // The button lives inside the workspace modal. Losing a rename because you looked at the
-  // clear dialog and cancelled would be its own bug.
-  const handler = main.slice(main.indexOf('if (clearActivity) clearActivity.onclick'));
-  const body = handler.slice(0, handler.indexOf('const confirmClear'));
-  assert.match(body, /wbCollectModalDraft\(\);/);
-  assert.match(body, /returnTo: \{ \.\.\.m \}/);
-  assert.match(fn('wbClearWorkspaceActivity'), /state\.builderModal = m\.returnTo \? \{ \.\.\.m\.returnTo \} : null;/);
-});
-
-test('the clear is saved, not just held in memory', () => {
-  assert.match(fn('wbClearWorkspaceActivity'), /wbSave\(m\.companyId\);/);
-});
-
-// --- reaching it from the sidebar workspace dialog ---------------------------------------
-
-test('a sidebar workspace is matched to its App Builder twin by name only when unambiguous', () => {
-  // Two separate records with no id linking them; name is the only bridge. An ambiguous
-  // match must offer nothing rather than clear a log nobody pointed at.
-  const list = [{ id: 'a', name: 'Main' }, { id: 'b', name: 'Field crew' }];
-  assert.equal(matchBuilderWorkspace(list, 'Main').id, 'a');
-  assert.equal(matchBuilderWorkspace(list, '  main  ').id, 'a', 'case and padding should not matter');
-  assert.equal(matchBuilderWorkspace(list, 'Ops'), null);
-  assert.equal(matchBuilderWorkspace([{ id: 'a', name: 'Main' }, { id: 'b', name: 'main' }], 'Main'), null, 'two matches is no match');
-  assert.equal(matchBuilderWorkspace(list, ''), null);
-  assert.equal(matchBuilderWorkspace(undefined, 'Main'), null);
-});
-
-test('Configure workspace offers the clear only when there is a log to clear', () => {
-  const modal = main.slice(main.indexOf('function renderOperationalWorkspaceEditModal('));
-  const body = modal.slice(0, modal.indexOf('\n}\n'));
-  assert.match(body, /const builderWs = canManage\s*\n\s*\? matchBuilderWorkspace\(/, 'no match, no button, and no button without permission');
-  assert.match(body, /data-action="open-clear-workspace-activity"/);
-  assert.match(body, /\$\{clearCount \? '' : 'disabled'\}/);
-});
-
-test('the confirm opens over the dialog rather than replacing it', () => {
-  // renderActiveModal checks state.builderModal before state.modal, so the Configure
-  // workspace dialog stays mounted underneath and cancelling lands back on it.
-  assert.match(main, /if \(state\.builderModal\) return renderWorkspaceBuilderModal\(\);/);
-  const handler = main.slice(main.indexOf("if (action === 'open-clear-workspace-activity')"));
-  assert.match(handler.slice(0, 600), /openWbModal\(\{ kind: 'clear-activity'/);
-  assert.ok(!/state\.modal = ''/.test(handler.slice(0, 600)), 'the dialog underneath must not be torn down');
-});
-
-// --- the command palette must not sit behind it -------------------------------------------
-
-test('the palette closes rather than lingering behind a dialog', () => {
-  // It is painted outside renderActiveModal, so nothing else reconciles the two. Dozens of
-  // paths set state.modal; the render path catches all of them.
-  assert.match(main, /if \(state\.commandPalette\.open && \(state\.modal \|\| state\.builderModal\)\) resetCommandPalette\(\);/);
-  const at = main.indexOf('resetCommandPalette();');
-  assert.ok(at < main.indexOf('const shell = shellTemplate('), 'reconcile before painting');
-});
-
-test('a dialog owns the keyboard, not the palette', () => {
-  // This is what made the password field impossible to type into: the palette answered the
-  // keydown first and returned, so the dialog never saw a keystroke.
-  assert.match(main, /if \(state\.commandPalette\.open && !\(state\.builderModal \|\| state\.modal\) && commandPaletteKeydown\(event\)\) return;/);
-});
-
-test('the palette refuses to open over a dialog at all', () => {
-  const body = fn('openCommandPalette');
-  assert.match(body, /if \(state\.modal \|\| state\.builderModal\) return;/);
-  assert.ok(
-    body.indexOf('state.modal || state.builderModal') < body.indexOf('state.commandPalette = { open: true'),
-    'refuse before opening',
-  );
-});
-
-test('the password field names the account, so managers do not fill the topbar search', () => {
-  // The trigger for the whole bug: a lone current-password field with no username sibling.
-  // Now shared, so every re-auth dialog gets it and none can be built without one.
-  const body = fn('reauthPasswordField');
-  assert.match(body, /autocomplete="username"/);
-  assert.match(body, /readonly/);
-  assert.ok(!/\bhidden\b/.test(body), 'display:none username fields get skipped by some managers');
-  assert.ok(
-    body.indexOf('autocomplete="username"') < body.indexOf('autocomplete="current-password"'),
-    'the username comes first, as managers expect',
-  );
-  assert.match(body, /value="\$\{h\(activeSession\(\)\?\.profile\?\.email \|\| ''\)\}"/);
-});
-
-test('re-authentication prompts go through the shared field, not hand-rolled inputs', () => {
-  // A new destructive dialog that rolls its own password input walks straight back into the
-  // autofill trap. Sign-in forms are a different thing -- they collect a password rather than
-  // re-check one, and they already carry their own username field.
-  const inputs = main
-    .split('\n')
-    .filter((line) => line.includes('<input') && line.includes('autocomplete="current-password"'));
-  assert.equal(inputs.length, 3, inputs.join('\n'));
-  assert.ok(inputs.some((line) => line.includes('id="${h(inputId)}"')), 'one of them is the shared helper');
-  // The other two are the client-portal login and the local sign-in form.
-  const signIns = inputs.filter((line) => line.includes('name="password"'));
-  assert.equal(signIns.length, 2, 'anything else asking for a password should reuse reauthPasswordField');
-});
-
-// --- timestamps ---------------------------------------------------------------------------
-
-test('a log entry carries the actual date and time, not only "2h ago"', () => {
-  // "1h ago" is not evidence: it drifts with every render, and two entries an hour apart can
-  // both say it.
-  const stamp = logStamp('2026-08-03T10:52:00.000Z');
-  assert.match(stamp, /Aug 3, 2026/);
-  assert.match(stamp, /\d{1,2}:\d{2}\s?(AM|PM)/);
-  assert.match(stamp, / · /);
-});
-
-test('the year is included, because the log has no time limit', () => {
-  // 60 entries deep with no age cap, so "Aug 3" read in February is a question.
-  assert.match(logStamp('2024-01-09T23:05:00.000Z'), /2024/);
-});
-
-test('a missing or broken stamp degrades instead of printing Invalid Date', () => {
-  assert.equal(logStamp(''), '');
-  assert.equal(logStamp(undefined), '');
-  assert.equal(logStamp('not a date'), '');
-});
-
-test('the row keeps the relative time and marks up the exact instant', () => {
-  const row = fn('wbActivityRow');
-  assert.match(row, /<time datetime="\$\{h\(ev\.ts\)\}">/, 'machine-readable value is the instant, not the rounded label');
-  assert.match(row, /wb-act-rel/);
-  assert.match(row, /: h\(wbTimeAgo\(ev\.ts\) \|\| ''\)/, 'an unparseable stamp still falls back');
+  assert.ok(!/\.feed\b|audit_events/.test(body));
 });

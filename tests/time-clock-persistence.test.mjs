@@ -42,11 +42,13 @@ test('stopping the clock stores the shift and clears the running row', () => {
   assert.match(body, /notifySyncFailure\(result\.error, 'Clock'\)/, 'a refused write has to say so');
 });
 
-test('the running clock is fetched on first paint, not on demand', () => {
+test('the running clock is fetched on first paint while history waits for Clock', () => {
   // The module grid paints an "On" badge for it before anything is clicked.
   assert.match(initialQueries, /activeTimerResult: client\.from\('company_active_timers'\)\.select\('\*'\)/);
   assert.match(main, /if \(!activeTimerResult\.error\) state\.activeTimer = normalizeActiveTimer\(\(activeTimerResult\.data \|\| \[\]\)\[0\]\)/);
-  assert.match(main, /if \(!timeEntriesResult\.error\) state\.timeEntries = \(timeEntriesResult\.data \|\| \[\]\)\.map\(normalizeTimeEntry\)/);
+  assert.doesNotMatch(initialQueries, /company_time_entries/);
+  assert.match(main, /if \(!ensureDomainLoaded\('time'\)\) return questLoader\('Loading clock'\)/);
+  assert.match(readFileSync(new URL('../src/data/realtime-deferred-loader.js', import.meta.url), 'utf8'), /domain === 'time'/);
 });
 
 test('the clock shows my time and nobody else s', () => {

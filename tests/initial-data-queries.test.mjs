@@ -91,6 +91,83 @@ test('paged lists preserve completed pages when a later page fails', async () =>
   assert.match(result.error.message, /offline/);
 });
 
+test('paged reads retain completed rows when a custom safe query rejects', async () => {
+  let page = 0;
+  const result = await loadPaginatedDataQuery(
+    () => ({ range() { return this; } }),
+    () => {
+      page += 1;
+      return page === 1
+        ? Promise.resolve({ data: [{ id: 'kept' }], error: null })
+        : Promise.reject(new Error('connection reset'));
+    },
+    { pageSize: 1, label: 'Contacts' },
+  );
+  assert.deepEqual(result.data, [{ id: 'kept' }]);
+  assert.match(result.error?.message || '', /connection reset/);
+});
+
+test('a successful paged read clears its overall deadline timer', async () => {
+  let aborted = false;
+  const result = await loadPaginatedDataQuery(
+    () => ({
+      abortSignal(signal) { signal.addEventListener('abort', () => { aborted = true; }); return this; },
+      range() { return this; },
+      then(resolve) { return Promise.resolve({ data: [{ id: 'done' }], error: null }).then(resolve); },
+    }),
+    (query) => Promise.resolve(query),
+    { deadlineMs: 20, label: 'Cleanup' },
+  );
+  assert.equal(result.error, null);
+  await new Promise((resolve) => setTimeout(resolve, 35));
+  assert.equal(aborted, false, 'a completed operation must not later abort its finished page');
+});
+
+test('one overall deadline aborts a slow later page while retaining completed rows', async () => {
+  let page = 0;
+  let secondPageSignal = null;
+  const result = await loadPaginatedDataQuery(
+    () => ({
+      abortSignal(signal) { secondPageSignal = signal; return this; },
+      range() { return this; },
+      then(resolve) {
+        page += 1;
+        if (page === 1) return Promise.resolve({ data: [{ id: 'kept' }], error: null }).then(resolve);
+        return new Promise(() => {});
+      },
+    }),
+    (query, options) => safeInitialDataQuery(query, options),
+    { pageSize: 1, deadlineMs: 25, label: 'Time entries' },
+  );
+
+  assert.deepEqual(result.data, [{ id: 'kept' }]);
+  assert.match(result.error?.message || '', /did not complete within 25ms/);
+  assert.equal(secondPageSignal?.aborted, true, 'the operation deadline cancels the active page');
+});
+
+test('simulated large time history no longer holds the initial workspace batch', async () => {
+  const slowRows = Array.from({ length: 1500 }, (_, index) => ({ id: `time-${index}` }));
+  const slowTimeQuery = () => {
+    let slice = [];
+    return {
+      range(from, to) { slice = slowRows.slice(from, to + 1); return this; },
+      then(resolve) { return new Promise((done) => setTimeout(() => done({ data: slice, error: null }), 15)).then(resolve); },
+    };
+  };
+  const baselineStarted = performance.now();
+  await loadPaginatedDataQuery(slowTimeQuery, (query) => Promise.resolve(query), { pageSize: 500, label: 'Legacy time history' });
+  const baselineMs = performance.now() - baselineStarted;
+
+  const client = queryClient();
+  const deferredStarted = performance.now();
+  await loadInitialDataQueries(client, (query) => Promise.resolve(query));
+  const deferredMs = performance.now() - deferredStarted;
+
+  assert.ok(!client.started.includes('company_time_entries'), 'initial batch must not start the historical time query');
+  assert.ok(baselineMs >= 40, `three deterministic slow pages should model the former hold (${baselineMs.toFixed(1)}ms)`);
+  assert.ok(deferredMs < baselineMs, `deferred first batch (${deferredMs.toFixed(1)}ms) should finish before the former history load (${baselineMs.toFixed(1)}ms)`);
+});
+
 test('startup requests carry human-readable timing labels', async () => {
   const client = queryClient();
   const labels = [];

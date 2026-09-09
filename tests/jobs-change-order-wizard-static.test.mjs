@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const queries = readFileSync(new URL('../src/data/realtime-query-batches.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const realtime = readFileSync(new URL('../src/data/realtime-deferred-loader.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const wizard = readFileSync(new URL('../src/jobs/change-order-wizard.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const jobFile = readFileSync(new URL('../src/jobs/job-file.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -60,7 +61,7 @@ test('saving checks the permission on the job, not the active company', () => {
 
 test('the lines are fetched with the rest of production and sliced per job', () => {
   assert.match(queries, /client\.from\('job_change_order_lines'\)\.select\('\*'\)\.order\('sort_order'/);
-  assert.match(main, /state\.jobChangeOrderLines = \(coLines\.data \|\| \[\]\)\.map\(normalizeChangeOrderLine\)/);
+  assert.match(realtime, /replaceRows\(changeOrderLines, 'jobChangeOrderLines', normalizeChangeOrderLine\)/);
   assert.match(main, /changeOrderLines: state\.jobChangeOrderLines\.filter\(\(row\) => row\.job_id === id\)/);
 });
 

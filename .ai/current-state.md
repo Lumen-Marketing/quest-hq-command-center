@@ -1,6 +1,34 @@
 # Current state
 
-Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
+
+## 2026-09-10 QB-RV review implementation
+
+- Started from synchronized main `becc167`. No coworker branch or unrelated temporary folder was
+  deleted. Email-delivery tests (QB-RV-08) were explicitly deferred by the user; no mail was sent.
+- QB-RV-01..04: clear-log preview uses exact server-held transfer IDs, actor/tenant checks and
+  atomic per-app audit markers. Browser deletes/forged markers are denied. New arrivals survive;
+  a retry replays the stored result. Both Clear log entry points work with transfer-only history.
+  Password/pending/session handling is covered, and failed activity saves report partial results.
+- QB-RV-05: Clock history is deferred while the active timer stays eager. All paged reads have a
+  15-second total ceiling and cancellation. Late responses from an obsolete identity are ignored.
+  Realtime appliers are lazy-loaded; the bundle guard is unchanged. Slow-fixture tests measure
+  query scheduling, not a claimed production speedup or a fix for every cause of slow loading.
+- QB-RV-06: preserved five distinct old trash snapshots as new recoverable rows and removed 86
+  exact archived-row document copies. The transaction proved all 156 existing rows unchanged,
+  including 62 live rows; repeat reconciliation found no remaining legacy entries. No records
+  were purged. Eight old archived contacts still need a confirmed survivor mapping before any
+  reference repair; their current links are untouched.
+- QB-RV-07: service-only cleanup run ledger, bounded retention and exact Storage-removal
+  accounting are implemented. The prior schedule returned HTTP 200; current candidates/bucket
+  are empty. Runtime tests and rollback ledger probes passed. A physical Storage fixture remains
+  unrun because server credential exports were empty, so real-object deletion is not certified.
+- QB-RV-09: removed contradictory current-risk notes, refreshed the catalog and separated live
+  evidence from historical release sections. Latest database advisors show no performance WARN
+  or ERROR and no unindexed foreign keys. The existing plan-gated password warning remains.
+
+Database changes are applied and verified. Application release evidence will be added below
+after the combined checks and commit-pinned production verification.
 
 ## 2026-09-09 the last unindexed foreign key
 

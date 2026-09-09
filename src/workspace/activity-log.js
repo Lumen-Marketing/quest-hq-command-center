@@ -21,10 +21,9 @@
 // anyone covering their tracks would do is exactly this, and the absence of evidence would
 // look identical to a quiet week.
 //
-// The transfer rows follow the same rule and enforce it one level lower. Clearing writes a
-// `direction: 'cleared'` tombstone per app that had rows, and the DELETE policy added in
-// 20260909120000 excludes tombstones from what it will remove — so clearing twice leaves two
-// tombstones, and no sequence of clears can produce a table that looks untouched.
+// The transfer rows follow the same rule one level lower. The server snapshots exact ids before
+// confirmation, then its atomic clear RPC deletes only that snapshot and writes a `cleared`
+// tombstone per affected app. Browser roles cannot delete rows or forge tombstones.
 //
 // Which rows those are is worked out in ./transfer-clear.js, kept separate because main.js
 // imports THIS module statically and everything in it is therefore downloaded by every session.

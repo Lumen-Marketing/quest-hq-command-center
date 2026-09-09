@@ -10,6 +10,7 @@ import { calculateTakeoff } from '../src/underwriting/takeoff.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 const queries = readFileSync(join(root, 'src', 'data', 'realtime-query-batches.js'), 'utf8').replace(/\r\n/g, '\n');
+const realtime = readFileSync(join(root, 'src', 'data', 'realtime-deferred-loader.js'), 'utf8').replace(/\r\n/g, '\n');
 const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
 const page = readFileSync(join(root, 'src', 'crm', 'underwriter-page.js'), 'utf8');
 
@@ -488,7 +489,7 @@ test('the measurements are saved with the decision and normalized on the way bac
 
 test('the calculators are fetched with the cases, in the same on-demand domain', () => {
   assert.match(queries, /client\.from\('underwriting_calculators'\)\.select\('\*'\)/);
-  assert.match(main, /state\.underwritingCalculators = calculators\.data \|\| \[\];/);
+  assert.match(realtime, /state\.underwritingCalculators = calculators\.data \|\| \[\];/);
 });
 
 // Every class the card emits has a rule behind it. A class with no rule looks correct in each

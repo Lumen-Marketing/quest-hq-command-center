@@ -1,5 +1,29 @@
 # Durable decisions
 
+## Destructive log counts belong to the server
+
+Decided 2026-09-10 (QB-RV-01 through QB-RV-04). A recent-row UI cache cannot authorize a
+workspace-wide delete. Preview freezes exact IDs for five minutes, binds the request to its
+actor and workspace, and refuses an oversized snapshot instead of silently truncating it.
+Confirmation rechecks management permission. Deletion, per-app audit markers and the stored
+retry result are atomic. Direct browser deletion and forged clear markers are blocked. Activity
+document persistence remains separately awaited, with an explicit partial-result retry.
+
+## Historical recovery preserves evidence instead of guessing ownership
+
+Decided 2026-09-10 (QB-RV-06). Archived contact references are not reassigned without a reliable
+survivor mapping. Matching email or phone is a review candidate, not proof of a merge. Distinct
+legacy recycle-bin snapshots must receive separate recoverable IDs; existing live records win
+every ID collision and are never overwritten. Verified redundant document copies can be removed
+only after an equivalent archived row has been proved or preserved.
+
+## Cleanup evidence must distinguish no work from proven removal
+
+Decided 2026-09-10 (QB-RV-07). A scheduled HTTP 200 with no candidates verifies scheduling, not
+physical deletion. The maintenance ledger contains counts and sanitized status only. Controlled
+Storage fixtures, when credentials are available, use exact disposable paths and a surviving
+control object; they do not establish the natural 48-hour candidate-selection path by themselves.
+
 ## Public form uploads are capabilities that must be claimed atomically
 
 Decided 2026-09-09. A private object path is not proof that the anonymous respondent actually

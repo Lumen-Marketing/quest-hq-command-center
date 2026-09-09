@@ -16,6 +16,13 @@ This project deploys directly. Do not run npm run dev or npm run preview, and do
 
 ## Delivery path
 
+For the 2026-09-10 review follow-ups, email delivery checks are explicitly deferred by the user.
+Do not send invitation, reset or support messages as an incidental release probe. Database probes
+under `supabase/probes` must be reviewed and run transactionally with their final ROLLBACK intact;
+they are not production cleanup commands. Legacy trash recovery has a service-only dry-run mode
+and must prove preservation before applying its forward-only migration. Never infer contact
+merge survivors from matching names, email addresses or phone numbers.
+
 1. Make a scoped branch or isolated worktree change.
 2. Run npm run check.
 3. Merge the verified change into main and push main to GitHub. A pull request may be used when review is requested, but is not required by the direct-delivery workflow.

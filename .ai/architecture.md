@@ -30,6 +30,23 @@ The app uses:
 
 ## Request and data flow
 
+Workspace log clearing uses `preview_wb_transfer_clear` to prepare an actor-bound snapshot of
+exact import/export IDs, then `clear_wb_transfer_log` to delete only those IDs and write the
+server-authored per-app audit markers in one transaction. Browser roles cannot directly delete
+transfer rows or insert a `cleared` marker. The activity-document save remains a separate awaited
+step: its failure is reported as partial completion and can be retried without repeating the
+transfer mutation. Preview counts do not depend on the recent-200-row display cache.
+
+Complete Clock history is deferred until its consumer opens; the active timer remains in the
+initial batch. Paged directory reads share one 15-second operation deadline, cancel in-flight
+requests and report incomplete results. Identity epochs prevent obsolete asynchronous results
+from hydrating a newer session.
+
+The form-upload cleanup endpoint records service-only maintenance run evidence before deleting
+anything, then records selected/deleted counts and a sanitized outcome. Storage responses must
+confirm exact requested paths before their unclaimed upload-intent rows are removed. An ambiguous
+or partial Storage response is not reported as a fully successful cleanup.
+
 Browser route -> company/session reconciliation -> operational-workspace reconciliation -> Help Center or permission/subscription/plugin checks -> module renderer -> Supabase query/RPC or a narrowly scoped Vercel Function.
 
 The route reconciliation step canonicalizes stale or inaccessible company/workspace identifiers against the signed-in member's allowed tenant set before any company module renders.

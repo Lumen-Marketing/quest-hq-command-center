@@ -1,8 +1,28 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-09-09T02:45:24.160499Z.
+The full machine-readable Supabase catalog was refreshed through 2026-09-09T18:38:53.856286Z.
 The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## 2026-09-10 review follow-ups
+
+Three migrations are live: `wb_transfer_clear_atomic`, `form_upload_purge_run_ledger`, and
+`recover_legacy_wb_trash_snapshots`. Their repository filenames and provider apply versions are
+recorded in the manifest and snapshot. All three new public ledgers have RLS enabled with no
+browser grants; their foreign keys are indexed. Transfer preview/clear RPCs check authenticated
+workspace-management permission and actor identity. Recovery and maintenance routines are
+service-only. Transfer rows no longer grant browser DELETE/UPDATE/TRUNCATE, and imports/exports
+must carry the caller's actor ID and a matching workspace/company pair.
+
+The recovery preserved all 156 existing rows and added five archived snapshots; 91 legacy
+document entries were removed only after proving their archived equivalents. A repeat dry-run
+was empty. Live records remained 62. No archived-contact references were reassigned.
+
+Live rollback probes passed transfer clear/replay/new-arrival and direct-write denials, plus
+maintenance-ledger access and bounded interrupted-run retention. Advisors report no performance
+warnings/errors or unindexed FKs. Security reports 64 authenticated definer routines (the two
+new clear RPCs are deliberately permission-gated), seven service-only RLS/no-policy tables and
+the existing plan-gated leaked-password-protection warning.
 
 ## 2026-09-09 public form response hardening
 

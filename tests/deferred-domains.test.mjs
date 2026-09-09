@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const initialQueries = readFileSync(new URL('../src/data/initial-data-queries.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const deferredLoader = readFileSync(new URL('../src/data/realtime-deferred-loader.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 const bootstrap = (() => {
   const start = main.indexOf('async function loadSupabaseData() {');
@@ -30,11 +31,12 @@ test('every deferred domain has a loader to defer to', () => {
   const list = main.match(/const DEFERRED_DOMAINS = \[([^\]]*)\]/);
   assert.ok(list, 'DEFERRED_DOMAINS should exist');
   const domains = [...list[1].matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
-  // 'production' is the job file's records -- per-job detail, fetched when a job is opened.
-  assert.deepEqual(domains, ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels', 'production']);
+  // 'production' is job-file detail and 'time' is a user's history; both wait for the
+  // route that can render a visible loading state instead of delaying the workspace shell.
+  assert.deepEqual(domains, ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels', 'production', 'time']);
   for (const domain of domains) {
     assert.ok(
-      new RegExp(`domain === '${domain}'`).test(main),
+      deferredLoader.includes(`'${domain}'`),
       `no loader branch handles the '${domain}' domain, so deferring it would leave it empty forever`,
     );
   }
@@ -64,7 +66,7 @@ test('every read of a deferred dataset goes through a hooked accessor', () => {
   //    persistAll can never observe a half-loaded state and cannot cache an empty array
   //    over a good one. Checked, not assumed: isLiveSupabaseSession() is
   //    `auth === 'supabase' && !isReadOnlyDemo()`.
-  const ALLOWED = /^(loadSupabaseData|loadRealtimeDomain|loadSecondaryRealtimeDomain|loadIdentityRealtimeDomain|applyWorkspaceBackupPayload|persistWorkspaceBackupPayloadToSupabase|buildWorkspaceBackupPayload|resetLiveWorkspaceData|resetDemoWorkspaceData|ensureDomainLoaded|persistAll|pricebookPersistLocal|saveFormsState|persistProposalsLocal|recordAuditEvent|applyContactLabel|removeContactLabel|mergeById)$/;
+  const ALLOWED = /^(loadSupabaseData|loadRealtimeDomain|applyWorkspaceBackupPayload|persistWorkspaceBackupPayloadToSupabase|buildWorkspaceBackupPayload|resetLiveWorkspaceData|resetDemoWorkspaceData|ensureDomainLoaded|persistAll|pricebookPersistLocal|saveFormsState|persistProposalsLocal|recordAuditEvent|applyContactLabel|removeContactLabel|mergeById)$/;
 
   const fns = [...main.matchAll(/^(?:async )?function ([\w$]+)/gm)].map((m) => ({ at: m.index, name: m[1] }));
   const owner = (idx) => {
@@ -114,7 +116,8 @@ test('every read of a deferred dataset goes through a hooked accessor', () => {
 // revision that was no longer current.
 test('workspace builder rows are applied through one shared function', () => {
   assert.equal((main.match(/function applyWorkspaceBuilderRows\(/g) || []).length, 1);
-  assert.equal((main.match(/applyWorkspaceBuilderRows\(/g) || []).length, 3, 'one definition, two call sites');
+  assert.equal((main.match(/applyWorkspaceBuilderRows\(/g) || []).length, 2, 'one definition and the bootstrap call site');
+  assert.match(deferredLoader, /applyWorkspaceBuilderRows\(builder\.data/, 'the deferred reload uses the same applier');
   const apply = main.slice(main.indexOf('function applyWorkspaceBuilderRows('));
   const body = apply.slice(0, apply.indexOf('\n}\n'));
   assert.match(body, /state\.wbDocVersions\[companyId\]/, 'the version token must be refreshed');
@@ -134,4 +137,21 @@ test('a failed deferred load becomes visible and can be retried', () => {
 
 test('deferred markers are cleared on sign-out', () => {
   assert.match(main, /state\.loadedDomains = \{\};/);
+});
+
+test('deferred results cannot hydrate a newer signed-in context', () => {
+  assert.match(main, /workspaceLoadEpoch \+= 1/);
+  assert.match(main, /const loadEpoch = state\.workspaceLoadEpoch;/);
+  assert.match(main, /loadRealtimeDomain\(client, domain, loadEpoch\)/);
+  assert.match(main, /if \(state\.workspaceLoadEpoch !== loadEpoch\) return;/);
+  assert.match(deferredLoader, /domain === 'time'/);
+  assert.match(deferredLoader, /const stale = \(\) => state\.workspaceLoadEpoch !== loadEpoch/);
+});
+
+test('an obsolete bootstrap failure cannot replace the new context sync state', () => {
+  const ensure = main.slice(main.indexOf('function ensureDataLoad()'));
+  const catchAt = ensure.indexOf('.catch(async (error) => {');
+  const catchBody = ensure.slice(catchAt, ensure.indexOf('.finally(async () => {', catchAt));
+  assert.match(catchBody, /if \(state\.workspaceLoadEpoch !== loadEpoch\) return;/);
+  assert.ok(catchBody.indexOf('if (state.workspaceLoadEpoch !== loadEpoch) return;') < catchBody.indexOf('state.sync'), 'stale failure must not label a fresh workspace as local fallback');
 });

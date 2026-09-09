@@ -97,7 +97,7 @@ if (newerThanSnapshot.length) {
 // Server-only ledgers: RLS on with no policies is the intended lockdown, stated directly
 // in 202607221400_taskmanagement_phase2_runtime_delta.sql ("no grants - RPC / service
 // role only"). They are never read from the browser.
-const SERVER_ONLY = new Set(['wo_counters', 'checkin_log', 'reminder_log', 'form_upload_intents']);
+const SERVER_ONLY = new Set(['wo_counters', 'checkin_log', 'reminder_log', 'form_upload_intents', 'wb_transfer_clear_requests', 'wb_legacy_trash_recovery_map']);
 
 const policiesByTable = new Map();
 for (const policy of snapshot.policies || []) {
