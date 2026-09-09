@@ -1,0 +1,804 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-09T00:04:06.346Z",
+  "app": {
+    "name": "Pipeline Handbook",
+    "recordName": "Guide",
+    "type": "",
+    "icon": "ti-book",
+    "color": "#378ADD",
+    "description": "How the Questroofing pipeline runs, and what each person does at every stage. Filter by Phase or by who it is for.",
+    "fields": [
+      {
+        "id": "hb-title",
+        "label": "Title",
+        "type": "text",
+        "config": {}
+      },
+      {
+        "id": "hb-phase",
+        "label": "Phase",
+        "type": "category",
+        "config": {
+          "options": [
+            {
+              "id": "ph-all",
+              "label": "Every phase",
+              "color": "#6E7681"
+            },
+            {
+              "id": "ph-prospect",
+              "label": "Prospecting",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "ph-under",
+              "label": "Underwriting",
+              "color": "#BA7517"
+            },
+            {
+              "id": "ph-sales",
+              "label": "Sales",
+              "color": "#378ADD"
+            },
+            {
+              "id": "ph-prod",
+              "label": "Production",
+              "color": "#639922"
+            }
+          ]
+        }
+      },
+      {
+        "id": "hb-kind",
+        "label": "Kind",
+        "type": "category",
+        "config": {
+          "options": [
+            {
+              "id": "k-rule",
+              "label": "The rule everything rests on",
+              "color": "#16181A"
+            },
+            {
+              "id": "k-who",
+              "label": "Who does what",
+              "color": "#378ADD"
+            },
+            {
+              "id": "k-move",
+              "label": "How work moves",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "k-house",
+              "label": "House rule",
+              "color": "#639922"
+            },
+            {
+              "id": "k-watch",
+              "label": "Watch out",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "k-setup",
+              "label": "Setup step",
+              "color": "#BA7517"
+            }
+          ]
+        }
+      },
+      {
+        "id": "hb-for",
+        "label": "Who it's for",
+        "type": "category",
+        "config": {
+          "options": [
+            {
+              "id": "w-all",
+              "label": "Everyone",
+              "color": "#6E7681"
+            },
+            {
+              "id": "w-canvass",
+              "label": "Canvassers & setters",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "w-est",
+              "label": "Estimators",
+              "color": "#BA7517"
+            },
+            {
+              "id": "w-close",
+              "label": "Closers",
+              "color": "#378ADD"
+            },
+            {
+              "id": "w-prod",
+              "label": "Production",
+              "color": "#639922"
+            },
+            {
+              "id": "w-admin",
+              "label": "Admins & owners",
+              "color": "#7F77DD"
+            }
+          ]
+        }
+      },
+      {
+        "id": "hb-do",
+        "label": "What to do",
+        "type": "textarea",
+        "config": {}
+      },
+      {
+        "id": "hb-why",
+        "label": "Why it matters",
+        "type": "textarea",
+        "config": {}
+      },
+      {
+        "id": "hb-apps",
+        "label": "Apps involved",
+        "type": "text",
+        "config": {}
+      },
+      {
+        "id": "hb-order",
+        "label": "Reading order",
+        "type": "number",
+        "config": {}
+      },
+      {
+        "id": "hb-status",
+        "label": "Status",
+        "type": "status",
+        "config": {
+          "options": [
+            {
+              "id": "st-pub",
+              "label": "Published",
+              "color": "#639922"
+            },
+            {
+              "id": "st-draft",
+              "label": "Draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "st-review",
+              "label": "Needs review",
+              "color": "#BA7517"
+            }
+          ]
+        }
+      },
+      {
+        "id": "hb-updated",
+        "label": "Last updated",
+        "type": "updated_time",
+        "config": {}
+      }
+    ],
+    "items": [
+      {
+        "id": "hb-rec-01",
+        "values": {
+          "hb-title": "The contact is the person. The apps are the stages.",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-rule",
+          "hb-for": "w-all",
+          "hb-do": "Before you send any record onward, make sure its Contact field points at the right person in Company Contacts. If the field is empty, fill it in — do not send it on without one.",
+          "hb-why": "Ten of the eleven apps carry the same Contact field, all pointing at one company directory. That is the thread tying a cold door-knock to a finished roof. The record moves between apps; the contact never does. An empty Contact breaks the history at that point and nobody downstream can tell whose job it is.",
+          "hb-apps": "All apps",
+          "hb-order": 10,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-02",
+        "values": {
+          "hb-title": "One lead is one trade at one address.",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-rule",
+          "hb-for": "w-all",
+          "hb-do": "Split a customer who wants two trades into two leads. Never carry two trades on one record.",
+          "hb-why": "One lead becomes exactly one underwriting sheet and one deal. Two trades on one record means the margin, the draws and the job all describe two different pieces of work at once, and nothing downstream can be trusted.",
+          "hb-apps": "Leads · Underwriting Sheet · Sales Pipeline",
+          "hb-order": 20,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-03",
+        "values": {
+          "hb-title": "Prospecting: work the name until there is something to bid",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-who",
+          "hb-for": "w-canvass",
+          "hb-do": "Work prospects through Cold, Working and Warming. When there is real work to price, promote to Leads. When there is not, send to Nurturing with a date, or mark Do not contact.",
+          "hb-why": "Prospecting owns everything before there is a number to put on paper. Nothing reaches an estimator until somebody here decides there is a job worth pricing.",
+          "hb-apps": "Prospects · Leads · Nurturing",
+          "hb-order": 30,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-04",
+        "values": {
+          "hb-title": "Underwriting: price it, then hand it over",
+          "hb-phase": "ph-under",
+          "hb-kind": "k-who",
+          "hb-for": "w-est",
+          "hb-do": "The Underwriting Sheet is the record that travels. The Calculator, Underwriter and GAF Calculator are tools — work out your numbers there, then put them on the sheet. Price the work in the Line items sub-list, not in the notes.",
+          "hb-why": "Only the sheet moves. The other three have no buttons and nothing leaves them, by design — they are where you think, not where you file.",
+          "hb-apps": "Underwriting Sheet · Underwriting Calculator · Underwriter · GAF Calculator",
+          "hb-order": 40,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-05",
+        "values": {
+          "hb-title": "Sales: the deal is yours once the quote is built",
+          "hb-phase": "ph-sales",
+          "hb-kind": "k-who",
+          "hb-for": "w-close",
+          "hb-do": "Take the deal from Estimate sent through to Won or Lost. Build the proposal when the quote is agreed.",
+          "hb-why": "One deal per trade per address, matching the lead it came from. If you are holding two trades on one deal, it came through wrong — send it back rather than working it.",
+          "hb-apps": "Sales Pipeline · Proposals",
+          "hb-order": 50,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-06",
+        "values": {
+          "hb-title": "Production: deliver it and record it on the job",
+          "hb-phase": "ph-prod",
+          "hb-kind": "k-who",
+          "hb-for": "w-prod",
+          "hb-do": "Move the job through Scheduled, In progress, Punch list, Complete, Invoiced, Paid / closed. Put daily reports and change orders in the sub-lists on the job.",
+          "hb-why": "The job is the record of what happened. A change order in an email or a text is a change order nobody can find when the invoice is questioned.",
+          "hb-apps": "Jobs",
+          "hb-order": 60,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-07",
+        "values": {
+          "hb-title": "Promote to Leads — a MOVE",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-move",
+          "hb-for": "w-canvass",
+          "hb-do": "Press Promote to Leads when there is something to bid. The record leaves Prospects.",
+          "hb-why": "A move takes the record off your list entirely. If you go looking for it later, it is in Leads, not in the recycle bin.",
+          "hb-apps": "Prospects → Leads",
+          "hb-order": 70,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-08",
+        "values": {
+          "hb-title": "Send to Nurturing — a MOVE, and always with a date",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-move",
+          "hb-for": "w-canvass",
+          "hb-do": "Send to Nurturing whenever the work is real but the timing is not. Always set a revisit date and a reason under Why not now.",
+          "hb-why": "Nurturing without a date is a graveyard. The whole point of the app is that something rings on a day you chose.",
+          "hb-apps": "Prospects → Nurturing · Leads → Nurturing",
+          "hb-order": 80,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-09",
+        "values": {
+          "hb-title": "Back to Leads or Back to Prospects — a MOVE",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-move",
+          "hb-for": "w-canvass",
+          "hb-do": "When a nurture record wakes up, send it back. The estimate goes with it.",
+          "hb-why": "You are not starting again. The work already done on the record travels, which is why it goes back rather than being re-entered.",
+          "hb-apps": "Nurturing → Leads · Nurturing → Prospects",
+          "hb-order": 90,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-10",
+        "values": {
+          "hb-title": "Send to Sales Pipeline — a MOVE",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-move",
+          "hb-for": "w-canvass",
+          "hb-do": "Press it once the quote exists and the deal is ready for a Closer.",
+          "hb-why": "The record leaves Leads. Prospecting is done with it at that point.",
+          "hb-apps": "Leads → Sales Pipeline",
+          "hb-order": 100,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-11",
+        "values": {
+          "hb-title": "Send to Sales Pipeline — a PUSH, not a move",
+          "hb-phase": "ph-under",
+          "hb-kind": "k-move",
+          "hb-for": "w-est",
+          "hb-do": "Press it when the quote is built. A copy goes to Sales; your sheet stays with you.",
+          "hb-why": "This is the only button in the whole pipeline that leaves a copy behind. It is deliberate: Estimating keeps its own record of what was priced, so a repricing later has something to compare against.",
+          "hb-apps": "Underwriting Sheet → Sales Pipeline",
+          "hb-order": 110,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-12",
+        "values": {
+          "hb-title": "Handed to Estimating is a signal, not a transfer",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-move",
+          "hb-for": "w-est",
+          "hb-do": "When a lead reaches Handed to Estimating, an estimator creates the underwriting sheet by hand. Watch that stage — nothing arrives on its own.",
+          "hb-why": "There is no button for this step. If nobody is watching the Handed to Estimating stage, leads sit there and nobody is told.",
+          "hb-apps": "Leads → Underwriting Sheet",
+          "hb-order": 120,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-13",
+        "values": {
+          "hb-title": "Sales Pipeline to Proposals is by hand",
+          "hb-phase": "ph-sales",
+          "hb-kind": "k-move",
+          "hb-for": "w-close",
+          "hb-do": "Create the proposal yourself when the quote is agreed.",
+          "hb-why": "There is no button for this today. It is a straight one-to-one step, so it could be automated later if it becomes a nuisance.",
+          "hb-apps": "Sales Pipeline → Proposals",
+          "hb-order": 130,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-14",
+        "values": {
+          "hb-title": "Proposals to Jobs is a checklist, on purpose",
+          "hb-phase": "ph-sales",
+          "hb-kind": "k-move",
+          "hb-for": "w-close",
+          "hb-do": "When a proposal is Won, work the Handoff at signature checklist. Do not look for a button.",
+          "hb-why": "A signing can split into several jobs, only signed scopes travel, and draws have to be armed. No single button could do that correctly, so a person does it.",
+          "hb-apps": "Proposals → Jobs",
+          "hb-order": 140,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-15",
+        "values": {
+          "hb-title": "Something to bid — promote them",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-house",
+          "hb-for": "w-canvass",
+          "hb-do": "Promote them to Leads, where the estimate attaches — one lead per trade per address.",
+          "hb-why": "This is the standing rule posted on the record when the bid flag is ticked.",
+          "hb-apps": "Prospects",
+          "hb-order": 150,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-16",
+        "values": {
+          "hb-title": "Gone quiet — decide, do not drift",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-house",
+          "hb-for": "w-canvass",
+          "hb-do": "Either send them to Nurturing with a day it rings on, or mark Do not contact.",
+          "hb-why": "A prospect left drifting is a drip nobody is working. Deciding is the job.",
+          "hb-apps": "Prospects",
+          "hb-order": 160,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-17",
+        "values": {
+          "hb-title": "Cooled — nurture it, do not lose it",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-house",
+          "hb-for": "w-canvass",
+          "hb-do": "Send this to Nurturing with a day it rings on rather than marking it Lost. The estimate travels with it.",
+          "hb-why": "Lost is final and loses the work already done. Cooled is a timing problem, not a dead one.",
+          "hb-apps": "Leads",
+          "hb-order": 170,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-18",
+        "values": {
+          "hb-title": "Buying signal — they are hot",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-house",
+          "hb-for": "w-canvass",
+          "hb-do": "Set Temperature to Hot and send it back to Leads — the estimate is still on it.",
+          "hb-why": "The record already carries the estimate, so it re-enters Leads further along than a fresh name would.",
+          "hb-apps": "Nurturing",
+          "hb-order": 180,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-19",
+        "values": {
+          "hb-title": "Gone cold — it still needs a date",
+          "hb-phase": "ph-prospect",
+          "hb-kind": "k-house",
+          "hb-for": "w-canvass",
+          "hb-do": "Push Revisit on out rather than leaving it in the past.",
+          "hb-why": "Cold is still nurturing, not closed. A date that has gone by is how a list becomes a graveyard.",
+          "hb-apps": "Nurturing",
+          "hb-order": 190,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-20",
+        "values": {
+          "hb-title": "A custom margin tier needs sign-off",
+          "hb-phase": "ph-under",
+          "hb-kind": "k-house",
+          "hb-for": "w-est",
+          "hb-do": "A sheet priced off the tier table needs sign-off before the quote leaves Estimating.",
+          "hb-why": "The tier table is the guardrail. Pricing outside it is allowed, but not quietly.",
+          "hb-apps": "Underwriting Sheet",
+          "hb-order": 200,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-21",
+        "values": {
+          "hb-title": "Quote built — the Closer takes the wheel",
+          "hb-phase": "ph-under",
+          "hb-kind": "k-house",
+          "hb-for": "w-est",
+          "hb-do": "Hand it over once the quote is built. The deal belongs to the Closer now.",
+          "hb-why": "One per trade per address. After the handover the Closer owns the conversation, not Estimating.",
+          "hb-apps": "Underwriting Sheet",
+          "hb-order": 210,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-22",
+        "values": {
+          "hb-title": "Won — arm the draws and split the jobs",
+          "hb-phase": "ph-sales",
+          "hb-kind": "k-house",
+          "hb-for": "w-close",
+          "hb-do": "Each accepted scope becomes its own job with its draws armed and its buckets pre-loaded. Work the Handoff at signature checklist.",
+          "hb-why": "It is the step, not a button. Splitting by scope is what keeps a job answerable for its own money.",
+          "hb-apps": "Proposals",
+          "hb-order": 220,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-23",
+        "values": {
+          "hb-title": "Partially won — only the signed trades travel",
+          "hb-phase": "ph-sales",
+          "hb-kind": "k-house",
+          "hb-for": "w-close",
+          "hb-do": "Only scopes with Signed ticked become jobs. The rest are closed or sent back to be re-quoted.",
+          "hb-why": "The proposal stays open on the record so the unsigned scopes are still visible.",
+          "hb-apps": "Proposals",
+          "hb-order": 230,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-24",
+        "values": {
+          "hb-title": "Automations do not notify anybody",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-watch",
+          "hb-for": "w-all",
+          "hb-do": "Do not wait to be told. If a stage change needs somebody to act, watching that stage has to be a named person’s job.",
+          "hb-why": "Every automation in these apps posts a message to the record’s activity feed. Nobody gets an email, a badge or a phone alert.",
+          "hb-apps": "All apps",
+          "hb-order": 240,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-25",
+        "values": {
+          "hb-title": "A move takes it off your list; a push leaves a copy",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-watch",
+          "hb-for": "w-all",
+          "hb-do": "If a record has vanished, look in the destination app before the recycle bin.",
+          "hb-why": "Every button in Prospecting is a move. Only Underwriting Sheet to Sales Pipeline is a push. This is behind most \"I lost a record\" reports.",
+          "hb-apps": "All apps",
+          "hb-order": 250,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-26",
+        "values": {
+          "hb-title": "Calculations do not travel",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-watch",
+          "hb-for": "w-all",
+          "hb-do": "After a handoff, check that the inputs a number depends on made the trip.",
+          "hb-why": "Gross profit, gross margin and any other calculated field are worked out fresh in each app. They are never carried by a button.",
+          "hb-apps": "All apps",
+          "hb-order": 260,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-27",
+        "values": {
+          "hb-title": "Everyone sees the whole contact directory",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-watch",
+          "hb-for": "w-all",
+          "hb-do": "Treat the directory as company-wide. Do not put anything in a contact you would not show every worker.",
+          "hb-why": "Records are walled off by workspace. Company Contacts is not — a canvasser in Prospecting can open any contact in the business.",
+          "hb-apps": "Company Contacts",
+          "hb-order": 270,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-28",
+        "values": {
+          "hb-title": "Sending a record on can add columns to the next team’s app",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-watch",
+          "hb-for": "w-all",
+          "hb-do": "Do not add one-off fields to a record you are about to send onward.",
+          "hb-why": "Any field the destination does not have is created there. Company Contacts is the one exception: it never grows.",
+          "hb-apps": "All apps",
+          "hb-order": 280,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-29",
+        "values": {
+          "hb-title": "Deleted records are gone for good after 30 days",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-watch",
+          "hb-for": "w-all",
+          "hb-do": "If somebody deletes the wrong record, restore it from that app’s recycle bin now, not later.",
+          "hb-why": "The bin holds a deleted record for 30 days and then removes it permanently. There is no copy behind that.",
+          "hb-apps": "All apps",
+          "hb-order": 290,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-30",
+        "values": {
+          "hb-title": "Wire every button to its destination",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-setup",
+          "hb-for": "w-admin",
+          "hb-do": "Open each of the seven buttons and set its target app. Do this before anybody uses the pipeline.",
+          "hb-why": "Buttons ship with no destination on purpose — a bundled target would point at an app id that does not exist yet. Until they are wired, nothing moves between apps and the buttons read \"This button has no destination set yet\".",
+          "hb-apps": "Prospects · Leads · Nurturing · Underwriting Sheet",
+          "hb-order": 300,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-31",
+        "values": {
+          "hb-title": "Decide where the EOD Report lives",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-setup",
+          "hb-for": "w-admin",
+          "hb-do": "Either put a copy in each workspace, or keep one where the whole company can reach it.",
+          "hb-why": "Its Stage field names all four phases, so it is the one app that does not belong to a single workspace.",
+          "hb-apps": "EOD Report",
+          "hb-order": 310,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-32",
+        "values": {
+          "hb-title": "Assign people to workspaces",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-setup",
+          "hb-for": "w-admin",
+          "hb-do": "Invite a worker with a non-elevated role and pick the workspaces they belong to. One person can be in more than one, with a different role in each.",
+          "hb-why": "Useful for an estimator who also closes. Invites can never grant Owner, Admin or Developer — those are promoted separately after onboarding.",
+          "hb-apps": "People & Access",
+          "hb-order": 320,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-33",
+        "values": {
+          "hb-title": "Remember who already sees everything",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-setup",
+          "hb-for": "w-admin",
+          "hb-do": "Do not assume a workspace assignment limits an owner or admin.",
+          "hb-why": "Owners, admins and developers inherit access to all four workspaces automatically. Everyone else sees only what they are assigned.",
+          "hb-apps": "People & Access",
+          "hb-order": 330,
+          "hb-status": "st-pub"
+        }
+      },
+      {
+        "id": "hb-rec-34",
+        "values": {
+          "hb-title": "Walk one real customer end to end before going live",
+          "hb-phase": "ph-all",
+          "hb-kind": "k-setup",
+          "hb-for": "w-admin",
+          "hb-do": "Take one customer from Prospect to Job, pressing every button on the way.",
+          "hb-why": "It is the fastest way to find a destination nobody wired, and it exercises every handoff once while the stakes are low.",
+          "hb-apps": "All apps",
+          "hb-order": 340,
+          "hb-status": "st-pub"
+        }
+      }
+    ],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "hb-b1",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What this covers",
+          "fieldIds": [
+            "hb-title",
+            "hb-phase",
+            "hb-kind",
+            "hb-for"
+          ]
+        }
+      },
+      {
+        "id": "hb-b2",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The instruction",
+          "fieldIds": [
+            "hb-do",
+            "hb-why"
+          ]
+        }
+      },
+      {
+        "id": "hb-b3",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Where it applies",
+          "fieldIds": [
+            "hb-apps",
+            "hb-order",
+            "hb-status",
+            "hb-updated"
+          ]
+        }
+      },
+      {
+        "id": "hb-b4",
+        "type": "comments",
+        "size": 2,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "hb-auto-new",
+        "name": "A new entry needs a home",
+        "enabled": true,
+        "trigger": {
+          "event": "created"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Set the Phase and Who it is for, then move Status to Published. An entry nobody can filter to is an entry nobody reads."
+          }
+        ]
+      },
+      {
+        "id": "hb-auto-review",
+        "name": "Flagged for review",
+        "enabled": true,
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "hb-status",
+          "to": "st-review"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Somebody thinks this no longer matches how the pipeline actually runs. Check it against the app it describes before editing — the apps are the truth, this is the explanation."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "hb-phase",
+      "hb-kind",
+      "hb-for",
+      "hb-status"
+    ],
+    "views": [
+      {
+        "id": "hb-v-phase",
+        "title": "By phase",
+        "fieldId": "hb-phase",
+        "scope": "team"
+      },
+      {
+        "id": "hb-v-for",
+        "title": "Who it is for",
+        "fieldId": "hb-for",
+        "scope": "team"
+      },
+      {
+        "id": "hb-v-kind",
+        "title": "By kind",
+        "fieldId": "hb-kind",
+        "scope": "team"
+      },
+      {
+        "id": "hb-v-status",
+        "title": "By status",
+        "fieldId": "hb-status",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "hb-w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "hb-w-phase",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "hb-phase"
+        }
+      },
+      {
+        "id": "hb-w-for",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "hb-for"
+        }
+      }
+    ]
+  }
+}
