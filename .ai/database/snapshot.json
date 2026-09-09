@@ -15265,9 +15265,13 @@
   {
    "name": "wb_data_transfers_clearable",
    "version": "20260909000308"
+  },
+  {
+   "name": "add_wb_records_deleted_by_index",
+   "version": "20260909024436"
   }
  ],
- "captured_at": "2026-09-09T00:05:53.763786+00:00",
+ "captured_at": "2026-09-09T02:45:24.160499+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",
@@ -17063,7 +17067,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "company_id",
+   "to_column": "id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",
@@ -17072,7 +17076,7 @@
   {
    "name": "tasks_company_deal_id_fkey",
    "to_table": "deals",
-   "to_column": "id",
+   "to_column": "company_id",
    "from_table": "tasks",
    "delete_rule": "NO ACTION",
    "from_column": "company_id",

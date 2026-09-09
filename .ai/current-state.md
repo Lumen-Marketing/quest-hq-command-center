@@ -2,6 +2,24 @@
 
 Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-09-09 the last unindexed foreign key
+
+- `20260909130000_add_wb_records_deleted_by_index.sql` adds `wb_records_deleted_by_idx`, applied
+  to live as `20260909024436`. The live performance advisor now reports **zero** unindexed foreign
+  keys; the finding was the only one in that category.
+
+- Third instance of the same shape: a migration adds a profile foreign key and nothing indexes it.
+  `20260828191625` covered `wb_records.created_by`, `20260902192917` covered
+  `wb_data_transfers.created_by`, and this one covers the `deleted_by` added by the 2026-09-04
+  soft-delete work. Worth watching for on the next migration that references `profiles`.
+
+- Database-only, so no redeploy: production stays on `15e5bd9`.
+
+- Not fixed, and not fixable from here: Supabase Auth leaked-password protection is still
+  disabled. It is a project Auth setting with no migration or MCP surface -- it has to be enabled
+  in the dashboard under Authentication, and it is the one remaining WARN-level security advisor
+  finding that is actually actionable.
+
 ## 2026-09-09 clearing a workspace log reaches the import & export rows
 
 - Released as `15e5bd9` in deployment `dpl_GxMDMnou5RPXnedoYzjthfJZupAj`, READY on

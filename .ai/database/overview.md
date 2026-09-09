@@ -1,6 +1,6 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-09-09T00:05:53.763786Z.
+The full machine-readable Supabase catalog was refreshed through 2026-09-09T02:45:24.160499Z.
 The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
 
@@ -21,6 +21,17 @@ the table. Notification inserts retain modern company/profile rows and the vendo
 shape, but every cross-recipient task notification is now tied to its creator, task company, and
 an active recipient in that company. Legacy self-notifications cannot be redirected into another
 profile's inbox through UPDATE.
+
+## 2026-09-09 wb_records.deleted_by gets its covering index
+
+Migration `20260909130000_add_wb_records_deleted_by_index.sql` adds `wb_records_deleted_by_idx`,
+live as `20260909024436`. Without it, deleting or reassigning a profile had to sequentially scan
+`wb_records` to prove nothing still referenced it, and so did any "what did this person delete"
+lookup. The live performance advisor now reports zero unindexed foreign keys.
+
+Plain `create index` rather than `concurrently`, matching `20260828191625` and `20260902192917`:
+the table is 156 rows / 400 kB, so the exclusive lock is milliseconds, and `concurrently` cannot
+run inside the transaction the migration runner uses.
 
 ## 2026-09-09 wb_data_transfers becomes clearable
 
@@ -97,8 +108,8 @@ reconciliation.
 - Public tables/views: 100
 - RLS policies: 313
 - Storage buckets: 6
-- Applied migration ledger entries: 182
-- Latest live ledger entry: `20260909000308_wb_data_transfers_clearable`
+- Applied migration ledger entries: 183
+- Latest live ledger entry: `20260909024436_add_wb_records_deleted_by_index`
 
 ## Operational-workspace identity
 
