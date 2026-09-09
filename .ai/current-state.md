@@ -2,6 +2,36 @@
 
 Captured through 2026-09-04T02:03:13.925881+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
+## 2026-09-09 clearing a workspace log reaches the import & export rows
+
+- `20260909120000_wb_data_transfers_clearable.sql` is applied to live as version
+  `20260909000308`, verified against the catalog: `wb_data_transfers` carries a DELETE policy
+  (`wb transfers clear`), RLS on, and still no UPDATE policy. The snapshot was refreshed from live
+  in the same pass.
+
+- "Clear log" on Configure workspace emptied `workspace.activity` only. The workspace activity
+  view merges three sources -- feed posts, that array, and `wb_data_transfers` rows through
+  `wbTransferActivity` -- so clearing left every export and import line on screen. The button
+  reported a clear the screen contradicted.
+
+- `public.wb_data_transfers` is no longer strictly append-only. DELETE is granted to
+  `workspaces.manage` with `direction <> 'cleared'` in the USING clause; UPDATE is still refused
+  and explicitly revoked. See [decisions](decisions.md) for why that trade changed.
+
+- Clearing writes one `direction = 'cleared'` tombstone per app that had rows, carrying the count
+  removed, so each app's Import & Export tab records what was there. Tombstones are not deletable,
+  so clearing twice leaves two of them.
+
+- A refused delete abandons the whole clear rather than emptying the activity array alone, which
+  would reproduce the inconsistency by a second route.
+
+- Checking live before writing the migration found `authenticated` still holding the UPDATE,
+  DELETE and TRUNCATE grants the table was created with -- the 2026-08-29 migration only ever
+  ADDED privileges. UPDATE and DELETE were inert behind RLS. TRUNCATE was not: it bypasses row
+  level security, so the `direction <> 'cleared'` clause protecting the tombstones would not have
+  applied to it. All three are now revoked. PostgREST never issues TRUNCATE, so nothing in the
+  product regressed.
+
 ## 2026-09-09 remaining code-review closure
 
 - Released as `285d133` in deployment `dpl_3HpnJX4DCSSaUN75oEGfFbpf1aoo`, READY on

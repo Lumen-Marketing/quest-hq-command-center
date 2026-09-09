@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { clearableCount, clearedActivity, logStamp, matchBuilderWorkspace } from '../src/workspace/activity-log.js';
+// Its own module so that main.js can reach it lazily: activity-log.js is a static import of
+// main.js, so anything living there is downloaded by every session whether or not a log is
+// ever cleared.
+import {
+  clearWorkspaceTransfers, clearableTransferCount, clearableTransfers, clearedTransferRows,
+} from '../src/workspace/transfer-clear.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
@@ -47,6 +53,202 @@ test('the count survives a workspace with no log at all', () => {
   assert.equal(clearableCount({}), 0);
   assert.equal(clearableCount({ activity: 'nonsense' }), 0);
   assert.equal(clearableCount({ activity: [1, 2] }), 2);
+});
+
+// --- the import & export rows -------------------------------------------------------------
+//
+// "Clear log" used to empty workspace.activity and stop. The activity view merges three sources
+// -- feed posts, that array, and wb_data_transfers rows -- so every "Exported 12 records from
+// Prospecting" line survived the clear and the screen looked barely touched.
+
+const TRANSFERS = [
+  { id: 'r1', workspace_id: 'ws-uuid', app_id: 'app-a', direction: 'export' },
+  { id: 'r2', workspace_id: 'ws-uuid', app_id: 'app-a', direction: 'import' },
+  { id: 'r3', workspace_id: 'ws-uuid', app_id: 'app-b', direction: 'export' },
+  { id: 'r4', workspace_id: 'other', app_id: 'app-c', direction: 'export' },
+];
+
+test('only this workspace’s rows are counted', () => {
+  assert.equal(clearableTransferCount(TRANSFERS, 'ws-uuid'), 3);
+  assert.equal(clearableTransferCount(TRANSFERS, 'other'), 1);
+  assert.equal(clearableTransferCount(TRANSFERS, 'nobody'), 0);
+});
+
+test('a workspace with no database id clears nothing rather than everything', () => {
+  // A legacy `ws-<companyId>` document maps to '' -- which must not be read as "match rows whose
+  // workspace_id is falsy" or as a wildcard.
+  assert.equal(clearableTransferCount(TRANSFERS, ''), 0);
+  assert.equal(clearableTransferCount(TRANSFERS, null), 0);
+  assert.equal(clearableTransferCount(undefined, 'ws-uuid'), 0);
+});
+
+test('tombstones are not counted, so clearing twice does not re-report the first clear', () => {
+  const withTomb = [...TRANSFERS, { id: 'r5', workspace_id: 'ws-uuid', app_id: 'app-a', direction: 'cleared', record_count: 3 }];
+  assert.equal(clearableTransferCount(withTomb, 'ws-uuid'), 3, 'still the three real transfers');
+});
+
+test('rows are grouped by app, because the tab that shows them belongs to one app', () => {
+  const byApp = clearableTransfers(TRANSFERS, 'ws-uuid');
+  assert.deepEqual([...byApp.entries()].sort(), [['app-a', 2], ['app-b', 1]]);
+});
+
+test('one tombstone per app, carrying that app’s own count', () => {
+  // A single workspace-level tombstone would leave every app's Import & Export tab reading
+  // "Nothing has moved yet" -- indistinguishable from an app nobody ever exported.
+  const rows = clearedTransferRows(TRANSFERS, { companyId: 'c1', workspaceId: 'ws-uuid', actorId: 'u1' });
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((r) => r.app_id).sort(), ['app-a', 'app-b']);
+  assert.ok(rows.every((r) => r.direction === 'cleared' && r.company_id === 'c1' && r.workspace_id === 'ws-uuid'));
+  assert.equal(rows.find((r) => r.app_id === 'app-a').record_count, 2);
+  assert.equal(rows.find((r) => r.app_id === 'app-b').record_count, 1);
+});
+
+test('an unknown actor is omitted rather than written as null over the FK', () => {
+  const [row] = clearedTransferRows(TRANSFERS, { companyId: 'c1', workspaceId: 'ws-uuid', actorId: null });
+  assert.ok(!('created_by' in row));
+});
+
+test('the clear entry names both counts, and stays short when there are no transfers', () => {
+  const both = clearedActivity({ activity: [1, 2, 3] }, { actorName: 'Rom', at: 'x', id: 'y', transfersRemoved: 4 });
+  assert.match(both[0].text, /Rom cleared the log \(3 entries and 4 entries of import & export history removed\)\./);
+  assert.equal(both[0].transfersRemoved, 4);
+  // Unchanged wording when nothing was transferred, which is the common case.
+  const only = clearedActivity({ activity: [1, 2, 3] }, { actorName: 'Rom', at: 'x', id: 'y' });
+  assert.match(only[0].text, /Rom cleared the activity log \(3 entries removed\)\./);
+});
+
+test('a half-done clear is refused rather than left half-done', () => {
+  // The exact state this change exists to remove, reachable a second way: activity emptied,
+  // transfer rows still there. So a database refusal abandons the whole thing.
+  const body = fn('wbClearWorkspaceActivity');
+  assert.match(body, /const transfersRemoved = await wbClearWorkspaceTransfers\(m\.companyId, workspace\);/);
+  assert.match(body, /if \(transfersRemoved === null\) \{/);
+  assert.ok(
+    body.indexOf('transfersRemoved === null') < body.indexOf('workspace.activity = clearedActivity'),
+    'the transfer clear must gate the activity clear, not follow it',
+  );
+});
+
+// The clear itself is now runnable rather than only readable: it takes its client and its state
+// as arguments, so these drive it instead of scanning main.js for the shape of it.
+
+const OPS = '11111111-2222-3333-4444-555555555555';
+const LIVE = [
+  { id: 'r1', workspace_id: OPS, app_id: 'app-a', direction: 'export' },
+  { id: 'r2', workspace_id: OPS, app_id: 'app-a', direction: 'import' },
+  { id: 'r3', workspace_id: OPS, app_id: 'app-b', direction: 'export' },
+  { id: 'r4', workspace_id: 'other-ws', app_id: 'app-c', direction: 'export' },
+  { id: 'r5', workspace_id: OPS, app_id: 'app-a', direction: 'cleared', record_count: 9 },
+];
+
+// Records what was asked of it and answers with whatever the test wants.
+function fakeClient({ insertError = null, deleteError = null } = {}) {
+  const calls = { inserted: null, deleteFilters: {} };
+  return {
+    calls,
+    from() {
+      const q = {
+        insert(rows) { calls.inserted = rows; return q; },
+        select: () => Promise.resolve(insertError
+          ? { error: insertError, data: null }
+          : { error: null, data: (calls.inserted || []).map((row, i) => ({ ...row, id: `t${i}` })) }),
+        delete() { calls.deleted = true; return q; },
+        eq(col, val) { calls.deleteFilters[col] = val; return q; },
+        in(col, val) { calls.deleteFilters[col] = val; return Promise.resolve({ error: deleteError }); },
+      };
+      return q;
+    },
+  };
+}
+
+test('it removes this workspace’s transfers and reports the count', async () => {
+  const state = { wbTransfers: [...LIVE] };
+  const client = fakeClient();
+  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
+  assert.equal(removed, 3, 'the three export/import rows, not the tombstone and not another workspace');
+});
+
+test('the delete is scoped to the workspace and never aimed at a tombstone', async () => {
+  const state = { wbTransfers: [...LIVE] };
+  const client = fakeClient();
+  await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
+  assert.equal(client.calls.deleteFilters.workspace_id, OPS);
+  assert.deepEqual(client.calls.deleteFilters.direction, ['export', 'import']);
+});
+
+test('the tombstone is written before the rows are deleted', async () => {
+  // This order over-reports on failure -- a clear that claims more than it did, with the rows
+  // still present to contradict it. The other order loses the rows silently.
+  const state = { wbTransfers: [...LIVE] };
+  const client = fakeClient({ deleteError: { message: 'refused' } });
+  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
+  assert.equal(removed, null, 'a refused delete is a refused clear');
+  assert.ok(client.calls.inserted, 'and the tombstone was already attempted');
+  assert.equal(state.wbTransfers.length, LIVE.length, 'nothing was removed locally either');
+});
+
+test('a refused insert clears nothing at all', async () => {
+  const state = { wbTransfers: [...LIVE] };
+  const client = fakeClient({ insertError: { message: 'refused' } });
+  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
+  assert.equal(removed, null);
+  assert.ok(!client.calls.deleted, 'and it never reached the delete');
+});
+
+test('the visible state keeps the tombstones and drops the rest', async () => {
+  const state = { wbTransfers: [...LIVE] };
+  const client = fakeClient();
+  await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' });
+  const ids = state.wbTransfers.map((r) => r.id).sort();
+  assert.ok(ids.includes('r4'), 'another workspace is untouched');
+  assert.ok(ids.includes('r5'), 'the existing tombstone survives');
+  assert.ok(!ids.some((id) => ['r1', 'r2', 'r3'].includes(id)), 'the cleared rows are gone without a reload');
+  assert.equal(state.wbTransfers.filter((r) => r.direction === 'cleared').length, 3, 'one new tombstone per app, plus the old one');
+});
+
+test('a legacy ws-<companyId> document clears nothing and reports no failure', async () => {
+  // It maps to '', so there is no workspace row its rows could belong to.
+  const state = { wbTransfers: [...LIVE] };
+  const client = fakeClient();
+  const removed = await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: 'ws-acme-co' }, actorId: 'u1' });
+  assert.equal(removed, 0, '0 means nothing to do; null would abandon the activity clear too');
+  assert.ok(!client.calls.inserted, 'and it wrote no tombstone for a workspace that does not exist');
+});
+
+test('a workspace that has never transferred anything writes no tombstone', async () => {
+  const state = { wbTransfers: [{ id: 'r5', workspace_id: OPS, app_id: 'app-a', direction: 'cleared' }] };
+  const client = fakeClient();
+  assert.equal(await clearWorkspaceTransfers({ client, state, companyId: 'c1', workspace: { id: `ws-${OPS}` }, actorId: 'u1' }), 0);
+  assert.ok(!client.calls.inserted, 'clearing an already-cleared log is a no-op, not a second tombstone');
+});
+
+test('the round trip is fetched on demand, not carried in the entry chunk', () => {
+  // The bundle budget refuses a raise, so this has to stay out of main.js. Only the four lines
+  // that decide whether there is a live session to talk to live there.
+  const body = fn('wbClearWorkspaceTransfers');
+  assert.match(body, /await import\('\.\/workspace\/transfer-clear\.js'\)/);
+  const entry = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(entry, /^import .*transfer-clear\.js';$/m, 'a static import would defeat the point');
+  assert.doesNotMatch(entry, /^import .*ops-workspace-id\.js';$/m);
+  assert.match(body, /if \(!client\) return 0;/, 'a local session never loads it at all');
+});
+
+test('the feed shows the clear once, not once per app', () => {
+  // wbTransferActivity renders transfer rows into the workspace feed. Tombstones there would
+  // report one clear as N lines, on top of the activity entry that already says it.
+  const body = fn('wbTransferActivity');
+  assert.match(body, /\.filter\(\(row\) => row\.direction !== 'cleared'\)/);
+});
+
+test('the Import & Export tab renders a tombstone as a clear, not as an import', () => {
+  const tab = readFileSync(new URL('../src/workspace/transfer-log.js', import.meta.url), 'utf8');
+  // Without this branch `out = direction === 'export'` is false for a tombstone and it paints
+  // as an Import of N records -- the opposite of what happened.
+  assert.match(tab, /if \(row\.direction === 'cleared'\) \{/);
+  assert.match(tab, /Earlier import &amp; export history was cleared/);
+  // A row count, deliberately not labelled "records": no records were removed from the app.
+  assert.match(tab, /\$\{count\} \$\{count === 1 \? 'entry' : 'entries'\}/);
+  assert.doesNotMatch(tab, /This log cannot be edited or removed/, 'the note has to stop claiming that');
 });
 
 // --- what it must not reach -------------------------------------------------------------

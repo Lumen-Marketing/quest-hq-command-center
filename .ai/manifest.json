@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-09T02:54:49.9924892+08:00",
-  "generated_from_commit": "285d133bd39fd9271f5420030395a486a3f3c9b5",
+  "generated_at": "2026-09-09T00:05:53.763786+00:00",
+  "generated_from_commit": "739e07460a583078043d11d9f169813fdd499185",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "285d133bd39fd9271f5420030395a486a3f3c9b5",
-    "latest_migration": "20260908184942_add_form_upload_intent_company_index.sql"
+    "main_commit_at_capture": "739e07460a583078043d11d9f169813fdd499185",
+    "latest_migration": "20260909120000_wb_data_transfers_clearable.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-09-08T18:50:43.354578+00:00",
+    "supabase_verified_at": "2026-09-09T00:05:53.763786+00:00",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260908185007",
-      "name": "add_form_upload_intent_company_index"
+      "version": "20260909000308",
+      "name": "wb_data_transfers_clearable"
     },
     "vercel_verified_at": "2026-09-09T02:54:49.9924892+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",

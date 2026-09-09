@@ -14276,11 +14276,20 @@ function wbFeedBumpedAt(entry) {
  * somebody has since deleted has nothing left to name.
  */
 function wbTransferActivity(companyId, workspace) {
+  // The bare replace rather than opsWorkspaceId(): this is a render path, so it cannot await the
+  // lazy module, and it only ever compares the result against rows it already has. A malformed id
+  // matches nothing, which is the same answer. Anything HANDED to Postgres uses the validated
+  // mapping instead -- see wbClearWorkspaceTransfers.
   const opsId = String(workspace?.id || '').replace(/^ws-/, '');
   if (!opsId) return [];
   const appName = (appId) => (workspace.apps || []).find((a) => String(a.id) === String(appId))?.name || '';
   return (state.wbTransfers || [])
     .filter((row) => String(row.workspace_id) === opsId)
+    // Tombstones are not transfers, and the feed already carries the clear: wbClearWorkspaceActivity
+    // writes one activity entry naming both counts. Rendering these here as well would report the
+    // same clear once per app that happened to have rows. The app's Import & Export tab is where
+    // they belong, because that is the table they account for.
+    .filter((row) => row.direction !== 'cleared')
     .map((row) => {
       const name = appName(row.app_id);
       if (!name) return null;
@@ -18772,16 +18781,56 @@ async function wbClearWorkspaceActivity(button) {
     if (!auth.ok) { m.error = auth.error; render(); return; }
   }
 
+  // The import & export rows go first, and a failure here abandons the whole clear.
+  //
+  // Deliberately NOT fire-and-forget, unlike logTransfer: an export is already done by the time
+  // its row is written, so losing the note is the lesser harm, but a clear that half-succeeded
+  // leaves the activity array empty and the transfer rows in place -- which is precisely the
+  // state this whole change exists to fix, arrived at a second way. Better to clear nothing and
+  // say so.
+  const transfersRemoved = await wbClearWorkspaceTransfers(m.companyId, workspace);
+  if (transfersRemoved === null) {
+    m.error = 'The import & export log could not be cleared, so nothing was cleared. Try again.';
+    render();
+    return;
+  }
+
   workspace.activity = clearedActivity(workspace, {
     actorName: actorName(),
     at: new Date().toISOString(),
     id: wbUid(),
+    transfersRemoved,
   });
   wbSave(m.companyId);
   // Back to the workspace modal the clear was started from, with its draft intact.
   state.builderModal = m.returnTo ? { ...m.returnTo } : null;
-  showToast('Activity log cleared.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
+  showToast(
+    transfersRemoved
+      ? `Log cleared, including ${transfersRemoved} import & export ${transfersRemoved === 1 ? 'entry' : 'entries'}.`
+      : 'Activity log cleared.',
+    isLiveSupabaseSession() ? 'live' : 'local',
+    'Workspaces',
+  );
   render();
+}
+
+/**
+ * Delete this workspace's export and import rows and leave a tombstone per app.
+ *
+ * Returns how many rows went, or null if the database refused; the caller treats null as "clear
+ * nothing", so the two logs cannot drift apart. A local demo session has no table to clear and
+ * returns 0 -- nothing failed, there was simply nothing there.
+ *
+ * The body is in ./workspace/transfer-clear.js and fetched on demand. Only these lines are in the
+ * entry chunk, because nothing here is reachable until somebody presses Clear log in a dialog.
+ */
+async function wbClearWorkspaceTransfers(companyId, workspace) {
+  const client = isLiveSupabaseSession() ? createSupabaseClient() : null;
+  if (!client) return 0;
+  const { clearWorkspaceTransfers } = await import('./workspace/transfer-clear.js');
+  return clearWorkspaceTransfers({
+    client, state, companyId, workspace, actorId: activeSession()?.profile?.id || null,
+  });
 }
 
 function openWbWorkspaceModal(companyId, editId) {

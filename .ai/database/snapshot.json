@@ -12605,6 +12605,13 @@
    "permissive": "PERMISSIVE"
   },
   {
+   "name": "wb transfers clear",
+   "roles": "{authenticated}",
+   "table": "wb_data_transfers",
+   "command": "DELETE",
+   "permissive": "PERMISSIVE"
+  },
+  {
    "name": "wb transfers insert",
    "roles": "{authenticated}",
    "table": "wb_data_transfers",
@@ -15254,9 +15261,13 @@
   {
    "name": "add_form_upload_intent_company_index",
    "version": "20260908185007"
+  },
+  {
+   "name": "wb_data_transfers_clearable",
+   "version": "20260909000308"
   }
  ],
- "captured_at": "2026-09-08T18:50:43.354578+00:00",
+ "captured_at": "2026-09-09T00:05:53.763786+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",

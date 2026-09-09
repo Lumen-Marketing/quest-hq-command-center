@@ -2036,6 +2036,27 @@ somebody can edit afterwards is not a log. Writing it is fire-and-forget -- the 
 already happened by the time the row is written, and failing the download because the note about
 it did not save would be the wrong trade.
 
+**Amended 2026-09-09 (`20260909120000_wb_data_transfers_clearable.sql`).** The DELETE half of that
+rule was wrong in practice and has been replaced; UPDATE remains impossible and permanent.
+
+"Clear log" on Configure workspace emptied `workspace.activity` and nothing else, but the
+workspace activity view is a merge of three sources -- feed posts, that array, and these rows via
+`wbTransferActivity`. Clearing therefore left every "Exported 12 records from Prospecting" line
+exactly where it was: the button reported a clear the screen contradicted.
+
+The append-only rule was defending against a different threat -- history quietly edited so that an
+absence of evidence looks like a quiet week. What actually defends against that is not "nothing can
+ever be removed", it is "nothing can be removed without saying so", which is how the activity log
+has always worked. So DELETE is now granted on the same terms as the button: `workspaces.manage`
+only, and `direction <> 'cleared'` in the USING clause so no amount of clearing can erase the
+record that a clear happened. The client writes one `direction = 'cleared'` tombstone per app that
+had rows, carrying the count it removed, so each app's Import & Export tab says what was there
+rather than showing an empty table indistinguishable from an app nobody ever exported.
+
+Clearing is the one place that is deliberately NOT fire-and-forget: a refused delete abandons the
+whole clear, activity array included, because a half-done clear lands in exactly the inconsistent
+state this change exists to remove.
+
 Compatibility is data again, per 20260828040051: export was granted once to every role that can
 read records (it was ungated, so they could already take a copy -- this names a power rather than
 adding one), and import to every role that could create them.

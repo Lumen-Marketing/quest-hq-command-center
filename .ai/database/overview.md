@@ -1,6 +1,6 @@
 # Database overview
 
-The full machine-readable Supabase catalog was refreshed through 2026-09-08T18:27:01.140981Z.
+The full machine-readable Supabase catalog was refreshed through 2026-09-09T00:05:53.763786Z.
 The [machine-readable snapshot](snapshot.json) contains catalog metadata
 only; it has no production rows, auth-user records, storage object paths, or credentials.
 
@@ -21,6 +21,22 @@ the table. Notification inserts retain modern company/profile rows and the vendo
 shape, but every cross-recipient task notification is now tied to its creator, task company, and
 an active recipient in that company. Legacy self-notifications cannot be redirected into another
 profile's inbox through UPDATE.
+
+## 2026-09-09 wb_data_transfers becomes clearable
+
+Migration `20260909120000_wb_data_transfers_clearable.sql` adds `'cleared'` to the `direction`
+check constraint, adds a `direction = 'cleared'` branch to the insert policy gated on
+`workspaces.manage`, and adds the table's first DELETE policy -- `workspaces.manage` and
+`direction <> 'cleared'`, so tombstones survive every clear. UPDATE is still unpolicied and is now
+explicitly revoked from `authenticated`.
+
+It also revokes the UPDATE, DELETE and TRUNCATE grants `authenticated` still held from the table's
+creation -- `20260829005613` only ever added privileges. TRUNCATE is the one that mattered: it
+bypasses row level security, so no USING clause, including the tombstone guard, applies to it.
+
+Applied to live as version `20260909000308` and verified against the catalog: the table carries
+`wb transfers clear` for DELETE, RLS on, and still no UPDATE policy. `snapshot.json` was refreshed
+from live in the same pass.
 
 ## 2026-09-03 foreign-key and policy advisor cleanup
 
@@ -78,14 +94,11 @@ reconciliation.
 
 ## Catalog summary
 
-- Public tables/views: 99
-- Foreign-key column relationships: 252
-- RLS policies: 312
-- Public functions: 82
-- Triggers: 105
+- Public tables/views: 100
+- RLS policies: 313
 - Storage buckets: 6
-- Applied migration ledger entries: 175
-- Latest live ledger entry: `20260903180057_tighten_profile_and_notification_boundaries`
+- Applied migration ledger entries: 182
+- Latest live ledger entry: `20260909000308_wb_data_transfers_clearable`
 
 ## Operational-workspace identity
 

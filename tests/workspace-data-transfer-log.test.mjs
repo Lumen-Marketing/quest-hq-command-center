@@ -12,6 +12,13 @@ const migration = readFileSync(
   new URL('../supabase/migrations/20260829005613_wb_data_transfers.sql', import.meta.url),
   'utf8',
 ).replace(/\r\n/g, '\n');
+// The follow-up that made the rows clearable. Read alongside the original rather than instead of
+// it: the two together are the current rule, and asserting only against the newer file would let
+// a re-added UPDATE policy in the older one pass unnoticed.
+const clearable = readFileSync(
+  new URL('../supabase/migrations/20260909120000_wb_data_transfers_clearable.sql', import.meta.url),
+  'utf8',
+).replace(/\r\n/g, '\n');
 
 test('the two transfer permissions are offered in the roles picker', () => {
   assert.match(main, /\['workspaces\.records\.export', 'Export app records'\]/);
@@ -64,10 +71,56 @@ test('writing the log needs the same permission as the act it records', () => {
   assert.match(migration, /direction = 'import' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.records\.import'\)/);
 });
 
-test('the log cannot be edited or erased afterwards', () => {
-  assert.doesNotMatch(migration, /create policy[^\n]*on public\.wb_data_transfers\s*\nfor (update|delete)/);
-  assert.match(migration, /grant select, insert on public\.wb_data_transfers to authenticated;/);
-  assert.doesNotMatch(migration, /grant[^\n]*(update|delete)[^\n]*wb_data_transfers/);
+test('the log cannot be edited, by anyone, ever', () => {
+  // UPDATE is the half of the append-only rule that never relaxed. A row that can be rewritten
+  // is a row that can be made to say an export was smaller or was somebody else's.
+  for (const sql of [migration, clearable]) {
+    assert.doesNotMatch(sql, /create policy[^\n]*on public\.wb_data_transfers\s*\nfor update/);
+    assert.doesNotMatch(sql, /grant[^\n]*\bupdate\b[^\n]*wb_data_transfers to/);
+  }
+  assert.match(clearable, /revoke update, truncate on public\.wb_data_transfers from authenticated;/);
+});
+
+test('TRUNCATE is revoked, because it is the one command RLS cannot see', () => {
+  // The 2026-08-29 migration only ever ADDED grants, so `authenticated` still held the TRUNCATE
+  // the table was created with -- verified against live. Truncate bypasses row level security
+  // entirely, so the `direction <> 'cleared'` clause that protects the tombstones does not apply
+  // to it, and a truncate would leave a table indistinguishable from one nobody ever used.
+  assert.match(clearable, /revoke update, truncate on public\.wb_data_transfers from authenticated;/);
+  // And the reason is written down, because "why is TRUNCATE in this list" is the question
+  // somebody will have when they next touch these grants.
+  assert.match(clearable, /bypasses row\n-- level security/);
+});
+
+test('erasing is possible now, but only downwards and only with a manager', () => {
+  // 20260829005613 had no DELETE policy at all. That changed: clearing a workspace log has to
+  // reach these rows, because the activity view merges them in and clearing around them left the
+  // screen looking untouched. What did NOT change is that a removal has to announce itself.
+  assert.match(clearable, /create policy "wb transfers clear" on public\.wb_data_transfers\nfor delete to authenticated/);
+  assert.match(clearable, /app_private\.has_workspace_permission\(workspace_id, 'workspaces\.manage'\)/);
+  assert.match(clearable, /grant delete on public\.wb_data_transfers to authenticated;/);
+});
+
+test('a tombstone cannot be deleted by the thing that writes it', () => {
+  // The whole safety property. Without this clause, clearing twice would erase the evidence of
+  // the first clear, and a table cleared n times would be indistinguishable from an unused one.
+  const policy = clearable.slice(clearable.indexOf('create policy "wb transfers clear"'));
+  assert.match(policy.slice(0, policy.indexOf(');')), /direction <> 'cleared'/);
+});
+
+test('writing a tombstone needs manage, not merely export', () => {
+  // Otherwise a role allowed to export could declare the log cleared, which is an administrative
+  // claim rather than a transfer.
+  assert.match(clearable, /direction = 'cleared' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.manage'\)/);
+  // And the original two branches survive the policy being replaced.
+  assert.match(clearable, /direction = 'export' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.records\.export'\)/);
+  assert.match(clearable, /direction = 'import' and app_private\.has_workspace_permission\(workspace_id, 'workspaces\.records\.import'\)/);
+});
+
+test('the direction constraint admits the tombstone, or every insert would fail', () => {
+  assert.match(clearable, /check \(direction in \('export', 'import', 'cleared'\)\)/);
+  // Dropped by name first: the original was an inline CHECK, so Postgres named it for us.
+  assert.match(clearable, /drop constraint if exists wb_data_transfers_direction_check/);
 });
 
 test('compatibility is granted as data, not as an alias', () => {

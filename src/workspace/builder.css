@@ -1459,6 +1459,10 @@ html.wb-lb-locked, html.wb-lb-locked body { overflow: hidden; }
 .wb-tx-dir { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; white-space: nowrap; }
 .wb-tx-dir.out { color: var(--warning, #b45309); }
 .wb-tx-dir.in { color: var(--success, #16a34a); }
+/* A clear is not a direction -- nothing moved. Muted rather than coloured, so a table of real
+ * transfers still reads as transfers and the tombstone reads as the boundary it is. */
+.wb-tx-dir.cleared { color: var(--muted, #6b7280); font-weight: 600; }
+.wb-tx-row.cleared td { background: var(--surface-2, #f6f5f2); font-style: italic; }
 
 /* The calculation TABLE under a list.
  *

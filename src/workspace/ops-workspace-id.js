@@ -2,10 +2,16 @@
 //
 // Its own module, and a deliberately tiny one, because of where it is imported FROM.
 // builder-core.js is the natural home -- it builds `ws-${workspace.id}` from the other
-// direction -- but main.js imports builder-core statically, so anything added there lands in the
-// entry chunk that every session downloads. The only callers are lazy: the record page, Quick
-// Create, and the intake link manager. So it lives where they can reach it without the entry
-// paying for a function it never calls.
+// direction -- but builder-core carries the whole App Builder with it, so putting this there
+// would drag that weight into anything that only wanted to map an id. Here it stays a function
+// on its own, and the lazy callers (the record page, Quick Create, the intake link manager)
+// reach it without pulling in a module they do not otherwise need.
+//
+// main.js reaches it too, through `await import(...)` inside wbClearWorkspaceTransfers rather
+// than a static import: a static one would pull it into the entry chunk, which the bundle budget
+// refuses. wbTransferActivity, next to it, keeps a bare `replace(/^ws-/, '')` because it is a
+// render path that cannot await -- and it only compares the result against rows it already holds,
+// where a malformed id matches nothing. The validated mapping is for ids being handed to Postgres.
 
 /**
  * The operational workspace a builder id points at, or '' when it points at nothing.
