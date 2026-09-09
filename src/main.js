@@ -31300,7 +31300,12 @@ function onDocumentSubmit(event) {
       return;
     }
     state.loginError = '';
-    startDemoMode(form.return_url || appHref(companyPath('jobs', {}, defaultCompanyId())));
+    // startLocalSession, not startDemoMode. This form validates the configured local credentials
+    // and then, until now, threw the result away and opened the read-only demo instead -- the same
+    // session the "Open read-only demo" button beside it gives anyone with no credentials at all.
+    // So the password gate protected nothing, buildLocalSession() was unreachable from the UI, and
+    // a developer who signed in correctly still could not write anything locally.
+    startLocalSession(form.return_url || appHref(companyPath('jobs', {}, defaultCompanyId())));
     return;
   }
 
@@ -31928,6 +31933,32 @@ async function signOut() {
   state.dataLoaded = false;
   state.everLoaded = false;
   navigate('/login', { replace: true });
+}
+
+/**
+ * Sign in to the DEV-only local session the local-login form gates on.
+ *
+ * Parallel to startDemoMode below, and deliberately so: the only difference is which session is
+ * built. The demo is a read-only visitor with one company; this is the `local-basic` developer
+ * with three, and `isReadOnlyDemo()` is false for it, so resetDemoWorkspaceData reads and persists
+ * the seeded local lists rather than serving immutable fallbacks. That is the entire point of it --
+ * a local environment you can actually write to.
+ *
+ * Unreachable in production by construction: the only caller checks CONFIG.localLoginEnabled,
+ * which is `import.meta.env.DEV && VITE_LOCAL_LOGIN_ENABLED === 'true'`, so a `vite build` cannot
+ * turn it on however the env is set.
+ */
+function startLocalSession(returnUrl = '') {
+  state.loginError = '';
+  state.authMessage = '';
+  state.session = buildLocalSession();
+  resetDemoWorkspaceData();
+  state.activeCompanyId = activeCompanyId();
+  localStorage.setItem(COMPANY_KEY, state.activeCompanyId);
+  writeJson(SESSION_KEY, state.session);
+  state.dataLoaded = false;
+  state.dataLoading = false;
+  navigate(safeReturnUrl(returnUrl || appHref(companyPath('jobs', {}, activeCompanyId()))), { replace: true });
 }
 
 function startDemoMode(returnUrl = '') {
