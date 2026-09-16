@@ -2,6 +2,194 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-15 Thirty sample apps for the Quest App Market
+
+- "Create 10 applications that I can install or use for my CRM … as a sample product on the Quest
+  App Market; I will install it on specific workspaces and share it", then "10 apps for school
+  management learning", then "an apps for managing the store like the inventory, sales". Three
+  sets of `.questapp.json` files. They are meant for **any** company, so
+  they do not build on the Questroofing Prospecting → Underwriting → Sales → Jobs apps. The owner
+  installs each one with Add app → **Install from a file**, then presses **Share app** so it lists
+  in the Market. A first draft built around the roofing funnel was rejected and removed.
+- **`docs/apps/market/crm`**: Client Accounts (Contacts), Support Tickets (Tickets), Client
+  Onboarding (Projects, Milestones list), Appointments (Calendar), Meeting Notes (Documents, Action
+  items list), Contracts & Renewals (Documents), Invoice Tracker (Invoices), Product Catalog
+  (Inventory), Customer Feedback (Records), Marketing Campaigns (Projects).
+- **`docs/apps/market/school`**: Students (Contacts), Admissions (Records), Attendance (Calendar,
+  Absences list), Fees & Payments (Invoices), Staff Directory (Contacts), Courses & Classes
+  (Projects, Units list), Assignments (Tasks), Gradebook (Records), Timetable (Calendar), Parent
+  Communication (Tickets). Grade, Subject and Term use identical option lists across the set.
+- **`docs/apps/market/store`** (added 2026-09-16, "an apps for managing the store like the
+  inventory, sales"): Products (Inventory), Sales (Invoices, Line items list), Purchase Orders
+  (Inventory, Line items list), Suppliers (Contacts), Stock Counts (Inventory, Variances list),
+  Customers & Loyalty (Contacts), Returns & Refunds (Tickets), Register Close (Records), Staff
+  Shifts (Calendar), Promotions (Projects). Department, payment method, channel and payment-terms
+  options are identical wherever they appear, pinned by a test. Products marks itself Low stock
+  below its reorder point and Out of stock at zero; loyalty tiers climb at 500 / 1,000 / 2,500;
+  Register Close sets Short or Over from the drawer count. Guarded formulas again: an uncounted
+  drawer is not short, an uncounted shelf is not low, a count with nothing counted yet has no
+  variance, a shift not yet worked has no overtime, and a promotion with no target is not behind it.
+- **Type is the Market category**, so every app uses one of the ten create-dialog types. Each app
+  stands alone: no button, relationship, rollup or shipped record. The Market installs structure
+  only, and a destination app id cannot exist in the installing company. Descriptions are written
+  for Market browsers. Every icon is in the committed Tabler subset. Contact links use the
+  `company_contact` field.
+- **Rules that do real work.** Customer Feedback sorts a 0–10 score into Promoter/Passive/Detractor
+  with four numeric rules (`>= 9`, `== 7`, `== 8`, `<= 6`). Product Catalog goes Low stock below its
+  reorder point and Out of stock at zero, and the later rule wins. Overdue invoices and fees count
+  their reminders with `+1`. Support Tickets counts a Resolved → Open move as a reopen.
+- **Gradebook letter grades** come from eight numeric rules, because the formula grammar has no
+  conditional. A numeric rule fires only on entering its range, so rising rules run in ascending
+  order and falling rules in descending order. A test walks the grade up and down through every
+  boundary.
+- **Blank-record misfires, found and fixed before shipping.** An empty calculation reads 0, which
+  trips every "less than" rule the moment a record is created. A blank grade report became an F
+  needing intervention. A blank course was full. An assignment with no hand-ins yet was "below 70%",
+  and campaigns and onboardings with no budget were "over budget". Guarded formulas now render an
+  em dash until the deciding value exists: `… * {Exams %} / {Exams %}`, `… * {Capacity} /
+  {Capacity}`, `… * {Budget} / {Budget}`, `… * {Hours budgeted} / {Hours budgeted}`. The
+  hand-in rule became a stage rule on *Collecting — past due*.
+- **Tests.** `tests/app-bundles.test.mjs` now walks `docs/apps` recursively, so all thirty get the
+  generic importer checks (561 pass across all 42 files). The new `tests/market-app-bundles.test.mjs` has 30 tests and
+  runs the real `wbBuildInstalledApp`, `wbRunAutomations` and `wbCalcRaw` lifted from `src/main.js`.
+  Each app installs by Market and by file, twice, with nothing dangling. A blank record fires only
+  `created` rules. Every one of the 85 non-Gradebook automations fires. The arithmetic is pinned.
+  Eleven deliberate mutations each failed the intended test: the formula guards, reversed letter
+  rules, a drifting Grade or Department label, an off-Market type, a balance ignoring discount, a
+  profit counting the tax. One mutation — reversing the loyalty tier rules — passed, which was a
+  hole in the TEST, not the app: every step in it crossed one threshold at a time, and order only
+  decides a jump from nothing straight past several tiers. That case is now asserted.
+- **Three older bundles had icons with no glyph, and now cannot again.** The Tabler font is subset
+  to what `src/` references and `docs/apps` is not scanned, so **Leads** (`ti-target-arrow`),
+  **Proposals** (`ti-file-signature`) and **Sales Pipeline** (`ti-writing-sign`) installed with a
+  blank square where the app icon goes. `wbBuildInstalledApp` accepts any `ti-*` name, so nothing
+  warned. They now use `ti-target`, `ti-file-description` and `ti-chart-line` — all three in the
+  subset AND in the picker at `src/workspace/icon-sets.js`, whose names that file documents as
+  permanent. `tests/app-bundles.test.mjs` gained a per-bundle check that the icon has a glyph in
+  `src/tabler-icons.css`; the three original names and one invented one were each confirmed to fail
+  it. The alternative fix — teaching `scripts/icon-usage.mjs` to scan `docs/apps` and rebuilding the
+  font — was not taken: it needs the Python/fonttools toolchain, rewrites the shared woff2, and
+  still would not cover an icon in an app shared to the Market by another company.
+- Files and tests only: no migration, no client change, nothing installed, shared or deployed. Not
+  committed at the time of writing.
+
+## 2026-09-15 Every app in the Questbase App Market company was deleted
+
+- At the owner's request, all apps were removed from both workspaces of the `Questbase App Market`
+  company (`new`): **Main** — 1, A, Underwriting Sheet, Form, Smoke test, calc, test, plus two
+  linked pointers that already dangled (they named App Test apps that no longer existed); **App
+  Test** — Leads, Nurturing, Prospect, Test App. Thirteen entries, 137 field definitions. Both
+  workspaces remain active. The owner had deleted apps "2" and "3" in the product about eighteen
+  minutes earlier.
+- **Nothing outside the company depended on them.** `list_workspace_app_library` lists apps flagged
+  `shared` from every company, and none of these were shared, so the App Market library lost
+  nothing. No other company's document referenced any of the ids, and every app had zero
+  `wb_records` rows, live or binned.
+- Done the way the product's own `del-app` does it: removed from `workspace.apps`, one `Deleted app`
+  activity line per named app in the product's entry shape, attributed to the requesting owner.
+  Also removed both `type: 'app'` tiles, since with no apps left every app tile is dead; the two
+  non-app tiles in App Test were kept. As the product does, the `wb_data_transfers` (42) and
+  `wb_record_events` (4) history rows for these apps were left in place.
+- The write was conditional on the document's `updated_at`, the same optimistic check the client
+  uses, and re-asserted 13 apps and zero records inside the transaction. A browser tab that had the
+  company open keeps the old document in memory until it reloads; its next save conflicts and merges
+  under the server's copy, so the apps do not come back.
+- No backups existed for the company. A recovery copy of the removed apps and tiles was saved to the
+  session scratchpad only, so it is not durable. The canonical pipeline templates remain in
+  `docs/apps`.
+- Left untouched and outside the request: the company's Company Contacts card still carries three
+  test buttons (`+1`, `+2`, `+3`) and an in-flight panel that now target only deleted apps. They
+  fail gracefully ("That app has been deleted or moved") but are clutter.
+
+## 2026-09-16 Public intake links: every one of them was broken
+
+Three faults on the share-a-link panel, found from one screenshot of it.
+
+- **Every public link answered "This form is not available."** `loadLinkApp`
+  (`api/_lib/intake-db.js`) matched the builder document's workspace id against
+  `wb_intake_links.workspace_id` as written. They are never the same string: the document keys
+  workspaces `ws-<uuid>`, while the column is a uuid and holds the BARE one, because RLS is
+  decided from it (`opsWorkspaceId`). The lookup therefore missed on every link ever created,
+  and the endpoint reported the app as gone. Both sides now have the `ws-` prefix stripped
+  before comparing, so a row holding either spelling resolves.
+  - It shipped because `tests/wb-intake-api.test.mjs` put the BUILDER key in its link fixture,
+    so the fake agreed with the broken code. The fixture now uses the real shapes on both
+    sides (`WS_UUID` in the row, `ws-<uuid>` in the doc); with it corrected, 9 of the 17 tests
+    fail against the old comparison.
+- **"Link created." was drawn underneath the form below it**, with the copy button and the
+  passcode unreachable. `.intake-manage .modal-body` is a flex column with a height to fit in,
+  and such a column shrinks its children before it scrolls them: `.form-message` carries a
+  `min-height: 20px` and nothing else, so the block was squashed from ~90px to 20px and its
+  text spilled out while the form was laid out where the squashed box ended. Fixed with
+  `flex-shrink: 0` on the body's children — not a z-index, which would only have hidden it.
+- **A private link had nowhere to set a passcode.** One was generated and shown once, in the
+  block the fault above had buried — so in practice a private link was unusable. There is now
+  an optional passcode box, revealed by the Private radio through CSS `:has()` rather than a
+  re-render (which would discard the other fields). Typed or generated, it goes through
+  `normalizePasscode` and the same `hashPasscode` call, so it matches what the public gate
+  normalizes the visitor's entry to; a typed one shorter than `PASSCODE_LENGTH` is refused.
+  Only the hash is stored, as before.
+
+Covered by `tests/intake-share-link-modal.test.mjs` (11) and `tests/wb-intake-api.test.mjs`
+(17). Not committed or deployed at the time of writing, and not exercised against the live
+site: `.ai/README.md` rules out a local server, so the fix for a link opening correctly is
+argued from the id shapes, not observed end to end.
+
+## 2026-09-16 All-apps grid on the workspace app strip
+
+- The app strip scrolls, so in a workspace with a dozen apps the far end is out of sight. A
+  grid button now sits between the strip and **Add app** (`wbWorkspaceHeader`, `src/main.js`)
+  and drops a panel under the bar showing every app at once, with a filter box, Escape and
+  click-away to dismiss. Activity is in the grid too — it rides inside the same scrolling
+  track, so it can be off-screen like any app — but it is not counted as one.
+- The panel is `src/workspace/all-apps.js`, fetched on first press like `topbar-drag.js`. It
+  draws itself by **cloning the strip's own tabs**, so the grid cannot disagree with the bar
+  (order after a drag, the open app, linked-app marks) and needs no workspace state. Clones
+  drop `data-wb-topbar-active` and `data-wb-app-id` so the reorder and scroll-into-view passes
+  do not find a second copy of every tab.
+- Built inline first, which put the entry chunk 385 gzip bytes over budget. Extracting it
+  brought the entry back under and cost 1.11 KB gzip in its own lazy chunk — the route
+  `scripts/bundle-budget-lib.mjs` asks for instead of a sixth ceiling raise.
+- Covered by `tests/workspace-all-apps-panel.test.mjs`. Not committed or deployed at the time
+  of writing, and not yet exercised in a browser: `.ai/README.md` rules out running a local
+  server, so the DOM behaviour (open, filter, dismiss) is guarded by source assertions only.
+
+## 2026-09-15 A rejected, empty company was deleted from production
+
+- Company `111` (created 2026-07-28, `terminal_status = 'rejected'` since 2026-09-14) was removed
+  at the owner's request. It kept appearing in the company switcher because it was the owner's
+  **currently open** company, and terminal companies stay visible in selectors only while open,
+  to avoid stranding the person in it. Switching away would also have hidden it; the owner asked
+  for it to be deleted instead.
+- It held only seeded configuration — task types and statuses, pipeline stages, the two system
+  roles, plugins, contact fields — plus 13 audit events, one owner membership and one workspace.
+  No contacts, company contacts, deals, jobs, tasks, App Builder records, files or messages.
+  The owner keeps five other active companies, so nobody was stranded.
+- Done through the app's own `delete_company_workspace` routine, run as the owner inside one
+  transaction that first re-verified the rejected status, the single membership and the absence of
+  business data. The two system roles were deleted first, while the owner membership still existed,
+  because `app_private.guard_system_role` refuses to delete Owner/Member for a non-owner and a
+  cascade does not guarantee memberships go last. `'111'` was also removed from the owner's
+  `profiles.company_ids`, which the client reads; the `sync_team_member_from_profile` trigger
+  carried that to `team_members`.
+- Verified after commit: no `companies` row, no profile or team member listing it, and zero rows
+  for it in any public table with a `company_id`. 13 companies remain. This was a data change, not
+  a schema change, so there is no migration and the catalog snapshot is unaffected.
+
+## 2026-09-15 Quest App Market sorted by category
+
+- The App Market (Add app → Quest App Market, `src/workspace/builder-modal.js`) now reads each
+  shared app's **Type** as its category. A row of category buttons under the search box — All,
+  then one per category present, each with a count — shows that category's apps; All lists every
+  app under its category title. Search narrows within the chosen category.
+- Order: the ten types the create dialog offers (Contacts … Custom, now one `WB_APP_TYPES` list),
+  then freehand types typed in Settings, alphabetically, then **Uncategorized** for apps with no
+  type. Types match without regard to case.
+- Client only: `list_workspace_app_library` already returns the app document minus items, so
+  `type` was there. No migration. Category icons were added to the Tabler subset.
+- Covered by `tests/app-market-categories.test.mjs`. Not yet committed or deployed at the time of
+  writing.
+
 ## 2026-09-10 QB-RV review implementation
 
 - Started from synchronized main `becc167`. No coworker branch or unrelated temporary folder was
