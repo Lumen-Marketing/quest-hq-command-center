@@ -1,0 +1,657 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Returns & Refunds",
+    "recordName": "Return",
+    "type": "Tickets",
+    "icon": "ti-arrow-back-up",
+    "color": "#e0552d",
+    "description": "Items coming back, and what happened to each one. Record the original receipt, why it came back and what condition it is in, then the outcome — refund, exchange, store credit, repair or declined. Net refund is the refund less any restocking fee, and every completed return asks the one question that keeps stock honest: was it put back on the shelf or written off?",
+    "fields": [
+      {
+        "id": "f-return",
+        "label": "Return",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Kettle — faulty — Rivera"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Return #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "RTN-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-customer",
+        "label": "Customer",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-receipt",
+        "label": "Original receipt #",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-saledate",
+        "label": "Sale date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-item",
+        "label": "Item",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-sku",
+        "label": "SKU",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-qty",
+        "label": "Quantity",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-reason",
+        "label": "Reason",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rr-faulty",
+              "label": "Faulty",
+              "color": "#dc2626"
+            },
+            {
+              "id": "rr-wrong",
+              "label": "Wrong item",
+              "color": "#d97706"
+            },
+            {
+              "id": "rr-notdescribed",
+              "label": "Not as described",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "rr-changed",
+              "label": "Changed their mind",
+              "color": "#2563eb"
+            },
+            {
+              "id": "rr-damaged",
+              "label": "Damaged in transit",
+              "color": "#e0552d"
+            },
+            {
+              "id": "rr-expired",
+              "label": "Expired or spoiled",
+              "color": "#0d9488"
+            },
+            {
+              "id": "rr-warranty",
+              "label": "Warranty claim",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-condition",
+        "label": "Condition",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cd-unopened",
+              "label": "Unopened",
+              "color": "#16a34a"
+            },
+            {
+              "id": "cd-resellable",
+              "label": "Opened — resellable",
+              "color": "#0891b2"
+            },
+            {
+              "id": "cd-notresellable",
+              "label": "Opened — not resellable",
+              "color": "#d97706"
+            },
+            {
+              "id": "cd-damaged",
+              "label": "Damaged",
+              "color": "#dc2626"
+            },
+            {
+              "id": "cd-faulty",
+              "label": "Faulty",
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-outcome",
+        "label": "Outcome",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "oc-refund",
+              "label": "Refund",
+              "color": "#16a34a"
+            },
+            {
+              "id": "oc-exchange",
+              "label": "Exchange",
+              "color": "#2563eb"
+            },
+            {
+              "id": "oc-credit",
+              "label": "Store credit",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "oc-repair",
+              "label": "Repair",
+              "color": "#d97706"
+            },
+            {
+              "id": "oc-declined",
+              "label": "Declined",
+              "color": "#dc2626"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rs-requested",
+              "label": "Requested",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "rs-review",
+              "label": "Under review",
+              "color": "#378ADD"
+            },
+            {
+              "id": "rs-approved",
+              "label": "Approved",
+              "color": "#0891b2"
+            },
+            {
+              "id": "rs-completed",
+              "label": "Completed",
+              "color": "#639922"
+            },
+            {
+              "id": "rs-declined",
+              "label": "Declined",
+              "color": "#E24B4A"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-handledby",
+        "label": "Handled by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-approvedby",
+        "label": "Approved by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-inwindow",
+        "label": "Within the return window",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-refund",
+        "label": "Refund amount",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-fee",
+        "label": "Restocking fee",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "As a positive amount"
+        }
+      },
+      {
+        "id": "f-net",
+        "label": "Net refund",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Refund amount} - {Restocking fee}"
+        }
+      },
+      {
+        "id": "f-method",
+        "label": "Refunded to",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pay-cash",
+              "label": "Cash",
+              "color": "#16a34a"
+            },
+            {
+              "id": "pay-card",
+              "label": "Card",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pay-wallet",
+              "label": "Mobile wallet",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pay-gift",
+              "label": "Gift card",
+              "color": "#db2777"
+            },
+            {
+              "id": "pay-credit",
+              "label": "Store credit",
+              "color": "#d97706"
+            },
+            {
+              "id": "pay-transfer",
+              "label": "Bank transfer",
+              "color": "#0891b2"
+            },
+            {
+              "id": "pay-split",
+              "label": "Split payment",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-restocked",
+        "label": "Put back on the shelf",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-writtenoff",
+        "label": "Written off",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-supplierclaim",
+        "label": "Claimed from the supplier",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-customersaid",
+        "label": "What the customer said",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-ournotes",
+        "label": "Our notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-photos",
+        "label": "Photos",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-return",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Return",
+          "fieldIds": [
+            "f-return",
+            "f-no",
+            "f-date",
+            "f-customer",
+            "f-receipt",
+            "f-saledate",
+            "f-inwindow"
+          ]
+        }
+      },
+      {
+        "id": "b-item",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Item",
+          "fieldIds": [
+            "f-item",
+            "f-sku",
+            "f-qty",
+            "f-reason",
+            "f-condition",
+            "f-photos"
+          ]
+        }
+      },
+      {
+        "id": "b-outcome",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Outcome",
+          "fieldIds": [
+            "f-outcome",
+            "f-status",
+            "f-handledby",
+            "f-approvedby"
+          ]
+        }
+      },
+      {
+        "id": "b-money",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Money",
+          "fieldIds": [
+            "f-refund",
+            "f-fee",
+            "f-net",
+            "f-method"
+          ]
+        }
+      },
+      {
+        "id": "b-stock",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What happened to the stock",
+          "fieldIds": [
+            "f-restocked",
+            "f-writtenoff",
+            "f-supplierclaim"
+          ]
+        }
+      },
+      {
+        "id": "b-words",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-customersaid",
+            "f-ournotes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-approved",
+        "name": "Approved — refund and restock",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "rs-approved"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A return was approved. Process the refund, then say whether the item went back on the shelf or was written off."
+          }
+        ]
+      },
+      {
+        "id": "a-declined",
+        "name": "Declined — explain it face to face",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "rs-declined"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A return was declined. Explain why to the customer and write the reason down here."
+          }
+        ]
+      },
+      {
+        "id": "a-notresellable",
+        "name": "Not resellable — claim or write it off",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-condition",
+          "value": "cd-notresellable"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This item cannot go back on the shelf. Claim it from the supplier if it was faulty, otherwise write it off in the next stock count."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-item",
+      "f-reason",
+      "f-outcome",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-reason",
+        "title": "By reason",
+        "fieldId": "f-reason",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-refund",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-refund"
+        }
+      },
+      {
+        "id": "w-qty",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-qty"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-reason",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-reason"
+        }
+      },
+      {
+        "id": "w-outcome",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-outcome"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,509 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Customer Feedback",
+    "recordName": "Response",
+    "type": "Records",
+    "icon": "ti-message-circle",
+    "color": "#db2777",
+    "description": "Collect what clients say about you and act on it. Record each survey answer, call or review with a 0–10 recommendation score; the app sorts it into Promoter, Passive or Detractor for you. Detractors are flagged for a follow-up, and clients happy to be quoted are marked so marketing can use their words.",
+    "fields": [
+      {
+        "id": "f-response",
+        "label": "Response",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Rivera — March service"
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Client",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-received",
+        "label": "Received on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-source",
+        "label": "Source",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "so-survey",
+              "label": "Survey",
+              "color": "#2563eb"
+            },
+            {
+              "id": "so-email",
+              "label": "Email",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "so-call",
+              "label": "Phone call",
+              "color": "#16a34a"
+            },
+            {
+              "id": "so-review",
+              "label": "Online review",
+              "color": "#d97706"
+            },
+            {
+              "id": "so-person",
+              "label": "In person",
+              "color": "#0891b2"
+            },
+            {
+              "id": "so-social",
+              "label": "Social media",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-score",
+        "label": "Score",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "out of 10"
+        }
+      },
+      {
+        "id": "f-group",
+        "label": "Group",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "np-promoter",
+              "label": "Promoter",
+              "color": "#16a34a"
+            },
+            {
+              "id": "np-passive",
+              "label": "Passive",
+              "color": "#d97706"
+            },
+            {
+              "id": "np-detractor",
+              "label": "Detractor",
+              "color": "#dc2626"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-stars",
+        "label": "Star rating",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-topics",
+        "label": "Topics",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tp-quality",
+              "label": "Quality of work",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tp-time",
+              "label": "Timeliness",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tp-comms",
+              "label": "Communication",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "tp-price",
+              "label": "Price and value",
+              "color": "#d97706"
+            },
+            {
+              "id": "tp-staff",
+              "label": "Staff",
+              "color": "#0891b2"
+            },
+            {
+              "id": "tp-billing",
+              "label": "Billing",
+              "color": "#64748b"
+            },
+            {
+              "id": "tp-clean",
+              "label": "Cleanliness",
+              "color": "#0d9488"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "fb-new",
+              "label": "New",
+              "color": "#378ADD"
+            },
+            {
+              "id": "fb-reviewed",
+              "label": "Reviewed",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "fb-followup",
+              "label": "Follow-up needed",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "fb-resolved",
+              "label": "Resolved",
+              "color": "#639922"
+            },
+            {
+              "id": "fb-closed",
+              "label": "Closed",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-said",
+        "label": "What they said",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "In their words"
+        }
+      },
+      {
+        "id": "f-reply",
+        "label": "Our response",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-followby",
+        "label": "Follow up by",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-quote",
+        "label": "OK to quote publicly",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-link",
+        "label": "Review link",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-response",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Response",
+          "fieldIds": [
+            "f-response",
+            "f-contact",
+            "f-received",
+            "f-source",
+            "f-owner"
+          ]
+        }
+      },
+      {
+        "id": "b-score",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Score",
+          "fieldIds": [
+            "f-score",
+            "f-group",
+            "f-stars",
+            "f-topics"
+          ]
+        }
+      },
+      {
+        "id": "b-words",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "In their words",
+          "fieldIds": [
+            "f-said",
+            "f-reply"
+          ]
+        }
+      },
+      {
+        "id": "b-follow",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Follow-up",
+          "fieldIds": [
+            "f-status",
+            "f-followby",
+            "f-quote",
+            "f-link"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-promoter",
+        "name": "Score 9 or 10 — Promoter",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-score",
+          "op": ">=",
+          "value": "9"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-group",
+            "value": "np-promoter"
+          }
+        ]
+      },
+      {
+        "id": "a-passive7",
+        "name": "Score 7 — Passive",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-score",
+          "op": "==",
+          "value": "7"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-group",
+            "value": "np-passive"
+          }
+        ]
+      },
+      {
+        "id": "a-passive8",
+        "name": "Score 8 — Passive",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-score",
+          "op": "==",
+          "value": "8"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-group",
+            "value": "np-passive"
+          }
+        ]
+      },
+      {
+        "id": "a-detractor",
+        "name": "Score 6 or below — Detractor",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-score",
+          "op": "<=",
+          "value": "6"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-group",
+            "value": "np-detractor"
+          },
+          {
+            "type": "set_field",
+            "fieldId": "f-status",
+            "value": "fb-followup"
+          },
+          {
+            "type": "notify",
+            "message": "A client scored you 6 or below. Call them to understand what went wrong and set a Follow up by date."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-score",
+      "f-group",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-group",
+        "title": "By group",
+        "fieldId": "f-group",
+        "scope": "team"
+      },
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-quote",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-quote"
+        }
+      },
+      {
+        "id": "w-group",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-group"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-detractors",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-group",
+          "value": "np-detractor"
+        }
+      },
+      {
+        "id": "w-nps",
+        "type": "note",
+        "size": 2,
+        "config": {
+          "text": "Net Promoter Score = % of Promoters minus % of Detractors. Read both from the Group bars."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,673 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Promotions",
+    "recordName": "Promotion",
+    "type": "Projects",
+    "icon": "ti-tag",
+    "color": "#7c3aed",
+    "description": "Every offer the store runs, and whether it was worth running. Set the mechanic, the dates and the products, then record units sold, revenue, the discount given and the cost of goods; the app works out gross profit, margin and revenue against target. A promotion cannot be judged by how busy it felt, and this is where next season is planned from.",
+    "fields": [
+      {
+        "id": "f-promotion",
+        "label": "Promotion",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Buy one get one — soft drinks"
+        }
+      },
+      {
+        "id": "f-kind",
+        "label": "Mechanic",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pk-percent",
+              "label": "Percent off",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pk-amount",
+              "label": "Amount off",
+              "color": "#16a34a"
+            },
+            {
+              "id": "pk-bogo",
+              "label": "Buy one get one",
+              "color": "#e0552d"
+            },
+            {
+              "id": "pk-bundle",
+              "label": "Bundle",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pk-clearance",
+              "label": "Clearance",
+              "color": "#d97706"
+            },
+            {
+              "id": "pk-points",
+              "label": "Double points",
+              "color": "#db2777"
+            },
+            {
+              "id": "pk-delivery",
+              "label": "Free delivery",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pr-planning",
+              "label": "Planning",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "pr-approved",
+              "label": "Approved",
+              "color": "#378ADD"
+            },
+            {
+              "id": "pr-live",
+              "label": "Live",
+              "color": "#639922"
+            },
+            {
+              "id": "pr-paused",
+              "label": "Paused",
+              "color": "#BA7517"
+            },
+            {
+              "id": "pr-ended",
+              "label": "Ended",
+              "color": "#0891b2"
+            },
+            {
+              "id": "pr-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-depts",
+        "label": "Departments",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dp-grocery",
+              "label": "Grocery",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dp-fresh",
+              "label": "Fresh and chilled",
+              "color": "#0d9488"
+            },
+            {
+              "id": "dp-household",
+              "label": "Household",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dp-beauty",
+              "label": "Health and beauty",
+              "color": "#db2777"
+            },
+            {
+              "id": "dp-apparel",
+              "label": "Apparel",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dp-electronics",
+              "label": "Electronics",
+              "color": "#0891b2"
+            },
+            {
+              "id": "dp-home",
+              "label": "Home and garden",
+              "color": "#d97706"
+            },
+            {
+              "id": "dp-toys",
+              "label": "Toys and games",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dp-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-channels",
+        "label": "Where it runs",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ch-store",
+              "label": "In store",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ch-online",
+              "label": "Online",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ch-phone",
+              "label": "Phone order",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ch-market",
+              "label": "Marketplace",
+              "color": "#d97706"
+            },
+            {
+              "id": "ch-social",
+              "label": "Social media",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-products",
+        "label": "Products included",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "SKUs, a category, or a supplier range"
+        }
+      },
+      {
+        "id": "f-code",
+        "label": "Promotion code",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-start",
+        "label": "Starts",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-end",
+        "label": "Ends",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-discountpct",
+        "label": "Discount %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-discountamt",
+        "label": "Amount off",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-units",
+        "label": "Units sold",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-revenue",
+        "label": "Revenue",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-cogs",
+        "label": "Cost of goods",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-given",
+        "label": "Discount given",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What the offer cost in margin"
+        }
+      },
+      {
+        "id": "f-profit",
+        "label": "Gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Revenue} - {Cost of goods}"
+        }
+      },
+      {
+        "id": "f-margin",
+        "label": "Margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Revenue} - {Cost of goods}) * 100 / {Revenue}"
+        }
+      },
+      {
+        "id": "f-perunit",
+        "label": "Discount per unit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Discount given} / {Units sold}"
+        }
+      },
+      {
+        "id": "f-redemptions",
+        "label": "Redemptions",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-target",
+        "label": "Revenue target",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-vstarget",
+        "label": "Against target",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Revenue} - {Revenue target}) * {Revenue target} / {Revenue target}"
+        }
+      },
+      {
+        "id": "f-setup",
+        "label": "Before it goes live",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Pricing approved",
+            "Stock checked to cover the offer",
+            "Tills and website updated",
+            "Signage and shelf edges printed",
+            "Staff briefed on the offer",
+            "Results reviewed when it ends"
+          ]
+        }
+      },
+      {
+        "id": "f-setuppct",
+        "label": "Setup progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-setup"
+        }
+      },
+      {
+        "id": "f-artwork",
+        "label": "Signage and artwork",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-lessons",
+        "label": "What we learned",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Run it again, change it, or stop — and why"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-promo",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Promotion",
+          "fieldIds": [
+            "f-promotion",
+            "f-kind",
+            "f-status",
+            "f-owner",
+            "f-depts",
+            "f-channels",
+            "f-code"
+          ]
+        }
+      },
+      {
+        "id": "b-offer",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The offer",
+          "fieldIds": [
+            "f-products",
+            "f-discountpct",
+            "f-discountamt",
+            "f-start",
+            "f-end"
+          ]
+        }
+      },
+      {
+        "id": "b-setup",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Before it goes live",
+          "fieldIds": [
+            "f-setup",
+            "f-setuppct",
+            "f-artwork"
+          ]
+        }
+      },
+      {
+        "id": "b-results",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Results",
+          "fieldIds": [
+            "f-units",
+            "f-revenue",
+            "f-cogs",
+            "f-given",
+            "f-redemptions",
+            "f-target"
+          ]
+        }
+      },
+      {
+        "id": "b-worked",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Did it work",
+          "fieldIds": [
+            "f-profit",
+            "f-margin",
+            "f-perunit",
+            "f-vstarget"
+          ]
+        }
+      },
+      {
+        "id": "b-lessons",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What we learned",
+          "fieldIds": [
+            "f-lessons"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-live",
+        "name": "Live — check the tills",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "pr-live"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A promotion is live. Ring one through to check the till takes the offer, and make sure the shelf edges match."
+          }
+        ]
+      },
+      {
+        "id": "a-ended",
+        "name": "Ended — take the signage down",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "pr-ended"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A promotion ended. Put prices back, take the signage down, and record units, revenue and discount given while they are to hand."
+          }
+        ]
+      },
+      {
+        "id": "a-undertarget",
+        "name": "Behind target",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-vstarget",
+          "op": "<",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This promotion is behind its revenue target. Decide whether to push it harder, change the offer, or let it end."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-kind",
+      "f-start",
+      "f-revenue",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-kind",
+        "title": "By mechanic",
+        "fieldId": "f-kind",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-revenue",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-revenue"
+        }
+      },
+      {
+        "id": "w-units",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-units"
+        }
+      },
+      {
+        "id": "w-given",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-given"
+        }
+      },
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-kind",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-kind"
+        }
+      },
+      {
+        "id": "w-start",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-start"
+        }
+      },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": {
+          "text": "Judge an offer on gross profit and margin, not on how busy the shop felt. A queue at a loss is still a loss."
+        }
+      }
+    ]
+  }
+}

@@ -33,8 +33,17 @@ const WIDGET_TYPES = ['metric', 'stages', 'records', 'recent', 'calendar', 'cloc
 // hand-authored file carrying one arrives pointing at nothing.
 const UNREMAPPED = ['targetApp', 'targetCompany', 'relField', 'targetField', 'fixedItem', 'displayField', 'identifyField'];
 
-const bundles = readdirSync(appsDir)
+// The icon font is SUBSET to the icons referenced in src/, and docs/apps is not scanned --
+// so a bundle naming an icon that exists upstream but not in the subset installs an app whose
+// icon is a blank square, with nothing to say why. Leads, Proposals and Sales Pipeline all
+// shipped that way until 2026-09-15.
+const subsetCss = readFileSync(join(root, 'src', 'tabler-icons.css'), 'utf8');
+
+// Walked, so the App Market sample sets in docs/apps/market/<set>/ get every check below too.
+const bundles = readdirSync(appsDir, { recursive: true })
+  .map((name) => String(name).replace(/\\/g, '/'))
   .filter((name) => name.endsWith('.questapp.json'))
+  .sort()
   .map((name) => [name, JSON.parse(readFileSync(join(appsDir, name), 'utf8'))]);
 
 test('there is at least one app to check', () => {
@@ -53,6 +62,14 @@ for (const [name, bundle] of bundles) {
     app.fields.forEach((field) => {
       assert.ok(WB_FIELD_TYPES[field.type], `"${field.label}" has type ${field.type}, which imports as plain text`);
     });
+  });
+
+  test(`${name}: its icon has a glyph in the subset font`, () => {
+    // A name the upstream font defines is not enough: it has to be in the generated subset,
+    // which only keeps what src/ references. Pick one the app's own icon picker offers
+    // (src/workspace/icon-sets.js), or add it there and run `npm run build:icons`.
+    assert.ok(subsetCss.includes(`.${app.icon}:before`),
+      `${app.icon} has no glyph in src/tabler-icons.css, so this app's icon renders blank`);
   });
 
   test(`${name}: nothing points at an id install cannot remap`, () => {

@@ -1,0 +1,589 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Support Tickets",
+    "recordName": "Ticket",
+    "type": "Tickets",
+    "icon": "ti-ticket",
+    "color": "#dc2626",
+    "description": "A simple help desk for client questions, problems and complaints. Log where each request came in, set its priority, assign it, and move it from New to Closed. Urgent tickets are flagged immediately, reopened tickets are counted, and every resolved ticket prompts a satisfaction check.",
+    "fields": [
+      {
+        "id": "f-subject",
+        "label": "Subject",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Invoice shows the wrong address"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Ticket #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "T-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Client",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-channel",
+        "label": "Channel",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ch-phone",
+              "label": "Phone",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ch-email",
+              "label": "Email",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ch-web",
+              "label": "Web form",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ch-chat",
+              "label": "Chat",
+              "color": "#0891b2"
+            },
+            {
+              "id": "ch-person",
+              "label": "In person",
+              "color": "#d97706"
+            },
+            {
+              "id": "ch-social",
+              "label": "Social media",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-kind",
+        "label": "Request type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rq-question",
+              "label": "Question",
+              "color": "#2563eb"
+            },
+            {
+              "id": "rq-problem",
+              "label": "Problem",
+              "color": "#e0552d"
+            },
+            {
+              "id": "rq-billing",
+              "label": "Billing",
+              "color": "#16a34a"
+            },
+            {
+              "id": "rq-complaint",
+              "label": "Complaint",
+              "color": "#dc2626"
+            },
+            {
+              "id": "rq-change",
+              "label": "Change request",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "rq-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-priority",
+        "label": "Priority",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pr-urgent",
+              "label": "Urgent",
+              "color": "#dc2626"
+            },
+            {
+              "id": "pr-high",
+              "label": "High",
+              "color": "#d97706"
+            },
+            {
+              "id": "pr-normal",
+              "label": "Normal",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pr-low",
+              "label": "Low",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ts-new",
+              "label": "New",
+              "color": "#378ADD"
+            },
+            {
+              "id": "ts-open",
+              "label": "Open",
+              "color": "#BA7517"
+            },
+            {
+              "id": "ts-waiting",
+              "label": "Waiting on client",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "ts-escalated",
+              "label": "Escalated",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "ts-resolved",
+              "label": "Resolved",
+              "color": "#639922"
+            },
+            {
+              "id": "ts-closed",
+              "label": "Closed",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-assignee",
+        "label": "Assigned to",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-opened",
+        "label": "Opened on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-due",
+        "label": "Due by",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-resolvedon",
+        "label": "Resolved on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-hours",
+        "label": "Hours spent",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "hrs"
+        }
+      },
+      {
+        "id": "f-reopened",
+        "label": "Times reopened",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-csat",
+        "label": "Satisfaction",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-desc",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What the client reported, in their words"
+        }
+      },
+      {
+        "id": "f-resolution",
+        "label": "Resolution",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What was done, and anything to watch"
+        }
+      },
+      {
+        "id": "f-steps",
+        "label": "Resolution steps",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Client told we are on it",
+            "Issue confirmed",
+            "Answer or fix given",
+            "Client confirmed it is resolved",
+            "Help article updated if needed"
+          ]
+        }
+      },
+      {
+        "id": "f-stepspct",
+        "label": "Resolution progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-steps"
+        }
+      },
+      {
+        "id": "f-files",
+        "label": "Attachments",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-ticket",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Ticket",
+          "fieldIds": [
+            "f-subject",
+            "f-no",
+            "f-kind",
+            "f-priority",
+            "f-status",
+            "f-assignee"
+          ]
+        }
+      },
+      {
+        "id": "b-client",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Client",
+          "fieldIds": [
+            "f-contact",
+            "f-email",
+            "f-phone",
+            "f-channel"
+          ]
+        }
+      },
+      {
+        "id": "b-desc",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "The request",
+          "fieldIds": [
+            "f-desc",
+            "f-files"
+          ]
+        }
+      },
+      {
+        "id": "b-work",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Working it",
+          "fieldIds": [
+            "f-steps",
+            "f-stepspct",
+            "f-hours",
+            "f-reopened"
+          ]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Dates",
+          "fieldIds": [
+            "f-opened",
+            "f-due",
+            "f-resolvedon"
+          ]
+        }
+      },
+      {
+        "id": "b-close",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Resolution",
+          "fieldIds": [
+            "f-resolution",
+            "f-csat"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-urgent",
+        "name": "Urgent ticket — respond now",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-priority",
+          "value": "pr-urgent"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An urgent ticket came in. Reply to the client within the hour and assign it if nobody has it."
+          }
+        ]
+      },
+      {
+        "id": "a-reopen",
+        "name": "Reopened — count it",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "from": "ts-resolved",
+          "to": "ts-open"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-reopened",
+            "value": "+1"
+          },
+          {
+            "type": "notify",
+            "message": "A resolved ticket was reopened. Check what the first fix missed."
+          }
+        ]
+      },
+      {
+        "id": "a-resolved",
+        "name": "Resolved — check satisfaction",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "ts-resolved"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A ticket was resolved. Ask the client to confirm and record their satisfaction before closing it."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-priority",
+      "f-assignee",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-kind",
+        "title": "By request type",
+        "fieldId": "f-kind",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-hours",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-hours"
+        }
+      },
+      {
+        "id": "w-reopened",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-reopened"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-urgent",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-priority",
+          "value": "pr-urgent"
+        }
+      },
+      {
+        "id": "w-kind",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-kind"
+        }
+      },
+      {
+        "id": "w-due",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-due"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,673 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Fees & Payments",
+    "recordName": "Fee invoice",
+    "type": "Invoices",
+    "icon": "ti-wallet",
+    "color": "#639922",
+    "description": "Bill families for tuition and extras, term by term. Each invoice itemises tuition, registration, books, transport and activities, subtracts any scholarship or discount, and shows the total and balance still owed. Overdue fees are counted and flagged, and payment plans are recorded so reminders stay kind and consistent.",
+    "fields": [
+      {
+        "id": "f-invoice",
+        "label": "Invoice",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Maya Santos — Term 1"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Invoice #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "FEE-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-student",
+        "label": "Student",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-guardian",
+        "label": "Parent or guardian",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Billing email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-grade",
+        "label": "Grade",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-term",
+        "label": "Term",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tm-t1",
+              "label": "Term 1",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tm-t2",
+              "label": "Term 2",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tm-t3",
+              "label": "Term 3",
+              "color": "#d97706"
+            },
+            {
+              "id": "tm-summer",
+              "label": "Summer",
+              "color": "#db2777"
+            },
+            {
+              "id": "tm-year",
+              "label": "Full year",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-year",
+        "label": "School year",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "2026–2027"
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "fe-draft",
+              "label": "Draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "fe-issued",
+              "label": "Issued",
+              "color": "#378ADD"
+            },
+            {
+              "id": "fe-partial",
+              "label": "Partially paid",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "fe-paid",
+              "label": "Paid",
+              "color": "#639922"
+            },
+            {
+              "id": "fe-overdue",
+              "label": "Overdue",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "fe-plan",
+              "label": "On a payment plan",
+              "color": "#BA7517"
+            },
+            {
+              "id": "fe-waived",
+              "label": "Waived",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-issued",
+        "label": "Issued on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-due",
+        "label": "Due on",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-paidon",
+        "label": "Paid on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-tuition",
+        "label": "Tuition",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-registration",
+        "label": "Registration fee",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-books",
+        "label": "Books and materials",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-transport",
+        "label": "Transport",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-activities",
+        "label": "Activities and trips",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-discount",
+        "label": "Scholarship or discount",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "As a positive amount"
+        }
+      },
+      {
+        "id": "f-paid",
+        "label": "Amount paid",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "Everything received so far"
+        }
+      },
+      {
+        "id": "f-total",
+        "label": "Total due",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tuition} + {Registration fee} + {Books and materials} + {Transport} + {Activities and trips} - {Scholarship or discount}"
+        }
+      },
+      {
+        "id": "f-balance",
+        "label": "Balance",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tuition} + {Registration fee} + {Books and materials} + {Transport} + {Activities and trips} - {Scholarship or discount} - {Amount paid}"
+        }
+      },
+      {
+        "id": "f-method",
+        "label": "Payment method",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pm-card",
+              "label": "Card",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pm-bank",
+              "label": "Bank transfer",
+              "color": "#16a34a"
+            },
+            {
+              "id": "pm-check",
+              "label": "Check",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pm-cash",
+              "label": "Cash",
+              "color": "#d97706"
+            },
+            {
+              "id": "pm-voucher",
+              "label": "Voucher / sponsor",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-reminders",
+        "label": "Reminders sent",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-receipt",
+        "label": "Receipts",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Payment plan terms, sponsor details"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-invoice",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Invoice",
+          "fieldIds": [
+            "f-invoice",
+            "f-no",
+            "f-student",
+            "f-guardian",
+            "f-email",
+            "f-grade",
+            "f-term",
+            "f-year",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Dates",
+          "fieldIds": [
+            "f-issued",
+            "f-due",
+            "f-paidon",
+            "f-method",
+            "f-reminders"
+          ]
+        }
+      },
+      {
+        "id": "b-charges",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Charges",
+          "fieldIds": [
+            "f-tuition",
+            "f-registration",
+            "f-books",
+            "f-transport",
+            "f-activities",
+            "f-discount"
+          ]
+        }
+      },
+      {
+        "id": "b-totals",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Totals",
+          "fieldIds": [
+            "f-total",
+            "f-paid",
+            "f-balance"
+          ]
+        }
+      },
+      {
+        "id": "b-files",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Receipts and notes",
+          "fieldIds": [
+            "f-receipt",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-overdue",
+        "name": "Overdue — send a reminder",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "fe-overdue"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-reminders",
+            "value": "+1"
+          },
+          {
+            "type": "notify",
+            "message": "A fee invoice is overdue. Send a friendly reminder, and offer a payment plan if the family is struggling."
+          }
+        ]
+      },
+      {
+        "id": "a-plan",
+        "name": "Payment plan — write down the terms",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "fe-plan"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A family is on a payment plan. Record the agreed amounts and dates in Notes."
+          }
+        ]
+      },
+      {
+        "id": "a-paid",
+        "name": "Paid — send the receipt",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "fe-paid"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A fee invoice was paid. Fill in the paid date and send the family a receipt."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-guardian",
+      "f-term",
+      "f-due",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-term",
+        "title": "By term",
+        "fieldId": "f-term",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-tuition",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-tuition"
+        }
+      },
+      {
+        "id": "w-paid",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-paid"
+        }
+      },
+      {
+        "id": "w-discount",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-discount"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-overdue",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "fe-overdue"
+        }
+      },
+      {
+        "id": "w-due",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-due"
+        }
+      },
+      {
+        "id": "w-term",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-term"
+        }
+      }
+    ]
+  }
+}

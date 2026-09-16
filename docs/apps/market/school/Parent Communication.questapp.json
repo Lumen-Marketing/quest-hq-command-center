@@ -1,0 +1,633 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Parent Communication",
+    "recordName": "Conversation",
+    "type": "Tickets",
+    "icon": "ti-messages",
+    "color": "#db2777",
+    "description": "A shared log of every conversation with families — questions, concerns, complaints and updates about progress, attendance, behaviour or wellbeing. Each one has an owner, a respond-by date and a clear status, so no parent is left waiting. Urgent matters are flagged, wellbeing conversations are marked confidential, and every resolved conversation records the outcome.",
+    "fields": [
+      {
+        "id": "f-subject",
+        "label": "Subject",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Question about Term 1 math homework"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Reference #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "PC-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-guardian",
+        "label": "Parent or guardian",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-student",
+        "label": "Student",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-grade",
+        "label": "Grade",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-direction",
+        "label": "Started by",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dr-parent",
+              "label": "Parent",
+              "color": "#db2777"
+            },
+            {
+              "id": "dr-school",
+              "label": "School",
+              "color": "#2563eb"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-channel",
+        "label": "Channel",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ch-phone",
+              "label": "Phone",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ch-email",
+              "label": "Email",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ch-meeting",
+              "label": "Meeting",
+              "color": "#d97706"
+            },
+            {
+              "id": "ch-message",
+              "label": "App message",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ch-letter",
+              "label": "Letter",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-topic",
+        "label": "Topic",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tp-academic",
+              "label": "Academic progress",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tp-attendance",
+              "label": "Attendance",
+              "color": "#0891b2"
+            },
+            {
+              "id": "tp-behaviour",
+              "label": "Behaviour",
+              "color": "#d97706"
+            },
+            {
+              "id": "tp-wellbeing",
+              "label": "Wellbeing",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "tp-fees",
+              "label": "Fees",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tp-transport",
+              "label": "Transport",
+              "color": "#64748b"
+            },
+            {
+              "id": "tp-complaint",
+              "label": "Complaint",
+              "color": "#dc2626"
+            },
+            {
+              "id": "tp-general",
+              "label": "General",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-priority",
+        "label": "Priority",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pr-urgent",
+              "label": "Urgent",
+              "color": "#dc2626"
+            },
+            {
+              "id": "pr-high",
+              "label": "High",
+              "color": "#d97706"
+            },
+            {
+              "id": "pr-normal",
+              "label": "Normal",
+              "color": "#2563eb"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pc-new",
+              "label": "New",
+              "color": "#378ADD"
+            },
+            {
+              "id": "pc-progress",
+              "label": "In progress",
+              "color": "#BA7517"
+            },
+            {
+              "id": "pc-meeting",
+              "label": "Meeting scheduled",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "pc-waiting",
+              "label": "Waiting on family",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "pc-resolved",
+              "label": "Resolved",
+              "color": "#639922"
+            },
+            {
+              "id": "pc-closed",
+              "label": "Closed",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-received",
+        "label": "Received on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-respondby",
+        "label": "Respond by",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-meetingdate",
+        "label": "Meeting date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-confidential",
+        "label": "Confidential",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-message",
+        "label": "Message",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What the family said or asked"
+        }
+      },
+      {
+        "id": "f-response",
+        "label": "Our response",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-outcome",
+        "label": "Outcome",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What was agreed, and any follow-up"
+        }
+      },
+      {
+        "id": "f-satisfaction",
+        "label": "Family satisfaction",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-files",
+        "label": "Attachments",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-conversation",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Conversation",
+          "fieldIds": [
+            "f-subject",
+            "f-no",
+            "f-topic",
+            "f-priority",
+            "f-status",
+            "f-owner",
+            "f-confidential"
+          ]
+        }
+      },
+      {
+        "id": "b-family",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Family",
+          "fieldIds": [
+            "f-guardian",
+            "f-student",
+            "f-grade",
+            "f-direction",
+            "f-channel"
+          ]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Dates",
+          "fieldIds": [
+            "f-received",
+            "f-respondby",
+            "f-meetingdate"
+          ]
+        }
+      },
+      {
+        "id": "b-words",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Messages",
+          "fieldIds": [
+            "f-message",
+            "f-response",
+            "f-files"
+          ]
+        }
+      },
+      {
+        "id": "b-outcome",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Outcome",
+          "fieldIds": [
+            "f-outcome",
+            "f-satisfaction"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-urgent",
+        "name": "Urgent — respond today",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-priority",
+          "value": "pr-urgent"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An urgent message from a family came in. Respond today, and involve school leadership if a child's safety is concerned."
+          }
+        ]
+      },
+      {
+        "id": "a-wellbeing",
+        "name": "Wellbeing — keep it confidential",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-topic",
+          "value": "tp-wellbeing"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-confidential",
+            "value": true
+          },
+          {
+            "type": "notify",
+            "message": "A wellbeing conversation was logged and marked confidential. Share it with the counselor, and only with staff who need to know."
+          }
+        ]
+      },
+      {
+        "id": "a-resolved",
+        "name": "Resolved — record the outcome",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "pc-resolved"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A conversation with a family was resolved. Write down what was agreed in Outcome."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-guardian",
+      "f-topic",
+      "f-respondby",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-topic",
+        "title": "By topic",
+        "fieldId": "f-topic",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-confidential",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-confidential"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-urgent",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-priority",
+          "value": "pr-urgent"
+        }
+      },
+      {
+        "id": "w-topic",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-topic"
+        }
+      },
+      {
+        "id": "w-respondby",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-respondby"
+        }
+      }
+    ]
+  }
+}

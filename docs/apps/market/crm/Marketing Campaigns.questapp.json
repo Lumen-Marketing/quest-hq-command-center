@@ -1,0 +1,590 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Marketing Campaigns",
+    "recordName": "Campaign",
+    "type": "Projects",
+    "icon": "ti-speakerphone",
+    "color": "#e0552d",
+    "description": "Plan campaigns and see which ones pay off. Track budget and spend beside reach, leads, appointments, won clients and revenue, and let the app work out cost per lead, conversion rates, cost per client and return on spend. Going over budget is flagged, and finishing a campaign prompts you to record its results.",
+    "fields": [
+      {
+        "id": "f-campaign",
+        "label": "Campaign",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Spring email offer"
+        }
+      },
+      {
+        "id": "f-channel",
+        "label": "Channel",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "mc-email",
+              "label": "Email",
+              "color": "#2563eb"
+            },
+            {
+              "id": "mc-social",
+              "label": "Social media",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "mc-search",
+              "label": "Search ads",
+              "color": "#0891b2"
+            },
+            {
+              "id": "mc-mail",
+              "label": "Direct mail",
+              "color": "#d97706"
+            },
+            {
+              "id": "mc-events",
+              "label": "Events",
+              "color": "#db2777"
+            },
+            {
+              "id": "mc-referral",
+              "label": "Referral program",
+              "color": "#16a34a"
+            },
+            {
+              "id": "mc-sms",
+              "label": "Text message",
+              "color": "#0d9488"
+            },
+            {
+              "id": "mc-print",
+              "label": "Print, radio or TV",
+              "color": "#64748b"
+            },
+            {
+              "id": "mc-partner",
+              "label": "Partnership",
+              "color": "#e0552d"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cp-plan",
+              "label": "Planning",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "cp-live",
+              "label": "Live",
+              "color": "#639922"
+            },
+            {
+              "id": "cp-paused",
+              "label": "Paused",
+              "color": "#BA7517"
+            },
+            {
+              "id": "cp-finished",
+              "label": "Finished",
+              "color": "#378ADD"
+            },
+            {
+              "id": "cp-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-audience",
+        "label": "Audience",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Past clients in the north service area"
+        }
+      },
+      {
+        "id": "f-offer",
+        "label": "Offer",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What people get, and until when"
+        }
+      },
+      {
+        "id": "f-start",
+        "label": "Start date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-end",
+        "label": "End date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-budget",
+        "label": "Budget",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-spent",
+        "label": "Spent",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-reach",
+        "label": "Reach",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "people"
+        }
+      },
+      {
+        "id": "f-leads",
+        "label": "Leads",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-appts",
+        "label": "Appointments",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-won",
+        "label": "Clients won",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-revenue",
+        "label": "Revenue won",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-left",
+        "label": "Budget left",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Budget} - {Spent}) * {Budget} / {Budget}"
+        }
+      },
+      {
+        "id": "f-cpl",
+        "label": "Cost per lead",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Spent} / {Leads}"
+        }
+      },
+      {
+        "id": "f-apptrate",
+        "label": "Lead to appointment %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Appointments} * 100 / {Leads}"
+        }
+      },
+      {
+        "id": "f-close",
+        "label": "Appointment to client %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Clients won} * 100 / {Appointments}"
+        }
+      },
+      {
+        "id": "f-cpc",
+        "label": "Cost per client won",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Spent} / {Clients won}"
+        }
+      },
+      {
+        "id": "f-roi",
+        "label": "Return on spend %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Revenue won} - {Spent}) * 100 / {Spent}"
+        }
+      },
+      {
+        "id": "f-link",
+        "label": "Tracking link",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-launch",
+        "label": "Launch steps",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Goal and audience agreed",
+            "Offer and message written",
+            "Creative approved",
+            "Tracking link or number set up",
+            "Team briefed",
+            "Results recorded at the end"
+          ]
+        }
+      },
+      {
+        "id": "f-launchpct",
+        "label": "Launch progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-launch"
+        }
+      },
+      {
+        "id": "f-creative",
+        "label": "Creative",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-lessons",
+        "label": "What we learned",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Keep, change or stop next time — and why"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-plan",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Plan",
+          "fieldIds": [
+            "f-campaign",
+            "f-channel",
+            "f-stage",
+            "f-owner",
+            "f-audience",
+            "f-start",
+            "f-end"
+          ]
+        }
+      },
+      {
+        "id": "b-launch",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Launch",
+          "fieldIds": [
+            "f-offer",
+            "f-launch",
+            "f-launchpct",
+            "f-link",
+            "f-creative"
+          ]
+        }
+      },
+      {
+        "id": "b-spend",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Budget",
+          "fieldIds": [
+            "f-budget",
+            "f-spent",
+            "f-left"
+          ]
+        }
+      },
+      {
+        "id": "b-results",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Results",
+          "fieldIds": [
+            "f-reach",
+            "f-leads",
+            "f-appts",
+            "f-won",
+            "f-revenue"
+          ]
+        }
+      },
+      {
+        "id": "b-ratios",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Performance",
+          "fieldIds": [
+            "f-cpl",
+            "f-apptrate",
+            "f-close",
+            "f-cpc",
+            "f-roi"
+          ]
+        }
+      },
+      {
+        "id": "b-lessons",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What we learned",
+          "fieldIds": [
+            "f-lessons"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-over",
+        "name": "Over budget — decide",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-left",
+          "op": "<",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A campaign has spent more than its budget. Pause it, or raise the budget on purpose."
+          }
+        ]
+      },
+      {
+        "id": "a-finished",
+        "name": "Finished — record the results",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-stage",
+          "to": "cp-finished"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A campaign finished. Fill in leads, appointments, clients won and revenue now, while the numbers are fresh."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-channel",
+      "f-start",
+      "f-spent",
+      "f-stage"
+    ],
+    "views": [
+      {
+        "id": "v-stage",
+        "title": "By stage",
+        "fieldId": "f-stage",
+        "scope": "team"
+      },
+      {
+        "id": "v-channel",
+        "title": "By channel",
+        "fieldId": "f-channel",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-spent",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-spent"
+        }
+      },
+      {
+        "id": "w-leads",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-leads"
+        }
+      },
+      {
+        "id": "w-won",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-won"
+        }
+      },
+      {
+        "id": "w-revenue",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-revenue"
+        }
+      },
+      {
+        "id": "w-channel",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-channel"
+        }
+      },
+      {
+        "id": "w-stage",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-stage"
+        }
+      },
+      {
+        "id": "w-start",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-start"
+        }
+      },
+      {
+        "id": "w-note",
+        "type": "note",
+        "size": 2,
+        "config": {
+          "text": "Compare channels on cost per client won, not cost per lead — cheap leads that never buy are the most expensive kind."
+        }
+      }
+    ]
+  }
+}

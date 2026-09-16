@@ -1,0 +1,625 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Staff Directory",
+    "recordName": "Staff member",
+    "type": "Contacts",
+    "icon": "ti-id-badge",
+    "color": "#7c3aed",
+    "description": "Everyone who works at the school — teachers, assistants, administrators and support staff. Keep role, department, subjects taught, contract and teaching hours together with the checks every school needs: background check, teaching certificate, safeguarding and first aid. Certificate and first-aid expiry dates show on calendars before they lapse.",
+    "fields": [
+      {
+        "id": "f-name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Daniel Okafor"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Staff ID",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "ST-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-photo",
+        "label": "Photo",
+        "type": "image",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-user",
+        "label": "Questbase user",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-role",
+        "label": "Role",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rl-teacher",
+              "label": "Teacher",
+              "color": "#2563eb"
+            },
+            {
+              "id": "rl-assistant",
+              "label": "Teaching assistant",
+              "color": "#0891b2"
+            },
+            {
+              "id": "rl-head",
+              "label": "Head of department",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "rl-leader",
+              "label": "School leadership",
+              "color": "#e0552d"
+            },
+            {
+              "id": "rl-admin",
+              "label": "Administration",
+              "color": "#64748b"
+            },
+            {
+              "id": "rl-counselor",
+              "label": "Counselor",
+              "color": "#16a34a"
+            },
+            {
+              "id": "rl-support",
+              "label": "Support staff",
+              "color": "#d97706"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-dept",
+        "label": "Department",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dp-math",
+              "label": "Mathematics",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dp-english",
+              "label": "English",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dp-science",
+              "label": "Science",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dp-humanities",
+              "label": "Humanities",
+              "color": "#d97706"
+            },
+            {
+              "id": "dp-arts",
+              "label": "Arts and music",
+              "color": "#db2777"
+            },
+            {
+              "id": "dp-pe",
+              "label": "Physical education",
+              "color": "#0d9488"
+            },
+            {
+              "id": "dp-sen",
+              "label": "Learning support",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dp-office",
+              "label": "School office",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-subjects",
+        "label": "Subjects taught",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sj-math",
+              "label": "Mathematics",
+              "color": "#2563eb"
+            },
+            {
+              "id": "sj-english",
+              "label": "English",
+              "color": "#e0552d"
+            },
+            {
+              "id": "sj-science",
+              "label": "Science",
+              "color": "#16a34a"
+            },
+            {
+              "id": "sj-social",
+              "label": "Social studies",
+              "color": "#d97706"
+            },
+            {
+              "id": "sj-languages",
+              "label": "World languages",
+              "color": "#0891b2"
+            },
+            {
+              "id": "sj-arts",
+              "label": "Arts",
+              "color": "#db2777"
+            },
+            {
+              "id": "sj-music",
+              "label": "Music",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "sj-pe",
+              "label": "Physical education",
+              "color": "#0d9488"
+            },
+            {
+              "id": "sj-cs",
+              "label": "Computer science",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "sj-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sf-onboarding",
+              "label": "Onboarding",
+              "color": "#378ADD"
+            },
+            {
+              "id": "sf-active",
+              "label": "Active",
+              "color": "#639922"
+            },
+            {
+              "id": "sf-leave",
+              "label": "On leave",
+              "color": "#BA7517"
+            },
+            {
+              "id": "sf-left",
+              "label": "Left the school",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-contract",
+        "label": "Contract",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "co-full",
+              "label": "Full-time",
+              "color": "#16a34a"
+            },
+            {
+              "id": "co-part",
+              "label": "Part-time",
+              "color": "#2563eb"
+            },
+            {
+              "id": "co-sub",
+              "label": "Substitute",
+              "color": "#d97706"
+            },
+            {
+              "id": "co-fixed",
+              "label": "Fixed term",
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-start",
+        "label": "Start date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-hours",
+        "label": "Teaching hours per week",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "hrs"
+        }
+      },
+      {
+        "id": "f-cert",
+        "label": "Teaching certificate #",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-certexp",
+        "label": "Certificate expires",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-check",
+        "label": "Background check date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-firstaid",
+        "label": "First aid expires",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-compliance",
+        "label": "Compliance",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Background check cleared",
+            "Teaching certificate verified",
+            "Contract signed",
+            "Safeguarding training done",
+            "First aid training done",
+            "Payroll details on file"
+          ]
+        }
+      },
+      {
+        "id": "f-compliancepct",
+        "label": "Compliance progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-compliance"
+        }
+      },
+      {
+        "id": "f-emergency",
+        "label": "Emergency contact",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Name, relationship and phone"
+        }
+      },
+      {
+        "id": "f-files",
+        "label": "Documents",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-person",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Staff member",
+          "fieldIds": [
+            "f-name",
+            "f-no",
+            "f-photo",
+            "f-user",
+            "f-email",
+            "f-phone",
+            "f-emergency"
+          ]
+        }
+      },
+      {
+        "id": "b-role",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Role",
+          "fieldIds": [
+            "f-role",
+            "f-dept",
+            "f-subjects",
+            "f-status",
+            "f-contract",
+            "f-start",
+            "f-hours"
+          ]
+        }
+      },
+      {
+        "id": "b-compliance",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Checks and certificates",
+          "fieldIds": [
+            "f-compliance",
+            "f-compliancepct",
+            "f-cert",
+            "f-certexp",
+            "f-check",
+            "f-firstaid"
+          ]
+        }
+      },
+      {
+        "id": "b-files",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Documents and notes",
+          "fieldIds": [
+            "f-files",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-new",
+        "name": "New staff member — start the checks",
+        "trigger": {
+          "event": "created"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A new staff member was added. Nobody works with students until the background check is cleared."
+          }
+        ]
+      },
+      {
+        "id": "a-leave",
+        "name": "On leave — arrange cover",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "sf-leave"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A staff member is going on leave. Arrange cover for their classes in the Timetable."
+          }
+        ]
+      },
+      {
+        "id": "a-left",
+        "name": "Left the school — close access",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "sf-left"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A staff member has left. Remove their system access and return keys and equipment."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-role",
+      "f-dept",
+      "f-certexp",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-dept",
+        "title": "By department",
+        "fieldId": "f-dept",
+        "scope": "team"
+      },
+      {
+        "id": "v-role",
+        "title": "By role",
+        "fieldId": "f-role",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-hours",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-hours"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-touched",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "touched"
+        }
+      },
+      {
+        "id": "w-dept",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-dept"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-certexp",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-certexp"
+        }
+      },
+      {
+        "id": "w-firstaid",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-firstaid"
+        }
+      }
+    ]
+  }
+}

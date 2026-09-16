@@ -1,0 +1,698 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Timetable",
+    "recordName": "Lesson slot",
+    "type": "Calendar",
+    "icon": "ti-table",
+    "color": "#0d9488",
+    "description": "The weekly timetable, one lesson slot at a time — class, subject, teacher, room, day, period and time. Filter by day, teacher or room to read a timetable any way you need. When a teacher is away, mark the slot for cover, name the substitute and the cover date, and the cover calendar shows every day that needs covering.",
+    "fields": [
+      {
+        "id": "f-slot",
+        "label": "Lesson slot",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "8A — Algebra I — Monday period 1"
+        }
+      },
+      {
+        "id": "f-class",
+        "label": "Class",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "8A"
+        }
+      },
+      {
+        "id": "f-course",
+        "label": "Course",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Algebra I"
+        }
+      },
+      {
+        "id": "f-subject",
+        "label": "Subject",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sj-math",
+              "label": "Mathematics",
+              "color": "#2563eb"
+            },
+            {
+              "id": "sj-english",
+              "label": "English",
+              "color": "#e0552d"
+            },
+            {
+              "id": "sj-science",
+              "label": "Science",
+              "color": "#16a34a"
+            },
+            {
+              "id": "sj-social",
+              "label": "Social studies",
+              "color": "#d97706"
+            },
+            {
+              "id": "sj-languages",
+              "label": "World languages",
+              "color": "#0891b2"
+            },
+            {
+              "id": "sj-arts",
+              "label": "Arts",
+              "color": "#db2777"
+            },
+            {
+              "id": "sj-music",
+              "label": "Music",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "sj-pe",
+              "label": "Physical education",
+              "color": "#0d9488"
+            },
+            {
+              "id": "sj-cs",
+              "label": "Computer science",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "sj-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-grade",
+        "label": "Grade",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-teacher",
+        "label": "Teacher",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-day",
+        "label": "Day",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dy-mon",
+              "label": "Monday",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dy-tue",
+              "label": "Tuesday",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dy-wed",
+              "label": "Wednesday",
+              "color": "#d97706"
+            },
+            {
+              "id": "dy-thu",
+              "label": "Thursday",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dy-fri",
+              "label": "Friday",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dy-sat",
+              "label": "Saturday",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-period",
+        "label": "Period",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pd-p1",
+              "label": "Period 1",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pd-p2",
+              "label": "Period 2",
+              "color": "#16a34a"
+            },
+            {
+              "id": "pd-p3",
+              "label": "Period 3",
+              "color": "#d97706"
+            },
+            {
+              "id": "pd-p4",
+              "label": "Period 4",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pd-p5",
+              "label": "Period 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "pd-p6",
+              "label": "Period 6",
+              "color": "#db2777"
+            },
+            {
+              "id": "pd-p7",
+              "label": "Period 7",
+              "color": "#0d9488"
+            },
+            {
+              "id": "pd-p8",
+              "label": "Period 8",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-starts",
+        "label": "Starts at",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "9:00"
+        }
+      },
+      {
+        "id": "f-ends",
+        "label": "Ends at",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "9:50"
+        }
+      },
+      {
+        "id": "f-room",
+        "label": "Room",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rm-r101",
+              "label": "Room 101",
+              "color": "#2563eb"
+            },
+            {
+              "id": "rm-r102",
+              "label": "Room 102",
+              "color": "#16a34a"
+            },
+            {
+              "id": "rm-r201",
+              "label": "Room 201",
+              "color": "#d97706"
+            },
+            {
+              "id": "rm-lab",
+              "label": "Science lab",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "rm-ict",
+              "label": "Computer lab",
+              "color": "#0891b2"
+            },
+            {
+              "id": "rm-gym",
+              "label": "Gym",
+              "color": "#e0552d"
+            },
+            {
+              "id": "rm-music",
+              "label": "Music room",
+              "color": "#db2777"
+            },
+            {
+              "id": "rm-library",
+              "label": "Library",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-term",
+        "label": "Term",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tm-t1",
+              "label": "Term 1",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tm-t2",
+              "label": "Term 2",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tm-t3",
+              "label": "Term 3",
+              "color": "#d97706"
+            },
+            {
+              "id": "tm-summer",
+              "label": "Summer",
+              "color": "#db2777"
+            },
+            {
+              "id": "tm-year",
+              "label": "Full year",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tt-draft",
+              "label": "Draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "tt-published",
+              "label": "Published",
+              "color": "#639922"
+            },
+            {
+              "id": "tt-cover",
+              "label": "Needs cover",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "tt-covered",
+              "label": "Cover arranged",
+              "color": "#BA7517"
+            },
+            {
+              "id": "tt-changed",
+              "label": "Changed",
+              "color": "#378ADD"
+            },
+            {
+              "id": "tt-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-coverdate",
+        "label": "Cover date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-substitute",
+        "label": "Substitute",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-coverwork",
+        "label": "Cover work",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What the class should do, and where the materials are"
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-slot",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Lesson",
+          "fieldIds": [
+            "f-slot",
+            "f-class",
+            "f-course",
+            "f-subject",
+            "f-grade",
+            "f-teacher",
+            "f-term"
+          ]
+        }
+      },
+      {
+        "id": "b-when",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "When and where",
+          "fieldIds": [
+            "f-day",
+            "f-period",
+            "f-starts",
+            "f-ends",
+            "f-room",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-cover",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Cover",
+          "fieldIds": [
+            "f-coverdate",
+            "f-substitute",
+            "f-coverwork"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-cover",
+        "name": "Needs cover — find a substitute",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "tt-cover"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A lesson needs cover. Set the cover date, choose a substitute, and leave cover work for the class."
+          }
+        ]
+      },
+      {
+        "id": "a-covered",
+        "name": "Cover arranged — tell the substitute",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "tt-covered"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Cover has been arranged. Make sure the substitute has the room, the class list and the cover work."
+          }
+        ]
+      },
+      {
+        "id": "a-changed",
+        "name": "Changed — tell students and staff",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "tt-changed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A timetable slot was changed. Let the class, the teacher and families know before the next lesson."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-day",
+      "f-period",
+      "f-room",
+      "f-teacher"
+    ],
+    "views": [
+      {
+        "id": "v-day",
+        "title": "By day",
+        "fieldId": "f-day",
+        "scope": "team"
+      },
+      {
+        "id": "v-room",
+        "title": "By room",
+        "fieldId": "f-room",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-touched",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "touched"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 1,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-day",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-day"
+        }
+      },
+      {
+        "id": "w-teacher",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-teacher"
+        }
+      },
+      {
+        "id": "w-cover",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "tt-cover"
+        }
+      },
+      {
+        "id": "w-coverdate",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-coverdate"
+        }
+      }
+    ]
+  }
+}

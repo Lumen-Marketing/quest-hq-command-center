@@ -1,0 +1,647 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Products",
+    "recordName": "Product",
+    "type": "Inventory",
+    "icon": "ti-packages",
+    "color": "#d97706",
+    "description": "Everything the store sells, with the numbers that decide what to reorder and what it earns. Cost and retail price give profit, margin and markup; stock on hand less what is reserved gives what is really available; and stock at cost shows what is sitting on the shelves. Products drop to Low stock below their reorder point and to Out of stock at zero on their own.",
+    "fields": [
+      {
+        "id": "f-product",
+        "label": "Product",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Colombian ground coffee 500g"
+        }
+      },
+      {
+        "id": "f-sku",
+        "label": "SKU",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-barcode",
+        "label": "Barcode",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "EAN or UPC"
+        }
+      },
+      {
+        "id": "f-dept",
+        "label": "Department",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dp-grocery",
+              "label": "Grocery",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dp-fresh",
+              "label": "Fresh and chilled",
+              "color": "#0d9488"
+            },
+            {
+              "id": "dp-household",
+              "label": "Household",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dp-beauty",
+              "label": "Health and beauty",
+              "color": "#db2777"
+            },
+            {
+              "id": "dp-apparel",
+              "label": "Apparel",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dp-electronics",
+              "label": "Electronics",
+              "color": "#0891b2"
+            },
+            {
+              "id": "dp-home",
+              "label": "Home and garden",
+              "color": "#d97706"
+            },
+            {
+              "id": "dp-toys",
+              "label": "Toys and games",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dp-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-brand",
+        "label": "Brand",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-variant",
+        "label": "Variant",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Size, colour or flavour"
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ps-active",
+              "label": "Active",
+              "color": "#639922"
+            },
+            {
+              "id": "ps-low",
+              "label": "Low stock",
+              "color": "#BA7517"
+            },
+            {
+              "id": "ps-out",
+              "label": "Out of stock",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "ps-seasonal",
+              "label": "Seasonal",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "ps-disc",
+              "label": "Discontinued",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-supplier",
+        "label": "Supplier",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-supsku",
+        "label": "Supplier code",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-lead",
+        "label": "Lead time",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "days"
+        }
+      },
+      {
+        "id": "f-cost",
+        "label": "Cost price",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What you pay per unit"
+        }
+      },
+      {
+        "id": "f-retail",
+        "label": "Retail price",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What the customer pays"
+        }
+      },
+      {
+        "id": "f-profit",
+        "label": "Profit per unit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Retail price} - {Cost price}"
+        }
+      },
+      {
+        "id": "f-margin",
+        "label": "Margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Retail price} - {Cost price}) * 100 / {Retail price}"
+        }
+      },
+      {
+        "id": "f-markup",
+        "label": "Markup %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Retail price} - {Cost price}) * 100 / {Cost price}"
+        }
+      },
+      {
+        "id": "f-stock",
+        "label": "In stock",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "units"
+        }
+      },
+      {
+        "id": "f-reserved",
+        "label": "Reserved",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "units",
+          "placeholder": "Held for orders not yet collected"
+        }
+      },
+      {
+        "id": "f-available",
+        "label": "Available to sell",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{In stock} - {Reserved}"
+        }
+      },
+      {
+        "id": "f-reorder",
+        "label": "Reorder point",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "units"
+        }
+      },
+      {
+        "id": "f-reorderqty",
+        "label": "Reorder quantity",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "units"
+        }
+      },
+      {
+        "id": "f-headroom",
+        "label": "Above reorder point",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({In stock} - {Reorder point}) * {In stock} / {In stock}"
+        }
+      },
+      {
+        "id": "f-stockvalue",
+        "label": "Stock at cost",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{In stock} * {Cost price}"
+        }
+      },
+      {
+        "id": "f-retailvalue",
+        "label": "Stock at retail",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{In stock} * {Retail price}"
+        }
+      },
+      {
+        "id": "f-location",
+        "label": "Shelf location",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Aisle 4 — shelf B"
+        }
+      },
+      {
+        "id": "f-counted",
+        "label": "Last counted",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-taxable",
+        "label": "Taxable",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-tags",
+        "label": "Tags",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tg-best",
+              "label": "Best seller",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tg-new",
+              "label": "New arrival",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tg-clearance",
+              "label": "Clearance",
+              "color": "#e0552d"
+            },
+            {
+              "id": "tg-seasonal",
+              "label": "Seasonal",
+              "color": "#d97706"
+            },
+            {
+              "id": "tg-fragile",
+              "label": "Fragile",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "tg-restricted",
+              "label": "Age restricted",
+              "color": "#dc2626"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-photo",
+        "label": "Photo",
+        "type": "image",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Pack size, storage, anything staff should know"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-product",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Product",
+          "fieldIds": [
+            "f-product",
+            "f-sku",
+            "f-barcode",
+            "f-dept",
+            "f-brand",
+            "f-variant",
+            "f-status",
+            "f-tags",
+            "f-photo"
+          ]
+        }
+      },
+      {
+        "id": "b-price",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Price and profit",
+          "fieldIds": [
+            "f-cost",
+            "f-retail",
+            "f-profit",
+            "f-margin",
+            "f-markup",
+            "f-taxable"
+          ]
+        }
+      },
+      {
+        "id": "b-stock",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Stock",
+          "fieldIds": [
+            "f-stock",
+            "f-reserved",
+            "f-available",
+            "f-reorder",
+            "f-reorderqty",
+            "f-headroom",
+            "f-stockvalue",
+            "f-retailvalue",
+            "f-location",
+            "f-counted"
+          ]
+        }
+      },
+      {
+        "id": "b-supplier",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Supplier",
+          "fieldIds": [
+            "f-supplier",
+            "f-supsku",
+            "f-lead"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-low",
+        "name": "Below the reorder point — low stock",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-headroom",
+          "op": "<",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-status",
+            "value": "ps-low"
+          },
+          {
+            "type": "notify",
+            "message": "A product has fallen below its reorder point. Add it to the next purchase order."
+          }
+        ]
+      },
+      {
+        "id": "a-out",
+        "name": "Nothing left — out of stock",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-stock",
+          "op": "<=",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-status",
+            "value": "ps-out"
+          },
+          {
+            "type": "notify",
+            "message": "A product is out of stock. Order it, and take it off the shelf edge and the website."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-sku",
+      "f-dept",
+      "f-stock",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-dept",
+        "title": "By department",
+        "fieldId": "f-dept",
+        "scope": "team"
+      },
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-stock",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-stock"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-touched",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "touched"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-dept",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-dept"
+        }
+      },
+      {
+        "id": "w-low",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "ps-low"
+        }
+      },
+      {
+        "id": "w-out",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "ps-out"
+        }
+      }
+    ]
+  }
+}

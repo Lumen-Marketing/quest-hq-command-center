@@ -6,7 +6,7 @@
     "name": "Sales Pipeline",
     "recordName": "Deal",
     "type": "Sales",
-    "icon": "ti-writing-sign",
+    "icon": "ti-chart-line",
     "color": "#378ADD",
     "description": "The Closer's board. A priced quote arrives from Underwriting and moves Estimate sent → Negotiating → Contract sent → Waiting to sign → Won. One deal per trade per address, grouped under a Project; each Won trade leaves as its own Job.",
     "fields": [

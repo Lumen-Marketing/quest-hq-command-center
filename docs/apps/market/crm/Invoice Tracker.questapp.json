@@ -1,0 +1,589 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Invoice Tracker",
+    "recordName": "Invoice",
+    "type": "Invoices",
+    "icon": "ti-receipt",
+    "color": "#16a34a",
+    "description": "Know who owes you what and when it is due. Track each invoice from Draft to Paid with its subtotal, discount, tax and payments, and see the total and balance due worked out for you. Overdue and disputed invoices are flagged, and a collection checklist keeps follow-ups consistent.",
+    "fields": [
+      {
+        "id": "f-invoice",
+        "label": "Invoice",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Rivera — March service"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Invoice #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "INV-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Client",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Billing email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-ref",
+        "label": "PO or reference #",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "iv-draft",
+              "label": "Draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "iv-sent",
+              "label": "Sent",
+              "color": "#378ADD"
+            },
+            {
+              "id": "iv-partial",
+              "label": "Partially paid",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "iv-paid",
+              "label": "Paid",
+              "color": "#639922"
+            },
+            {
+              "id": "iv-overdue",
+              "label": "Overdue",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "iv-disputed",
+              "label": "Disputed",
+              "color": "#BA7517"
+            },
+            {
+              "id": "iv-void",
+              "label": "Written off",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-issued",
+        "label": "Issued on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-due",
+        "label": "Due on",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-paidon",
+        "label": "Paid on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-terms",
+        "label": "Payment terms",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pt-receipt",
+              "label": "Due on receipt",
+              "color": "#64748b"
+            },
+            {
+              "id": "pt-net15",
+              "label": "Net 15",
+              "color": "#0891b2"
+            },
+            {
+              "id": "pt-net30",
+              "label": "Net 30",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pt-net60",
+              "label": "Net 60",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pt-autopay",
+              "label": "Monthly autopay",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-subtotal",
+        "label": "Subtotal",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-discount",
+        "label": "Discount",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "As a positive amount"
+        }
+      },
+      {
+        "id": "f-tax",
+        "label": "Tax",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-paid",
+        "label": "Amount paid",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "Everything received so far"
+        }
+      },
+      {
+        "id": "f-total",
+        "label": "Total",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Subtotal} - {Discount} + {Tax}"
+        }
+      },
+      {
+        "id": "f-balance",
+        "label": "Balance due",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Subtotal} - {Discount} + {Tax} - {Amount paid}"
+        }
+      },
+      {
+        "id": "f-method",
+        "label": "Payment method",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pm-card",
+              "label": "Card",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pm-ach",
+              "label": "Bank transfer",
+              "color": "#16a34a"
+            },
+            {
+              "id": "pm-check",
+              "label": "Check",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pm-cash",
+              "label": "Cash",
+              "color": "#d97706"
+            },
+            {
+              "id": "pm-finance",
+              "label": "Financing",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-reminders",
+        "label": "Reminders sent",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-collect",
+        "label": "Collection steps",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Invoice sent",
+            "Reminder before the due date",
+            "Reminder on the due date",
+            "Phone call at 7 days overdue",
+            "Final notice at 30 days overdue"
+          ]
+        }
+      },
+      {
+        "id": "f-collectpct",
+        "label": "Collection progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-collect"
+        }
+      },
+      {
+        "id": "f-pdf",
+        "label": "Invoice file",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-receipts",
+        "label": "Receipts",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Promises to pay, disputes, who approves payment"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-invoice",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Invoice",
+          "fieldIds": [
+            "f-invoice",
+            "f-no",
+            "f-contact",
+            "f-email",
+            "f-ref",
+            "f-status",
+            "f-owner"
+          ]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Dates and terms",
+          "fieldIds": [
+            "f-issued",
+            "f-due",
+            "f-paidon",
+            "f-terms",
+            "f-method"
+          ]
+        }
+      },
+      {
+        "id": "b-money",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Amounts",
+          "fieldIds": [
+            "f-subtotal",
+            "f-discount",
+            "f-tax",
+            "f-total",
+            "f-paid",
+            "f-balance"
+          ]
+        }
+      },
+      {
+        "id": "b-collect",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Collections",
+          "fieldIds": [
+            "f-collect",
+            "f-collectpct",
+            "f-reminders"
+          ]
+        }
+      },
+      {
+        "id": "b-files",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Files and notes",
+          "fieldIds": [
+            "f-pdf",
+            "f-receipts",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-overdue",
+        "name": "Overdue — follow up",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "iv-overdue"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-reminders",
+            "value": "+1"
+          },
+          {
+            "type": "notify",
+            "message": "An invoice is overdue. Contact the client today and note any promise to pay."
+          }
+        ]
+      },
+      {
+        "id": "a-disputed",
+        "name": "Disputed — resolve before chasing",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "iv-disputed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A client disputed an invoice. Stop reminders, find out what is wrong, and record the outcome in Notes."
+          }
+        ]
+      },
+      {
+        "id": "a-paid",
+        "name": "Paid — record the date",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "iv-paid"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An invoice was marked Paid. Fill in the Paid on date and payment method."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-due",
+      "f-balance",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-terms",
+        "title": "By payment terms",
+        "fieldId": "f-terms",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-subtotal",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-subtotal"
+        }
+      },
+      {
+        "id": "w-paid",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-paid"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-overdue",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "iv-overdue"
+        }
+      },
+      {
+        "id": "w-due",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-due"
+        }
+      },
+      {
+        "id": "w-method",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-method"
+        }
+      }
+    ]
+  }
+}

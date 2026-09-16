@@ -1,0 +1,633 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Client Accounts",
+    "recordName": "Account",
+    "type": "Contacts",
+    "icon": "ti-building",
+    "color": "#2563eb",
+    "description": "One place for every client you do business with — who to call, who manages the relationship, how much they are worth, and how healthy the account is. Track lifetime and yearly revenue, open balances and review dates, and work each new account through a simple account plan.",
+    "fields": [
+      {
+        "id": "f-account",
+        "label": "Account",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Rivera Property Group"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Account #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "AC-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Primary contact",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-website",
+        "label": "Website",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-kind",
+        "label": "Client type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ct-res",
+              "label": "Residential",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ct-com",
+              "label": "Commercial",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ct-pm",
+              "label": "Property management",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ct-gov",
+              "label": "Government",
+              "color": "#64748b"
+            },
+            {
+              "id": "ct-np",
+              "label": "Nonprofit",
+              "color": "#db2777"
+            },
+            {
+              "id": "ct-other",
+              "label": "Other",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-tier",
+        "label": "Tier",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tr-key",
+              "label": "Key account",
+              "color": "#e0552d"
+            },
+            {
+              "id": "tr-growth",
+              "label": "Growth",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tr-standard",
+              "label": "Standard",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tr-occasional",
+              "label": "Occasional",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "as-onboard",
+              "label": "Onboarding",
+              "color": "#378ADD"
+            },
+            {
+              "id": "as-active",
+              "label": "Active",
+              "color": "#639922"
+            },
+            {
+              "id": "as-risk",
+              "label": "At risk",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "as-paused",
+              "label": "Paused",
+              "color": "#BA7517"
+            },
+            {
+              "id": "as-former",
+              "label": "Former client",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-manager",
+        "label": "Account manager",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-since",
+        "label": "Client since",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-review",
+        "label": "Next review",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-method",
+        "label": "Preferred contact",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cm-call",
+              "label": "Call",
+              "color": "#16a34a"
+            },
+            {
+              "id": "cm-text",
+              "label": "Text",
+              "color": "#2563eb"
+            },
+            {
+              "id": "cm-email",
+              "label": "Email",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "cm-person",
+              "label": "In person",
+              "color": "#d97706"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-tags",
+        "label": "Tags",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tg-vip",
+              "label": "VIP",
+              "color": "#e0552d"
+            },
+            {
+              "id": "tg-referrer",
+              "label": "Refers others",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tg-taxexempt",
+              "label": "Tax exempt",
+              "color": "#64748b"
+            },
+            {
+              "id": "tg-po",
+              "label": "Needs a PO",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "tg-terms",
+              "label": "On credit terms",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tg-seasonal",
+              "label": "Seasonal",
+              "color": "#d97706"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-lifetime",
+        "label": "Lifetime revenue",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-yearrev",
+        "label": "Revenue this year",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-orders",
+        "label": "Orders this year",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-avg",
+        "label": "Average order",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Revenue this year} / {Orders this year}"
+        }
+      },
+      {
+        "id": "f-balance",
+        "label": "Open balance",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-health",
+        "label": "Account health",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-plan",
+        "label": "Account plan",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Welcome call",
+            "Billing details on file",
+            "Key contacts documented",
+            "First review meeting",
+            "Annual review",
+            "Growth conversation"
+          ]
+        }
+      },
+      {
+        "id": "f-planpct",
+        "label": "Plan progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-plan"
+        }
+      },
+      {
+        "id": "f-docs",
+        "label": "Documents",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "How they like to work, who decides, anything to remember"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-who",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Account",
+          "fieldIds": [
+            "f-account",
+            "f-no",
+            "f-kind",
+            "f-tier",
+            "f-status",
+            "f-manager",
+            "f-tags"
+          ]
+        }
+      },
+      {
+        "id": "b-reach",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "How to reach them",
+          "fieldIds": [
+            "f-contact",
+            "f-phone",
+            "f-email",
+            "f-website",
+            "f-address",
+            "f-method"
+          ]
+        }
+      },
+      {
+        "id": "b-value",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Value",
+          "fieldIds": [
+            "f-lifetime",
+            "f-yearrev",
+            "f-orders",
+            "f-avg",
+            "f-balance"
+          ]
+        }
+      },
+      {
+        "id": "b-rel",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Relationship",
+          "fieldIds": [
+            "f-since",
+            "f-review",
+            "f-health",
+            "f-plan",
+            "f-planpct"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes and documents",
+          "fieldIds": [
+            "f-notes",
+            "f-docs"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-new",
+        "name": "New account — start the account plan",
+        "trigger": {
+          "event": "created"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A new client account was added. Assign an account manager and book the welcome call."
+          }
+        ]
+      },
+      {
+        "id": "a-risk",
+        "name": "At risk — call this week",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "as-risk"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An account is at risk. The account manager should call this week and set a Next review date."
+          }
+        ]
+      },
+      {
+        "id": "a-former",
+        "name": "Former client — note why",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "as-former"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An account was marked Former client. Record why in Notes so the reason is not lost."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-tier",
+      "f-manager",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-tier",
+        "title": "By tier",
+        "fieldId": "f-tier",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-yearrev",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-yearrev"
+        }
+      },
+      {
+        "id": "w-balance",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-balance"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-tier",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-tier"
+        }
+      },
+      {
+        "id": "w-risk",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "as-risk"
+        }
+      },
+      {
+        "id": "w-review",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-review"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,616 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Register Close",
+    "recordName": "Close",
+    "type": "Records",
+    "icon": "ti-cash",
+    "color": "#639922",
+    "description": "The end-of-day count, one record per register per day. Enter the float, takings by payment type and what was actually in the drawer; the app totals the day, works out the cash it expected and tells you whether you are over or short. Footfall against transactions gives a conversion rate, and a five-step close-down checklist means the last person out does the same things every night.",
+    "fields": [
+      {
+        "id": "f-close",
+        "label": "Close",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Tuesday — Register 1"
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-register",
+        "label": "Register",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rg-r1",
+              "label": "Register 1",
+              "color": "#2563eb"
+            },
+            {
+              "id": "rg-r2",
+              "label": "Register 2",
+              "color": "#16a34a"
+            },
+            {
+              "id": "rg-r3",
+              "label": "Register 3",
+              "color": "#d97706"
+            },
+            {
+              "id": "rg-kiosk",
+              "label": "Self checkout",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "rg-online",
+              "label": "Online",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-closedby",
+        "label": "Closed by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cl-open",
+              "label": "Open",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "cl-counted",
+              "label": "Counted",
+              "color": "#378ADD"
+            },
+            {
+              "id": "cl-balanced",
+              "label": "Balanced",
+              "color": "#639922"
+            },
+            {
+              "id": "cl-over",
+              "label": "Over",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "cl-short",
+              "label": "Short",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "cl-reviewed",
+              "label": "Reviewed",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-float",
+        "label": "Opening float",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-cash",
+        "label": "Cash takings",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-card",
+        "label": "Card takings",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-wallet",
+        "label": "Mobile wallet takings",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-giftcard",
+        "label": "Gift card takings",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-other",
+        "label": "Other takings",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-takings",
+        "label": "Total takings",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Cash takings} + {Card takings} + {Mobile wallet takings} + {Gift card takings} + {Other takings}"
+        }
+      },
+      {
+        "id": "f-payouts",
+        "label": "Paid out of the till",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "Petty cash, deliveries paid in cash"
+        }
+      },
+      {
+        "id": "f-deposit",
+        "label": "Banked",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-expected",
+        "label": "Cash expected",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Opening float} + {Cash takings} - {Paid out of the till} - {Banked}"
+        }
+      },
+      {
+        "id": "f-counted",
+        "label": "Cash counted",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What was actually in the drawer"
+        }
+      },
+      {
+        "id": "f-overshort",
+        "label": "Over or short",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Cash counted} - {Opening float} - {Cash takings} + {Paid out of the till} + {Banked}) * {Cash counted} / {Cash counted}"
+        }
+      },
+      {
+        "id": "f-refunds",
+        "label": "Refunds given",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-discounts",
+        "label": "Discounts given",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-transactions",
+        "label": "Transactions",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-items",
+        "label": "Items sold",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-basket",
+        "label": "Average basket",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Cash takings} + {Card takings} + {Mobile wallet takings} + {Gift card takings} + {Other takings}) / {Transactions}"
+        }
+      },
+      {
+        "id": "f-footfall",
+        "label": "Footfall",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "People through the door"
+        }
+      },
+      {
+        "id": "f-conversion",
+        "label": "Conversion %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Transactions} * 100 / {Footfall}"
+        }
+      },
+      {
+        "id": "f-steps",
+        "label": "Close-down",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Drawer counted twice",
+            "Card terminal settled",
+            "Deposit bagged and logged",
+            "Safe balanced",
+            "Float left ready for the morning"
+          ]
+        }
+      },
+      {
+        "id": "f-stepspct",
+        "label": "Close-down progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-steps"
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Anything odd: a void, a big refund, a till error"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-close",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Close",
+          "fieldIds": [
+            "f-close",
+            "f-date",
+            "f-register",
+            "f-closedby",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-takings",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Takings",
+          "fieldIds": [
+            "f-cash",
+            "f-card",
+            "f-wallet",
+            "f-giftcard",
+            "f-other",
+            "f-takings",
+            "f-refunds",
+            "f-discounts"
+          ]
+        }
+      },
+      {
+        "id": "b-drawer",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The drawer",
+          "fieldIds": [
+            "f-float",
+            "f-payouts",
+            "f-deposit",
+            "f-expected",
+            "f-counted",
+            "f-overshort"
+          ]
+        }
+      },
+      {
+        "id": "b-day",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "The day",
+          "fieldIds": [
+            "f-transactions",
+            "f-items",
+            "f-basket",
+            "f-footfall",
+            "f-conversion"
+          ]
+        }
+      },
+      {
+        "id": "b-steps",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Close-down",
+          "fieldIds": [
+            "f-steps",
+            "f-stepspct",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-short",
+        "name": "Drawer is short",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-overshort",
+          "op": "<",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-status",
+            "value": "cl-short"
+          },
+          {
+            "type": "notify",
+            "message": "The drawer counted short. Recount, check for a missed payout or a wrong change, and tell the manager before leaving."
+          }
+        ]
+      },
+      {
+        "id": "a-over",
+        "name": "Drawer is over",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-overshort",
+          "op": ">",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-status",
+            "value": "cl-over"
+          },
+          {
+            "type": "notify",
+            "message": "The drawer counted over. Recount and check whether a sale was rung up wrong."
+          }
+        ]
+      },
+      {
+        "id": "a-reviewed",
+        "name": "Reviewed — file the day",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cl-reviewed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A register close was reviewed. Make sure the banking matches and the day is filed."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-date",
+      "f-register",
+      "f-overshort",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-register",
+        "title": "By register",
+        "fieldId": "f-register",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-cash",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-cash"
+        }
+      },
+      {
+        "id": "w-card",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-card"
+        }
+      },
+      {
+        "id": "w-transactions",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-transactions"
+        }
+      },
+      {
+        "id": "w-items",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-items"
+        }
+      },
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-short",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "cl-short"
+        }
+      },
+      {
+        "id": "w-register",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-register"
+        }
+      }
+    ]
+  }
+}

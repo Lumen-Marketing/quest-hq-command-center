@@ -1,0 +1,628 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Sales",
+    "recordName": "Sale",
+    "type": "Invoices",
+    "icon": "ti-shopping-cart",
+    "color": "#16a34a",
+    "description": "Every sale the store makes, in store or online, with what was in the basket. Each sale itemises its lines, totals subtotal less discount plus tax, and works out gross profit and margin against the cost of what was sold. Refunded, held and voided sales each say what to do next, so the till, the stock and the books agree at the end of the day.",
+    "fields": [
+      {
+        "id": "f-sale",
+        "label": "Sale",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Receipt 1042 — Tuesday"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Receipt #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "R-",
+          "padding": 6
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-customer",
+        "label": "Customer",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-channel",
+        "label": "Channel",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ch-store",
+              "label": "In store",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ch-online",
+              "label": "Online",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ch-phone",
+              "label": "Phone order",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ch-market",
+              "label": "Marketplace",
+              "color": "#d97706"
+            },
+            {
+              "id": "ch-social",
+              "label": "Social media",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-cashier",
+        "label": "Served by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ss-completed",
+              "label": "Completed",
+              "color": "#639922"
+            },
+            {
+              "id": "ss-held",
+              "label": "Held",
+              "color": "#BA7517"
+            },
+            {
+              "id": "ss-partial",
+              "label": "Partly refunded",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "ss-refunded",
+              "label": "Refunded",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "ss-void",
+              "label": "Voided",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-items",
+        "label": "Items sold",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "units"
+        }
+      },
+      {
+        "id": "f-subtotal",
+        "label": "Subtotal",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-discount",
+        "label": "Discount",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "As a positive amount"
+        }
+      },
+      {
+        "id": "f-tax",
+        "label": "Tax",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-total",
+        "label": "Total",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Subtotal} - {Discount} + {Tax}"
+        }
+      },
+      {
+        "id": "f-cogs",
+        "label": "Cost of goods",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What the items cost you"
+        }
+      },
+      {
+        "id": "f-profit",
+        "label": "Gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Subtotal} - {Discount} - {Cost of goods}"
+        }
+      },
+      {
+        "id": "f-marginpct",
+        "label": "Margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Subtotal} - {Discount} - {Cost of goods}) * 100 / ({Subtotal} - {Discount})"
+        }
+      },
+      {
+        "id": "f-method",
+        "label": "Payment method",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pay-cash",
+              "label": "Cash",
+              "color": "#16a34a"
+            },
+            {
+              "id": "pay-card",
+              "label": "Card",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pay-wallet",
+              "label": "Mobile wallet",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pay-gift",
+              "label": "Gift card",
+              "color": "#db2777"
+            },
+            {
+              "id": "pay-credit",
+              "label": "Store credit",
+              "color": "#d97706"
+            },
+            {
+              "id": "pay-transfer",
+              "label": "Bank transfer",
+              "color": "#0891b2"
+            },
+            {
+              "id": "pay-split",
+              "label": "Split payment",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-paid",
+        "label": "Amount paid",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-balance",
+        "label": "Balance",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Subtotal} - {Discount} + {Tax} - {Amount paid}"
+        }
+      },
+      {
+        "id": "f-points",
+        "label": "Loyalty points earned",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-promo",
+        "label": "Promotion code",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-receipt",
+        "label": "Receipt",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Special order, delivery arrangement, anything unusual"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-lines",
+        "name": "Line items",
+        "recordName": "Line item",
+        "fields": [
+          {
+            "id": "l-item",
+            "label": "Item",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Colombian ground coffee 500g"
+            }
+          },
+          {
+            "id": "l-sku",
+            "label": "SKU",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "l-qty",
+            "label": "Quantity",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "l-price",
+            "label": "Unit price",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": ""
+            }
+          },
+          {
+            "id": "l-discount",
+            "label": "Line discount",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": ""
+            }
+          },
+          {
+            "id": "l-total",
+            "label": "Line total",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": ""
+            }
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-sale",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Sale",
+          "fieldIds": [
+            "f-sale",
+            "f-no",
+            "f-date",
+            "f-customer",
+            "f-channel",
+            "f-cashier",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-lines",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-lines"
+        }
+      },
+      {
+        "id": "b-money",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Money",
+          "fieldIds": [
+            "f-items",
+            "f-subtotal",
+            "f-discount",
+            "f-tax",
+            "f-total",
+            "f-cogs",
+            "f-profit",
+            "f-marginpct"
+          ]
+        }
+      },
+      {
+        "id": "b-payment",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Payment",
+          "fieldIds": [
+            "f-method",
+            "f-paid",
+            "f-balance",
+            "f-points",
+            "f-promo",
+            "f-receipt"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-refunded",
+        "name": "Refunded — put the stock back",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "ss-refunded"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A sale was refunded. Open a record in Returns & Refunds, put resellable stock back on the shelf, and check the till at close."
+          }
+        ]
+      },
+      {
+        "id": "a-void",
+        "name": "Voided — a manager should see it",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "ss-void"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A sale was voided. A manager should check why before the register is closed."
+          }
+        ]
+      },
+      {
+        "id": "a-held",
+        "name": "Held — do not leave it hanging",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "ss-held"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A sale is on hold. Reserve the stock against the product, and clear it before the end of the day."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-date",
+      "f-customer",
+      "f-method",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-method",
+        "title": "By payment method",
+        "fieldId": "f-method",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-subtotal",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-subtotal"
+        }
+      },
+      {
+        "id": "w-paid",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-paid"
+        }
+      },
+      {
+        "id": "w-items",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-items"
+        }
+      },
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-method",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-method"
+        }
+      },
+      {
+        "id": "w-channel",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-channel"
+        }
+      }
+    ]
+  }
+}

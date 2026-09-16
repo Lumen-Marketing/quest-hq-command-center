@@ -1,0 +1,648 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Students",
+    "recordName": "Student",
+    "type": "Contacts",
+    "icon": "ti-school",
+    "color": "#2563eb",
+    "description": "The student record at the heart of the school: grade and class, homeroom teacher, parent or guardian, emergency and medical details, learning support needs and enrollment documents. Termly attendance and current average sit on the profile, and a student whose attendance drops below 90% is flagged for follow-up.",
+    "fields": [
+      {
+        "id": "f-student",
+        "label": "Student",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Maya Santos"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Student ID",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "S-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-photo",
+        "label": "Photo",
+        "type": "image",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-dob",
+        "label": "Date of birth",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-grade",
+        "label": "Grade",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-class",
+        "label": "Class",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "7-B"
+        }
+      },
+      {
+        "id": "f-homeroom",
+        "label": "Homeroom teacher",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ss-enrolled",
+              "label": "Enrolled",
+              "color": "#378ADD"
+            },
+            {
+              "id": "ss-active",
+              "label": "Active",
+              "color": "#639922"
+            },
+            {
+              "id": "ss-leave",
+              "label": "On leave",
+              "color": "#BA7517"
+            },
+            {
+              "id": "ss-transferred",
+              "label": "Transferred out",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "ss-graduated",
+              "label": "Graduated",
+              "color": "#0891b2"
+            },
+            {
+              "id": "ss-withdrawn",
+              "label": "Withdrawn",
+              "color": "#E24B4A"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-enrolled",
+        "label": "Enrollment date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-guardian",
+        "label": "Parent or guardian",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-gphone",
+        "label": "Guardian phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-gemail",
+        "label": "Guardian email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-address",
+        "label": "Home address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-emergency",
+        "label": "Emergency contact",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Name and relationship"
+        }
+      },
+      {
+        "id": "f-ephone",
+        "label": "Emergency phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-medical",
+        "label": "Medical notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Allergies, conditions, medication"
+        }
+      },
+      {
+        "id": "f-support",
+        "label": "Support and programs",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sp-plan",
+              "label": "Learning plan",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "sp-gifted",
+              "label": "Gifted program",
+              "color": "#16a34a"
+            },
+            {
+              "id": "sp-ell",
+              "label": "English learner",
+              "color": "#0891b2"
+            },
+            {
+              "id": "sp-scholar",
+              "label": "Scholarship",
+              "color": "#d97706"
+            },
+            {
+              "id": "sp-bus",
+              "label": "Uses school transport",
+              "color": "#2563eb"
+            },
+            {
+              "id": "sp-meals",
+              "label": "Meal program",
+              "color": "#e0552d"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-days",
+        "label": "Days enrolled this term",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-present",
+        "label": "Days present this term",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-absent",
+        "label": "Days absent",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Days enrolled this term} - {Days present this term}"
+        }
+      },
+      {
+        "id": "f-rate",
+        "label": "Attendance %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Days present this term} * 100 / {Days enrolled this term}"
+        }
+      },
+      {
+        "id": "f-average",
+        "label": "Current average %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-docs",
+        "label": "Enrollment documents",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Birth certificate",
+            "Previous school records",
+            "Immunization record",
+            "Signed enrollment form",
+            "Photo permission form",
+            "Fee agreement signed"
+          ]
+        }
+      },
+      {
+        "id": "f-docspct",
+        "label": "Documents progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-docs"
+        }
+      },
+      {
+        "id": "f-files",
+        "label": "Documents",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-student",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Student",
+          "fieldIds": [
+            "f-student",
+            "f-no",
+            "f-photo",
+            "f-dob",
+            "f-grade",
+            "f-class",
+            "f-homeroom",
+            "f-status",
+            "f-enrolled"
+          ]
+        }
+      },
+      {
+        "id": "b-family",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Family and emergency",
+          "fieldIds": [
+            "f-guardian",
+            "f-gphone",
+            "f-gemail",
+            "f-address",
+            "f-emergency",
+            "f-ephone"
+          ]
+        }
+      },
+      {
+        "id": "b-care",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Care and support",
+          "fieldIds": [
+            "f-medical",
+            "f-support"
+          ]
+        }
+      },
+      {
+        "id": "b-progress",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "This term",
+          "fieldIds": [
+            "f-days",
+            "f-present",
+            "f-absent",
+            "f-rate",
+            "f-average"
+          ]
+        }
+      },
+      {
+        "id": "b-docs",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Enrollment documents",
+          "fieldIds": [
+            "f-docs",
+            "f-docspct",
+            "f-files"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-new",
+        "name": "New student — collect documents",
+        "trigger": {
+          "event": "created"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A new student was added. Collect the enrollment documents and assign a homeroom teacher."
+          }
+        ]
+      },
+      {
+        "id": "a-attendance",
+        "name": "Attendance below 90% — follow up",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-rate",
+          "op": "<",
+          "value": "90"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A student's attendance has dropped below 90%. The homeroom teacher should contact the family."
+          }
+        ]
+      },
+      {
+        "id": "a-withdrawn",
+        "name": "Withdrawn — close the record",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "ss-withdrawn"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A student was withdrawn. Settle any fees, return records requested by the new school, and note the reason."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-grade",
+      "f-class",
+      "f-guardian",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-grade",
+        "title": "By grade",
+        "fieldId": "f-grade",
+        "scope": "team"
+      },
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-days",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-days"
+        }
+      },
+      {
+        "id": "w-present",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-present"
+        }
+      },
+      {
+        "id": "w-grade",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-grade"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-homeroom",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-homeroom"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      }
+    ]
+  }
+}

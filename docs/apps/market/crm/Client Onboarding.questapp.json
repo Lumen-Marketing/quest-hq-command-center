@@ -1,0 +1,585 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Client Onboarding",
+    "recordName": "Onboarding",
+    "type": "Projects",
+    "icon": "ti-rocket",
+    "color": "#7c3aed",
+    "description": "Get every new client set up the same way. Each onboarding has a kickoff date, a go-live target, a standard checklist, milestones, and an hours budget that shows how much time is left. Stalled onboardings are flagged, and going live reminds you to book the first check-in.",
+    "fields": [
+      {
+        "id": "f-client",
+        "label": "Client",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Rivera Property Group"
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Client contact",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-package",
+        "label": "Package",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pk-starter",
+              "label": "Starter",
+              "color": "#64748b"
+            },
+            {
+              "id": "pk-standard",
+              "label": "Standard",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pk-premium",
+              "label": "Premium",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pk-custom",
+              "label": "Custom",
+              "color": "#d97706"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ob-kickoff",
+              "label": "Kickoff scheduled",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "ob-collect",
+              "label": "Collecting information",
+              "color": "#378ADD"
+            },
+            {
+              "id": "ob-setup",
+              "label": "Setting up",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "ob-training",
+              "label": "Training",
+              "color": "#0891b2"
+            },
+            {
+              "id": "ob-live",
+              "label": "Live",
+              "color": "#639922"
+            },
+            {
+              "id": "ob-stalled",
+              "label": "Stalled",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "ob-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-kickoff",
+        "label": "Kickoff date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-target",
+        "label": "Target go-live",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-live",
+        "label": "Went live on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-checklist",
+        "label": "Onboarding checklist",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Welcome email sent",
+            "Kickoff call held",
+            "Contract and billing set up",
+            "Accounts and access created",
+            "Information and documents collected",
+            "Training session done",
+            "First check-in after go-live"
+          ]
+        }
+      },
+      {
+        "id": "f-pct",
+        "label": "Onboarding progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-checklist"
+        }
+      },
+      {
+        "id": "f-setupfee",
+        "label": "Setup fee",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-monthly",
+        "label": "Monthly value",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-budget",
+        "label": "Hours budgeted",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "hrs"
+        }
+      },
+      {
+        "id": "f-used",
+        "label": "Hours used",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "hrs"
+        }
+      },
+      {
+        "id": "f-left",
+        "label": "Hours left",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Hours budgeted} - {Hours used}) * {Hours budgeted} / {Hours budgeted}"
+        }
+      },
+      {
+        "id": "f-health",
+        "label": "Health",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-goals",
+        "label": "Goals",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What success looks like for this client"
+        }
+      },
+      {
+        "id": "f-blockers",
+        "label": "Risks and blockers",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What could delay go-live, and who can unblock it"
+        }
+      },
+      {
+        "id": "f-docs",
+        "label": "Documents",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-milestones",
+        "name": "Milestones",
+        "recordName": "Milestone",
+        "fields": [
+          {
+            "id": "m-name",
+            "label": "Milestone",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Data imported"
+            }
+          },
+          {
+            "id": "m-due",
+            "label": "Due",
+            "type": "date",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "m-owner",
+            "label": "Owner",
+            "type": "user",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "m-status",
+            "label": "Status",
+            "type": "status",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                {
+                  "id": "ms-todo",
+                  "label": "Not started",
+                  "color": "#9AA0A8"
+                },
+                {
+                  "id": "ms-doing",
+                  "label": "In progress",
+                  "color": "#378ADD"
+                },
+                {
+                  "id": "ms-done",
+                  "label": "Done",
+                  "color": "#639922"
+                },
+                {
+                  "id": "ms-blocked",
+                  "label": "Blocked",
+                  "color": "#E24B4A"
+                }
+              ]
+            }
+          },
+          {
+            "id": "m-notes",
+            "label": "Notes",
+            "type": "textarea",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-client",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Client",
+          "fieldIds": [
+            "f-client",
+            "f-contact",
+            "f-owner",
+            "f-package",
+            "f-stage",
+            "f-health"
+          ]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Timeline",
+          "fieldIds": [
+            "f-kickoff",
+            "f-target",
+            "f-live"
+          ]
+        }
+      },
+      {
+        "id": "b-check",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Checklist",
+          "fieldIds": [
+            "f-checklist",
+            "f-pct"
+          ]
+        }
+      },
+      {
+        "id": "b-budget",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Value and hours",
+          "fieldIds": [
+            "f-setupfee",
+            "f-monthly",
+            "f-budget",
+            "f-used",
+            "f-left"
+          ]
+        }
+      },
+      {
+        "id": "b-milestones",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-milestones"
+        }
+      },
+      {
+        "id": "b-goals",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Goals and risks",
+          "fieldIds": [
+            "f-goals",
+            "f-blockers",
+            "f-docs"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-stalled",
+        "name": "Stalled — find the blocker",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-stage",
+          "to": "ob-stalled"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An onboarding has stalled. Write down the blocker and agree a next step with the client this week."
+          }
+        ]
+      },
+      {
+        "id": "a-live",
+        "name": "Live — book the first check-in",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-stage",
+          "to": "ob-live"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A client just went live. Fill in the go-live date and book the first check-in within two weeks."
+          }
+        ]
+      },
+      {
+        "id": "a-hours",
+        "name": "Over the hours budget",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-left",
+          "op": "<",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An onboarding has used more hours than budgeted. Review the scope before doing more work."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-target",
+      "f-pct",
+      "f-stage"
+    ],
+    "views": [
+      {
+        "id": "v-stage",
+        "title": "By stage",
+        "fieldId": "f-stage",
+        "scope": "team"
+      },
+      {
+        "id": "v-package",
+        "title": "By package",
+        "fieldId": "f-package",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-monthly",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-monthly"
+        }
+      },
+      {
+        "id": "w-setup",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-setupfee"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-stage",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-stage"
+        }
+      },
+      {
+        "id": "w-target",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-target"
+        }
+      },
+      {
+        "id": "w-stalled",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-stage",
+          "value": "ob-stalled"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      }
+    ]
+  }
+}

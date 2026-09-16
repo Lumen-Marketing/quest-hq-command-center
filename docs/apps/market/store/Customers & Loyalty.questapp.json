@@ -1,0 +1,625 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Customers & Loyalty",
+    "recordName": "Customer",
+    "type": "Contacts",
+    "icon": "ti-users",
+    "color": "#db2777",
+    "description": "The regulars, what they spend and what they have earned. Points collected less points redeemed gives what is available to spend; total spend over visits gives the average basket. Tiers move themselves as customers spend — Silver, Gold and VIP — and a lapsed customer is flagged for a win-back while they still remember you.",
+    "fields": [
+      {
+        "id": "f-customer",
+        "label": "Customer",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Ana Rivera"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Member #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "M-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-birthday",
+        "label": "Birthday",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-joined",
+        "label": "Joined on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-tier",
+        "label": "Tier",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tr-bronze",
+              "label": "Bronze",
+              "color": "#d97706"
+            },
+            {
+              "id": "tr-silver",
+              "label": "Silver",
+              "color": "#64748b"
+            },
+            {
+              "id": "tr-gold",
+              "label": "Gold",
+              "color": "#eab308"
+            },
+            {
+              "id": "tr-vip",
+              "label": "VIP",
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cu-active",
+              "label": "Active",
+              "color": "#639922"
+            },
+            {
+              "id": "cu-new",
+              "label": "New",
+              "color": "#378ADD"
+            },
+            {
+              "id": "cu-lapsed",
+              "label": "Lapsed",
+              "color": "#BA7517"
+            },
+            {
+              "id": "cu-blocked",
+              "label": "Blocked",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "cu-closed",
+              "label": "Closed",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-points",
+        "label": "Points earned",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-redeemed",
+        "label": "Points redeemed",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-available",
+        "label": "Points available",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Points earned} - {Points redeemed}"
+        }
+      },
+      {
+        "id": "f-visits",
+        "label": "Visits",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-spend",
+        "label": "Total spend",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-basket",
+        "label": "Average basket",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Total spend} / {Visits}"
+        }
+      },
+      {
+        "id": "f-lastvisit",
+        "label": "Last purchase",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-favourite",
+        "label": "Shops mostly in",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dp-grocery",
+              "label": "Grocery",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dp-fresh",
+              "label": "Fresh and chilled",
+              "color": "#0d9488"
+            },
+            {
+              "id": "dp-household",
+              "label": "Household",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dp-beauty",
+              "label": "Health and beauty",
+              "color": "#db2777"
+            },
+            {
+              "id": "dp-apparel",
+              "label": "Apparel",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dp-electronics",
+              "label": "Electronics",
+              "color": "#0891b2"
+            },
+            {
+              "id": "dp-home",
+              "label": "Home and garden",
+              "color": "#d97706"
+            },
+            {
+              "id": "dp-toys",
+              "label": "Toys and games",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dp-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-channel",
+        "label": "Usually buys",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ch-store",
+              "label": "In store",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ch-online",
+              "label": "Online",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ch-phone",
+              "label": "Phone order",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ch-market",
+              "label": "Marketplace",
+              "color": "#d97706"
+            },
+            {
+              "id": "ch-social",
+              "label": "Social media",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-credit",
+        "label": "Store credit",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-consent",
+        "label": "Happy to be contacted",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-tags",
+        "label": "Tags",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tg-wholesale",
+              "label": "Buys wholesale",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tg-staff",
+              "label": "Staff discount",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tg-taxexempt",
+              "label": "Tax exempt",
+              "color": "#64748b"
+            },
+            {
+              "id": "tg-returner",
+              "label": "Frequent returner",
+              "color": "#d97706"
+            },
+            {
+              "id": "tg-birthday",
+              "label": "Birthday club",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What they like, allergies, how they prefer to be served"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-who",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Customer",
+          "fieldIds": [
+            "f-customer",
+            "f-no",
+            "f-contact",
+            "f-phone",
+            "f-email",
+            "f-birthday",
+            "f-joined",
+            "f-consent"
+          ]
+        }
+      },
+      {
+        "id": "b-loyalty",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Loyalty",
+          "fieldIds": [
+            "f-tier",
+            "f-status",
+            "f-points",
+            "f-redeemed",
+            "f-available",
+            "f-credit"
+          ]
+        }
+      },
+      {
+        "id": "b-spend",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Spending",
+          "fieldIds": [
+            "f-visits",
+            "f-spend",
+            "f-basket",
+            "f-lastvisit",
+            "f-favourite",
+            "f-channel"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-tags",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-silver",
+        "name": "Spend reaches 500 — Silver",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-spend",
+          "op": ">=",
+          "value": "500"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-tier",
+            "value": "tr-silver"
+          }
+        ]
+      },
+      {
+        "id": "a-gold",
+        "name": "Spend reaches 1,000 — Gold",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-spend",
+          "op": ">=",
+          "value": "1000"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-tier",
+            "value": "tr-gold"
+          }
+        ]
+      },
+      {
+        "id": "a-vip",
+        "name": "Spend reaches 2,500 — VIP",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-spend",
+          "op": ">=",
+          "value": "2500"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-tier",
+            "value": "tr-vip"
+          },
+          {
+            "type": "notify",
+            "message": "A customer has passed 2,500 in spend and is now VIP. Worth a thank-you and an invitation to the next preview evening."
+          }
+        ]
+      },
+      {
+        "id": "a-lapsed",
+        "name": "Lapsed — win them back",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cu-lapsed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A regular has lapsed. Send them their points balance and an offer while they still remember the store."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-tier",
+      "f-spend",
+      "f-lastvisit",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-tier",
+        "title": "By tier",
+        "fieldId": "f-tier",
+        "scope": "team"
+      },
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-spend",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-spend"
+        }
+      },
+      {
+        "id": "w-visits",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-visits"
+        }
+      },
+      {
+        "id": "w-points",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-points"
+        }
+      },
+      {
+        "id": "w-tier",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-tier"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-birthday",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-birthday"
+        }
+      },
+      {
+        "id": "w-lapsed",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "cu-lapsed"
+        }
+      }
+    ]
+  }
+}

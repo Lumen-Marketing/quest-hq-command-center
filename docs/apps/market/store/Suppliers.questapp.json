@@ -1,0 +1,649 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Suppliers",
+    "recordName": "Supplier",
+    "type": "Contacts",
+    "icon": "ti-building-store",
+    "color": "#0d9488",
+    "description": "Who you buy from, on what terms, and whether they deliver when they say they will. Keep the rep, the account number, payment terms, lead time and minimum order in one place, with spend this year and an on-time delivery percentage beside them. A third late delivery prompts a review before it costs you a weekend of empty shelves.",
+    "fields": [
+      {
+        "id": "f-supplier",
+        "label": "Supplier",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Harbour Wholesale Ltd"
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Main contact",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-rep",
+        "label": "Sales rep",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-website",
+        "label": "Website",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-depts",
+        "label": "Supplies",
+        "type": "tags",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dp-grocery",
+              "label": "Grocery",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dp-fresh",
+              "label": "Fresh and chilled",
+              "color": "#0d9488"
+            },
+            {
+              "id": "dp-household",
+              "label": "Household",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dp-beauty",
+              "label": "Health and beauty",
+              "color": "#db2777"
+            },
+            {
+              "id": "dp-apparel",
+              "label": "Apparel",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dp-electronics",
+              "label": "Electronics",
+              "color": "#0891b2"
+            },
+            {
+              "id": "dp-home",
+              "label": "Home and garden",
+              "color": "#d97706"
+            },
+            {
+              "id": "dp-toys",
+              "label": "Toys and games",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dp-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sp-onboarding",
+              "label": "Onboarding",
+              "color": "#378ADD"
+            },
+            {
+              "id": "sp-active",
+              "label": "Active",
+              "color": "#0891b2"
+            },
+            {
+              "id": "sp-preferred",
+              "label": "Preferred",
+              "color": "#639922"
+            },
+            {
+              "id": "sp-hold",
+              "label": "On hold",
+              "color": "#BA7517"
+            },
+            {
+              "id": "sp-former",
+              "label": "No longer used",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-buyer",
+        "label": "Our buyer",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-account",
+        "label": "Account number",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-terms",
+        "label": "Payment terms",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tm-receipt",
+              "label": "Due on receipt",
+              "color": "#64748b"
+            },
+            {
+              "id": "tm-net15",
+              "label": "Net 15",
+              "color": "#0891b2"
+            },
+            {
+              "id": "tm-net30",
+              "label": "Net 30",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tm-net60",
+              "label": "Net 60",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "tm-consign",
+              "label": "Consignment",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-lead",
+        "label": "Lead time",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "days"
+        }
+      },
+      {
+        "id": "f-minimum",
+        "label": "Minimum order",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-discount",
+        "label": "Trade discount %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-orderday",
+        "label": "Order day",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "od-mon",
+              "label": "Monday",
+              "color": "#2563eb"
+            },
+            {
+              "id": "od-tue",
+              "label": "Tuesday",
+              "color": "#16a34a"
+            },
+            {
+              "id": "od-wed",
+              "label": "Wednesday",
+              "color": "#d97706"
+            },
+            {
+              "id": "od-thu",
+              "label": "Thursday",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "od-fri",
+              "label": "Friday",
+              "color": "#e0552d"
+            },
+            {
+              "id": "od-any",
+              "label": "Any day",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-orders",
+        "label": "Orders this year",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-spend",
+        "label": "Spend this year",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-average",
+        "label": "Average order",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Spend this year} / {Orders this year}"
+        }
+      },
+      {
+        "id": "f-ontime",
+        "label": "Deliveries on time",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-late",
+        "label": "Deliveries late",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-ontimepct",
+        "label": "On-time %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Deliveries on time} * 100 / ({Deliveries on time} + {Deliveries late})"
+        }
+      },
+      {
+        "id": "f-quality",
+        "label": "Quality",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-setup",
+        "label": "Account setup",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Tax details and trading terms on file",
+            "Signed supply agreement",
+            "Current price list",
+            "Delivery schedule agreed",
+            "Returns and credits policy understood"
+          ]
+        }
+      },
+      {
+        "id": "f-setuppct",
+        "label": "Setup progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-setup"
+        }
+      },
+      {
+        "id": "f-pricelist",
+        "label": "Price list",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Who to call when something is short, cut-off times, quirks"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-who",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Supplier",
+          "fieldIds": [
+            "f-supplier",
+            "f-contact",
+            "f-rep",
+            "f-phone",
+            "f-email",
+            "f-website",
+            "f-address"
+          ]
+        }
+      },
+      {
+        "id": "b-trade",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Trading",
+          "fieldIds": [
+            "f-depts",
+            "f-status",
+            "f-buyer",
+            "f-account",
+            "f-terms",
+            "f-lead",
+            "f-minimum",
+            "f-discount",
+            "f-orderday"
+          ]
+        }
+      },
+      {
+        "id": "b-perf",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "How they perform",
+          "fieldIds": [
+            "f-orders",
+            "f-spend",
+            "f-average",
+            "f-ontime",
+            "f-late",
+            "f-ontimepct",
+            "f-quality"
+          ]
+        }
+      },
+      {
+        "id": "b-setup",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Account setup",
+          "fieldIds": [
+            "f-setup",
+            "f-setuppct",
+            "f-pricelist"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-late",
+        "name": "Third late delivery — review them",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-late",
+          "op": ">=",
+          "value": "3"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This supplier has been late three times. Review the account with the rep, or move the lines to a second source."
+          }
+        ]
+      },
+      {
+        "id": "a-hold",
+        "name": "On hold — do not order",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "sp-hold"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A supplier was put on hold. Check for open purchase orders with them and find another source for anything urgent."
+          }
+        ]
+      },
+      {
+        "id": "a-preferred",
+        "name": "Preferred — agree the terms",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "sp-preferred"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A supplier is now preferred. Make sure the trade discount and payment terms here match what was agreed."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-rep",
+      "f-terms",
+      "f-ontimepct",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-terms",
+        "title": "By payment terms",
+        "fieldId": "f-terms",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-spend",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-spend"
+        }
+      },
+      {
+        "id": "w-orders",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-orders"
+        }
+      },
+      {
+        "id": "w-late",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-late"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-orderday",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-orderday"
+        }
+      },
+      {
+        "id": "w-hold",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "sp-hold"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      }
+    ]
+  }
+}

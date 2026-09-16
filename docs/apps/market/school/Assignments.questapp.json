@@ -1,0 +1,665 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Assignments",
+    "recordName": "Assignment",
+    "type": "Tasks",
+    "icon": "ti-pencil",
+    "color": "#e0552d",
+    "description": "Set homework, projects, essays and quizzes, and follow them from assigned to returned. Each assignment keeps its instructions, rubric, due date and points, and shows how many students have handed it in, how many are missing, how many are left to grade and the class average. Moving it to Collecting after the due date prompts teachers to chase missing work.",
+    "fields": [
+      {
+        "id": "f-assignment",
+        "label": "Assignment",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Linear equations worksheet"
+        }
+      },
+      {
+        "id": "f-course",
+        "label": "Course",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Algebra I — 8A"
+        }
+      },
+      {
+        "id": "f-subject",
+        "label": "Subject",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sj-math",
+              "label": "Mathematics",
+              "color": "#2563eb"
+            },
+            {
+              "id": "sj-english",
+              "label": "English",
+              "color": "#e0552d"
+            },
+            {
+              "id": "sj-science",
+              "label": "Science",
+              "color": "#16a34a"
+            },
+            {
+              "id": "sj-social",
+              "label": "Social studies",
+              "color": "#d97706"
+            },
+            {
+              "id": "sj-languages",
+              "label": "World languages",
+              "color": "#0891b2"
+            },
+            {
+              "id": "sj-arts",
+              "label": "Arts",
+              "color": "#db2777"
+            },
+            {
+              "id": "sj-music",
+              "label": "Music",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "sj-pe",
+              "label": "Physical education",
+              "color": "#0d9488"
+            },
+            {
+              "id": "sj-cs",
+              "label": "Computer science",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "sj-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-grade",
+        "label": "Grade",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-teacher",
+        "label": "Teacher",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-kind",
+        "label": "Type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ak-homework",
+              "label": "Homework",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ak-project",
+              "label": "Project",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ak-essay",
+              "label": "Essay",
+              "color": "#e0552d"
+            },
+            {
+              "id": "ak-quiz",
+              "label": "Quiz",
+              "color": "#d97706"
+            },
+            {
+              "id": "ak-lab",
+              "label": "Lab report",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ak-presentation",
+              "label": "Presentation",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "as-draft",
+              "label": "Draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "as-assigned",
+              "label": "Assigned",
+              "color": "#378ADD"
+            },
+            {
+              "id": "as-collecting",
+              "label": "Collecting — past due",
+              "color": "#0891b2"
+            },
+            {
+              "id": "as-grading",
+              "label": "Grading",
+              "color": "#BA7517"
+            },
+            {
+              "id": "as-returned",
+              "label": "Graded and returned",
+              "color": "#639922"
+            },
+            {
+              "id": "as-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-assigned",
+        "label": "Assigned on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-due",
+        "label": "Due on",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-returned",
+        "label": "Returned on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-points",
+        "label": "Points possible",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-weight",
+        "label": "Weight in final grade %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-students",
+        "label": "Students assigned",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-submitted",
+        "label": "Handed in",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-graded",
+        "label": "Graded",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-avgscore",
+        "label": "Average score",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "In points"
+        }
+      },
+      {
+        "id": "f-missing",
+        "label": "Missing",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Students assigned} - {Handed in}"
+        }
+      },
+      {
+        "id": "f-tograde",
+        "label": "Left to grade",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Handed in} - {Graded}"
+        }
+      },
+      {
+        "id": "f-rate",
+        "label": "Hand-in rate %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Handed in} * 100 / {Students assigned}"
+        }
+      },
+      {
+        "id": "f-avgpct",
+        "label": "Class average %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Average score} * 100 / {Points possible}"
+        }
+      },
+      {
+        "id": "f-instructions",
+        "label": "Instructions",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What students need to do, and how to hand it in"
+        }
+      },
+      {
+        "id": "f-rubric",
+        "label": "Rubric",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-link",
+        "label": "Resources link",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-files",
+        "label": "Attachments",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-assignment",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Assignment",
+          "fieldIds": [
+            "f-assignment",
+            "f-course",
+            "f-subject",
+            "f-grade",
+            "f-teacher",
+            "f-kind",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Dates and marks",
+          "fieldIds": [
+            "f-assigned",
+            "f-due",
+            "f-returned",
+            "f-points",
+            "f-weight"
+          ]
+        }
+      },
+      {
+        "id": "b-instructions",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Instructions",
+          "fieldIds": [
+            "f-instructions",
+            "f-rubric",
+            "f-link",
+            "f-files"
+          ]
+        }
+      },
+      {
+        "id": "b-tracking",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Hand-in and grading",
+          "fieldIds": [
+            "f-students",
+            "f-submitted",
+            "f-graded",
+            "f-missing",
+            "f-tograde",
+            "f-rate"
+          ]
+        }
+      },
+      {
+        "id": "b-results",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Results",
+          "fieldIds": [
+            "f-avgscore",
+            "f-avgpct"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-collecting",
+        "name": "Past due — chase missing work",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "as-collecting"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An assignment is past its due date. Check Missing, remind those students and contact their families."
+          }
+        ]
+      },
+      {
+        "id": "a-grading",
+        "name": "Grading — aim to return within a week",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "as-grading"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An assignment is being graded. Aim to return feedback to students within a week."
+          }
+        ]
+      },
+      {
+        "id": "a-returned",
+        "name": "Returned — record the grades",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "as-returned"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An assignment was returned. Record the scores in the Gradebook."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-course",
+      "f-due",
+      "f-rate",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-subject",
+        "title": "By subject",
+        "fieldId": "f-subject",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-submitted",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-submitted"
+        }
+      },
+      {
+        "id": "w-graded",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-graded"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-due",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-due"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-kind",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-kind"
+        }
+      },
+      {
+        "id": "w-grading",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "as-grading"
+        }
+      }
+    ]
+  }
+}

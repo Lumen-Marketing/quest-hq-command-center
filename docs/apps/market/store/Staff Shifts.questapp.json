@@ -1,0 +1,525 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Staff Shifts",
+    "recordName": "Shift",
+    "type": "Calendar",
+    "icon": "ti-clock",
+    "color": "#0891b2",
+    "description": "Who is on, when, and what the floor cost to run. Each shift carries its role, hours scheduled and actually worked, overtime, and the cost at the hourly rate. Sales taken during the shift give sales per hour, so a quiet Tuesday and a heavy Saturday can be staffed on evidence. A shift needing cover says so loudly enough to be filled.",
+    "fields": [
+      {
+        "id": "f-shift",
+        "label": "Shift",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Saturday — floor — Ana"
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-staff",
+        "label": "Staff member",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-role",
+        "label": "Role",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rl-cashier",
+              "label": "Cashier",
+              "color": "#2563eb"
+            },
+            {
+              "id": "rl-floor",
+              "label": "Shop floor",
+              "color": "#16a34a"
+            },
+            {
+              "id": "rl-stock",
+              "label": "Stockroom",
+              "color": "#d97706"
+            },
+            {
+              "id": "rl-supervisor",
+              "label": "Supervisor",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "rl-manager",
+              "label": "Manager",
+              "color": "#e0552d"
+            },
+            {
+              "id": "rl-delivery",
+              "label": "Deliveries",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-start",
+        "label": "Starts",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "09:00"
+        }
+      },
+      {
+        "id": "f-end",
+        "label": "Ends",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "17:30"
+        }
+      },
+      {
+        "id": "f-scheduled",
+        "label": "Hours scheduled",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "hrs"
+        }
+      },
+      {
+        "id": "f-break",
+        "label": "Break",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "min"
+        }
+      },
+      {
+        "id": "f-actual",
+        "label": "Hours worked",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "hrs"
+        }
+      },
+      {
+        "id": "f-overtime",
+        "label": "Overtime",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Hours worked} - {Hours scheduled}) * {Hours worked} / {Hours worked}"
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sh-scheduled",
+              "label": "Scheduled",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "sh-confirmed",
+              "label": "Confirmed",
+              "color": "#378ADD"
+            },
+            {
+              "id": "sh-cover",
+              "label": "Needs cover",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "sh-covered",
+              "label": "Cover arranged",
+              "color": "#BA7517"
+            },
+            {
+              "id": "sh-completed",
+              "label": "Completed",
+              "color": "#639922"
+            },
+            {
+              "id": "sh-noshow",
+              "label": "No show",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "sh-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-cover",
+        "label": "Covered by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-rate",
+        "label": "Hourly rate",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-cost",
+        "label": "Shift cost",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Hours worked} * {Hourly rate}"
+        }
+      },
+      {
+        "id": "f-sales",
+        "label": "Sales taken",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-transactions",
+        "label": "Transactions",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-perhour",
+        "label": "Sales per hour",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Sales taken} / {Hours worked}"
+        }
+      },
+      {
+        "id": "f-duties",
+        "label": "Shift duties",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Float checked at the start",
+            "Shop floor faced and tidy",
+            "Deliveries put away",
+            "Returns processed",
+            "Handover notes written"
+          ]
+        }
+      },
+      {
+        "id": "f-dutiespct",
+        "label": "Duties progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-duties"
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Handover: what the next shift needs to know"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-shift",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Shift",
+          "fieldIds": [
+            "f-shift",
+            "f-date",
+            "f-staff",
+            "f-role",
+            "f-status",
+            "f-cover"
+          ]
+        }
+      },
+      {
+        "id": "b-hours",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Hours",
+          "fieldIds": [
+            "f-start",
+            "f-end",
+            "f-scheduled",
+            "f-break",
+            "f-actual",
+            "f-overtime"
+          ]
+        }
+      },
+      {
+        "id": "b-cost",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Cost and takings",
+          "fieldIds": [
+            "f-rate",
+            "f-cost",
+            "f-sales",
+            "f-transactions",
+            "f-perhour"
+          ]
+        }
+      },
+      {
+        "id": "b-duties",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Duties",
+          "fieldIds": [
+            "f-duties",
+            "f-dutiespct",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-cover",
+        "name": "Needs cover — fill it today",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "sh-cover"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A shift needs cover. Ask the team today rather than the night before, and name who is covering here."
+          }
+        ]
+      },
+      {
+        "id": "a-noshow",
+        "name": "No show — cover the floor",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "sh-noshow"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Somebody did not turn up. Cover the floor first, then talk to them before the next shift."
+          }
+        ]
+      },
+      {
+        "id": "a-completed",
+        "name": "Completed — record the hours",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "sh-completed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A shift finished. Enter the hours actually worked so the cost and the payroll are right."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-date",
+      "f-staff",
+      "f-role",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-role",
+        "title": "By role",
+        "fieldId": "f-role",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 4,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-actual",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-actual"
+        }
+      },
+      {
+        "id": "w-sales",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-sales"
+        }
+      },
+      {
+        "id": "w-transactions",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-transactions"
+        }
+      },
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-role",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-role"
+        }
+      },
+      {
+        "id": "w-cover",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "sh-cover"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      }
+    ]
+  }
+}

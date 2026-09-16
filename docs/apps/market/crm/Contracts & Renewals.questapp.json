@@ -1,0 +1,617 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Contracts & Renewals",
+    "recordName": "Contract",
+    "type": "Documents",
+    "icon": "ti-file-invoice",
+    "color": "#0d9488",
+    "description": "Never miss a renewal. Store each client agreement with its signed copy, term, value and payment terms, and see the renewal notice date and end date on a calendar. The app works out annual value and the renewal price after an increase, and walks every renewal through the same five steps.",
+    "fields": [
+      {
+        "id": "f-contract",
+        "label": "Contract",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Rivera — annual maintenance plan"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Contract #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "CT-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Client",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-kind",
+        "label": "Contract type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ck-service",
+              "label": "Service agreement",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ck-maint",
+              "label": "Maintenance plan",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ck-msa",
+              "label": "Master services agreement",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ck-sub",
+              "label": "Subscription",
+              "color": "#0891b2"
+            },
+            {
+              "id": "ck-nda",
+              "label": "NDA",
+              "color": "#64748b"
+            },
+            {
+              "id": "ck-other",
+              "label": "Other",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cs-draft",
+              "label": "Draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "cs-sent",
+              "label": "Sent for signature",
+              "color": "#378ADD"
+            },
+            {
+              "id": "cs-active",
+              "label": "Active",
+              "color": "#639922"
+            },
+            {
+              "id": "cs-due",
+              "label": "Renewal due",
+              "color": "#BA7517"
+            },
+            {
+              "id": "cs-renewed",
+              "label": "Renewed",
+              "color": "#0891b2"
+            },
+            {
+              "id": "cs-expired",
+              "label": "Expired",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "cs-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-owner",
+        "label": "Owner",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-signed",
+        "label": "Signed on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-start",
+        "label": "Start date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-end",
+        "label": "End date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-notice",
+        "label": "Renewal notice by",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-term",
+        "label": "Term",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "months"
+        }
+      },
+      {
+        "id": "f-auto",
+        "label": "Auto-renews",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-value",
+        "label": "Contract value",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "Total over the whole term"
+        }
+      },
+      {
+        "id": "f-monthly",
+        "label": "Monthly value",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-increase",
+        "label": "Renewal increase %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-annual",
+        "label": "Annual value",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Monthly value} * 12"
+        }
+      },
+      {
+        "id": "f-renewal",
+        "label": "Annual value at renewal",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Monthly value} * 12 * (100 + {Renewal increase %}) / 100"
+        }
+      },
+      {
+        "id": "f-terms",
+        "label": "Payment terms",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pt-receipt",
+              "label": "Due on receipt",
+              "color": "#64748b"
+            },
+            {
+              "id": "pt-net15",
+              "label": "Net 15",
+              "color": "#0891b2"
+            },
+            {
+              "id": "pt-net30",
+              "label": "Net 30",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pt-net60",
+              "label": "Net 60",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pt-autopay",
+              "label": "Monthly autopay",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-billing",
+        "label": "Billing frequency",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "bf-once",
+              "label": "One-time",
+              "color": "#64748b"
+            },
+            {
+              "id": "bf-monthly",
+              "label": "Monthly",
+              "color": "#2563eb"
+            },
+            {
+              "id": "bf-quarterly",
+              "label": "Quarterly",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "bf-annual",
+              "label": "Annually",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-likely",
+        "label": "Renewal likelihood",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-keyterms",
+        "label": "Key terms",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What is included, exclusions, cancellation terms"
+        }
+      },
+      {
+        "id": "f-renewsteps",
+        "label": "Renewal steps",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Results reviewed with the client",
+            "Renewal offer sent",
+            "Pricing approved",
+            "Signed renewal received",
+            "Billing updated"
+          ]
+        }
+      },
+      {
+        "id": "f-renewpct",
+        "label": "Renewal progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-renewsteps"
+        }
+      },
+      {
+        "id": "f-signedcopy",
+        "label": "Signed copy",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-amendments",
+        "label": "Amendments",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-contract",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Contract",
+          "fieldIds": [
+            "f-contract",
+            "f-no",
+            "f-contact",
+            "f-kind",
+            "f-status",
+            "f-owner"
+          ]
+        }
+      },
+      {
+        "id": "b-term",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Term",
+          "fieldIds": [
+            "f-signed",
+            "f-start",
+            "f-end",
+            "f-notice",
+            "f-term",
+            "f-auto"
+          ]
+        }
+      },
+      {
+        "id": "b-money",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Value",
+          "fieldIds": [
+            "f-value",
+            "f-monthly",
+            "f-annual",
+            "f-increase",
+            "f-renewal",
+            "f-terms",
+            "f-billing"
+          ]
+        }
+      },
+      {
+        "id": "b-renewal",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Renewal",
+          "fieldIds": [
+            "f-likely",
+            "f-renewsteps",
+            "f-renewpct"
+          ]
+        }
+      },
+      {
+        "id": "b-docs",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Terms and documents",
+          "fieldIds": [
+            "f-keyterms",
+            "f-signedcopy",
+            "f-amendments"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-due",
+        "name": "Renewal due — start the renewal steps",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cs-due"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A contract is due for renewal. Review results with the client and send the renewal offer before the notice date."
+          }
+        ]
+      },
+      {
+        "id": "a-expired",
+        "name": "Expired — renew or close",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cs-expired"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A contract has expired. Either send a renewal now or mark it Cancelled with a note explaining why."
+          }
+        ]
+      },
+      {
+        "id": "a-renewed",
+        "name": "Renewed — update the dates",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cs-renewed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A contract was renewed. Update the start, end and notice dates and upload the signed renewal."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-end",
+      "f-monthly",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-kind",
+        "title": "By contract type",
+        "fieldId": "f-kind",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-monthly",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-monthly"
+        }
+      },
+      {
+        "id": "w-value",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-value"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-notice",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-notice"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-due",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "cs-due"
+        }
+      },
+      {
+        "id": "w-end",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-end"
+        }
+      }
+    ]
+  }
+}

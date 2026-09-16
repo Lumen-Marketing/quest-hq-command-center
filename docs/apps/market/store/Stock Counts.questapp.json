@@ -1,0 +1,735 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Stock Counts",
+    "recordName": "Stock count",
+    "type": "Inventory",
+    "icon": "ti-clipboard-check",
+    "color": "#7c3aed",
+    "description": "Cycle counts and full inventories, with the difference between what the system expected and what was actually on the shelf. Each count records units and value both ways, works out the variance and the shrinkage percentage, and itemises every item that did not match with a reason and an action. A count worth less than expected asks to be investigated before the stock is adjusted.",
+    "fields": [
+      {
+        "id": "f-count",
+        "label": "Count",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Aisle 4 — March cycle count"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Count #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "SC-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-kind",
+        "label": "Type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ck-cycle",
+              "label": "Cycle count",
+              "color": "#2563eb"
+            },
+            {
+              "id": "ck-full",
+              "label": "Full inventory",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "ck-spot",
+              "label": "Spot check",
+              "color": "#16a34a"
+            },
+            {
+              "id": "ck-delivery",
+              "label": "After a delivery",
+              "color": "#d97706"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-area",
+        "label": "Area",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Aisle 4, or the stockroom"
+        }
+      },
+      {
+        "id": "f-dept",
+        "label": "Department",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dp-grocery",
+              "label": "Grocery",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dp-fresh",
+              "label": "Fresh and chilled",
+              "color": "#0d9488"
+            },
+            {
+              "id": "dp-household",
+              "label": "Household",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dp-beauty",
+              "label": "Health and beauty",
+              "color": "#db2777"
+            },
+            {
+              "id": "dp-apparel",
+              "label": "Apparel",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dp-electronics",
+              "label": "Electronics",
+              "color": "#0891b2"
+            },
+            {
+              "id": "dp-home",
+              "label": "Home and garden",
+              "color": "#d97706"
+            },
+            {
+              "id": "dp-toys",
+              "label": "Toys and games",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dp-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-countedby",
+        "label": "Counted by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-checkedby",
+        "label": "Checked by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cs-scheduled",
+              "label": "Scheduled",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "cs-counting",
+              "label": "Counting",
+              "color": "#378ADD"
+            },
+            {
+              "id": "cs-review",
+              "label": "Under review",
+              "color": "#BA7517"
+            },
+            {
+              "id": "cs-adjusted",
+              "label": "Stock adjusted",
+              "color": "#639922"
+            },
+            {
+              "id": "cs-closed",
+              "label": "Closed",
+              "color": "#0891b2"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-lines",
+        "label": "Items counted",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-expectedunits",
+        "label": "Units expected",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-countedunits",
+        "label": "Units counted",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-unitvariance",
+        "label": "Unit variance",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Units counted} - {Units expected}) * {Units counted} / {Units counted}"
+        }
+      },
+      {
+        "id": "f-expectedvalue",
+        "label": "Value expected",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "At cost"
+        }
+      },
+      {
+        "id": "f-countedvalue",
+        "label": "Value counted",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "At cost"
+        }
+      },
+      {
+        "id": "f-valuevariance",
+        "label": "Value variance",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Value counted} - {Value expected}) * {Value counted} / {Value counted}"
+        }
+      },
+      {
+        "id": "f-shrinkage",
+        "label": "Shrinkage %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Value expected} - {Value counted}) * 100 / {Value expected}"
+        }
+      },
+      {
+        "id": "f-reason",
+        "label": "Main reason",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rs-miscount",
+              "label": "Miscount",
+              "color": "#64748b"
+            },
+            {
+              "id": "rs-damage",
+              "label": "Damage",
+              "color": "#d97706"
+            },
+            {
+              "id": "rs-theft",
+              "label": "Theft",
+              "color": "#dc2626"
+            },
+            {
+              "id": "rs-expiry",
+              "label": "Expiry and waste",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "rs-delivery",
+              "label": "Delivery error",
+              "color": "#2563eb"
+            },
+            {
+              "id": "rs-system",
+              "label": "System error",
+              "color": "#0891b2"
+            },
+            {
+              "id": "rs-unknown",
+              "label": "Unknown",
+              "color": "#9AA0A8"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-approved",
+        "label": "Adjustment approved",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-steps",
+        "label": "Count steps",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Area tidied and faced before counting",
+            "Counted once",
+            "Differences recounted",
+            "Variances explained",
+            "Stock adjusted on the products"
+          ]
+        }
+      },
+      {
+        "id": "f-stepspct",
+        "label": "Count progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-steps"
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-var",
+        "name": "Variances",
+        "recordName": "Variance",
+        "fields": [
+          {
+            "id": "v-item",
+            "label": "Item",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "v-sku",
+            "label": "SKU",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "v-expected",
+            "label": "Expected",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "v-counted",
+            "label": "Counted",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "v-diff",
+            "label": "Difference",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Counted less expected"
+            }
+          },
+          {
+            "id": "v-value",
+            "label": "Value difference",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": ""
+            }
+          },
+          {
+            "id": "v-reason",
+            "label": "Reason",
+            "type": "category",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                {
+                  "id": "vr-miscount",
+                  "label": "Miscount",
+                  "color": "#64748b"
+                },
+                {
+                  "id": "vr-damage",
+                  "label": "Damage",
+                  "color": "#d97706"
+                },
+                {
+                  "id": "vr-theft",
+                  "label": "Theft",
+                  "color": "#dc2626"
+                },
+                {
+                  "id": "vr-expiry",
+                  "label": "Expiry and waste",
+                  "color": "#7c3aed"
+                },
+                {
+                  "id": "vr-delivery",
+                  "label": "Delivery error",
+                  "color": "#2563eb"
+                },
+                {
+                  "id": "vr-unknown",
+                  "label": "Unknown",
+                  "color": "#9AA0A8"
+                }
+              ]
+            }
+          },
+          {
+            "id": "v-action",
+            "label": "Action",
+            "type": "category",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                {
+                  "id": "va-adjust",
+                  "label": "Adjust stock",
+                  "color": "#16a34a"
+                },
+                {
+                  "id": "va-recount",
+                  "label": "Recount",
+                  "color": "#2563eb"
+                },
+                {
+                  "id": "va-writeoff",
+                  "label": "Write off",
+                  "color": "#dc2626"
+                },
+                {
+                  "id": "va-investigate",
+                  "label": "Investigate",
+                  "color": "#d97706"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-count",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Count",
+          "fieldIds": [
+            "f-count",
+            "f-no",
+            "f-date",
+            "f-kind",
+            "f-area",
+            "f-dept",
+            "f-countedby",
+            "f-checkedby",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-units",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Units",
+          "fieldIds": [
+            "f-lines",
+            "f-expectedunits",
+            "f-countedunits",
+            "f-unitvariance"
+          ]
+        }
+      },
+      {
+        "id": "b-value",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Value",
+          "fieldIds": [
+            "f-expectedvalue",
+            "f-countedvalue",
+            "f-valuevariance",
+            "f-shrinkage",
+            "f-reason",
+            "f-approved"
+          ]
+        }
+      },
+      {
+        "id": "b-var",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-var"
+        }
+      },
+      {
+        "id": "b-steps",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Count steps",
+          "fieldIds": [
+            "f-steps",
+            "f-stepspct",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-short",
+        "name": "Counted short — investigate",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-valuevariance",
+          "op": "<",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This count came up short against the system. List the items in Variances with a reason before adjusting any stock."
+          }
+        ]
+      },
+      {
+        "id": "a-adjusted",
+        "name": "Adjusted — update the products",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cs-adjusted"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A count was adjusted. Make sure In stock on each product now matches what was counted."
+          }
+        ]
+      },
+      {
+        "id": "a-theft",
+        "name": "Theft suspected — tell the manager",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-reason",
+          "value": "rs-theft"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A count was put down to theft. Tell the store manager and check whether the items need moving or securing."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-date",
+      "f-area",
+      "f-valuevariance",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-kind",
+        "title": "By type",
+        "fieldId": "f-kind",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-lines",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-lines"
+        }
+      },
+      {
+        "id": "w-expected",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-expectedvalue"
+        }
+      },
+      {
+        "id": "w-counted",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-countedvalue"
+        }
+      },
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-reason",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-reason"
+        }
+      },
+      {
+        "id": "w-dept",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-dept"
+        }
+      }
+    ]
+  }
+}

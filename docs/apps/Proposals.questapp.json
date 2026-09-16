@@ -6,7 +6,7 @@
     "name": "Proposals",
     "recordName": "Proposal",
     "type": "Sales",
-    "icon": "ti-file-signature",
+    "icon": "ti-file-description",
     "color": "#7c3aed",
     "description": "The document the client signs, sitting ABOVE the per-trade deals rather than replacing them. One deal is one trade, so a lump sum wrapped across three trades had nowhere to live and a partial signing had to be inferred from which deals went Lost. Scopes is the list of trades this document covers — each with its own Signed tick — so a partial signing is recorded on the thing that was signed, and Partially won is a stage of its own. Two limits are shown rather than papered over: Contract price is TYPED, because a calculation resolves {Label} against the app's fields and never a sub-item list, and there is no per-record rollup over a collection; and \"the draw schedule must total 100%\" is shown by Draw total %, not enforced, because the formula grammar has no conditional. There is deliberately no hand-off button — one press creates one record, and the handoff fans out to one job per SIGNED trade, so a single button would file one job carrying no trade and read as working. The checklist carries the step instead.",
     "fields": [

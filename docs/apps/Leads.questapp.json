@@ -6,7 +6,7 @@
     "name": "Leads",
     "recordName": "Lead",
     "type": "Prospecting",
-    "icon": "ti-target-arrow",
+    "icon": "ti-target",
     "color": "#2563eb",
     "description": "A prospect becomes a lead once they have got something to bid. Money attaches here, and attaches as an ESTIMATE — Est. value, Est. cost, Est. gross profit, Est. margin % — deliberately not \"Contract price\", which belongs to Sales after a signature. One lead per trade per address, the same rule the Sales Pipeline runs on, so a Won lead becomes exactly one deal. It carries both Trade interest (what they asked about, arriving from the prospect) and Trade (the one this lead bids), so a two-trade prospect becomes two leads that each still remember the whole interest. The two hand-off buttons install without a destination; pick the Sales Pipeline and Nurturing once after installing.",
     "fields": [

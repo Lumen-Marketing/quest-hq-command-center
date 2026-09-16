@@ -1,0 +1,711 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "app": {
+    "name": "Purchase Orders",
+    "recordName": "Purchase order",
+    "type": "Inventory",
+    "icon": "ti-truck",
+    "color": "#2563eb",
+    "description": "What you have ordered from suppliers, and what actually arrived. Each order lists its items with quantities ordered and received side by side, totals cost with shipping and tax, and shows how many units are still outstanding and how much is still owed. Part deliveries and cancellations prompt the chase, so a short delivery is caught on the order rather than at the shelf.",
+    "fields": [
+      {
+        "id": "f-order",
+        "label": "Order",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Coffee and tea — weekly"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "PO #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "PO-",
+          "padding": 5
+        }
+      },
+      {
+        "id": "f-supplier",
+        "label": "Supplier",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-contact",
+        "label": "Supplier contact",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-supref",
+        "label": "Supplier reference",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-buyer",
+        "label": "Ordered by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-dept",
+        "label": "Department",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "dp-grocery",
+              "label": "Grocery",
+              "color": "#16a34a"
+            },
+            {
+              "id": "dp-fresh",
+              "label": "Fresh and chilled",
+              "color": "#0d9488"
+            },
+            {
+              "id": "dp-household",
+              "label": "Household",
+              "color": "#2563eb"
+            },
+            {
+              "id": "dp-beauty",
+              "label": "Health and beauty",
+              "color": "#db2777"
+            },
+            {
+              "id": "dp-apparel",
+              "label": "Apparel",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "dp-electronics",
+              "label": "Electronics",
+              "color": "#0891b2"
+            },
+            {
+              "id": "dp-home",
+              "label": "Home and garden",
+              "color": "#d97706"
+            },
+            {
+              "id": "dp-toys",
+              "label": "Toys and games",
+              "color": "#e0552d"
+            },
+            {
+              "id": "dp-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "os-draft",
+              "label": "Draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "os-sent",
+              "label": "Sent",
+              "color": "#378ADD"
+            },
+            {
+              "id": "os-confirmed",
+              "label": "Confirmed",
+              "color": "#0891b2"
+            },
+            {
+              "id": "os-partial",
+              "label": "Partly received",
+              "color": "#BA7517"
+            },
+            {
+              "id": "os-received",
+              "label": "Received",
+              "color": "#639922"
+            },
+            {
+              "id": "os-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-ordered",
+        "label": "Ordered on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-expected",
+        "label": "Expected on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-receivedon",
+        "label": "Received on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-units",
+        "label": "Units ordered",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-unitsin",
+        "label": "Units received",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-outstanding",
+        "label": "Units outstanding",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Units ordered} - {Units received}"
+        }
+      },
+      {
+        "id": "f-subtotal",
+        "label": "Goods subtotal",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-shipping",
+        "label": "Shipping",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-tax",
+        "label": "Tax",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-discount",
+        "label": "Supplier discount",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "As a positive amount"
+        }
+      },
+      {
+        "id": "f-total",
+        "label": "Order total",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Goods subtotal} + {Shipping} + {Tax} - {Supplier discount}"
+        }
+      },
+      {
+        "id": "f-paid",
+        "label": "Amount paid",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-balance",
+        "label": "Balance owed",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Goods subtotal} + {Shipping} + {Tax} - {Supplier discount} - {Amount paid}"
+        }
+      },
+      {
+        "id": "f-terms",
+        "label": "Payment terms",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tm-receipt",
+              "label": "Due on receipt",
+              "color": "#64748b"
+            },
+            {
+              "id": "tm-net15",
+              "label": "Net 15",
+              "color": "#0891b2"
+            },
+            {
+              "id": "tm-net30",
+              "label": "Net 30",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tm-net60",
+              "label": "Net 60",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "tm-consign",
+              "label": "Consignment",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-check",
+        "label": "On delivery",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Counted against the order",
+            "Damage and short dates checked",
+            "Prices checked against the invoice",
+            "Stock levels updated on the products",
+            "Invoice filed for payment"
+          ]
+        }
+      },
+      {
+        "id": "f-checkpct",
+        "label": "Delivery progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-check"
+        }
+      },
+      {
+        "id": "f-invoice",
+        "label": "Supplier invoice",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Substitutions, short-dated stock, what the rep promised"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-lines",
+        "name": "Line items",
+        "recordName": "Line item",
+        "fields": [
+          {
+            "id": "l-item",
+            "label": "Item",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "l-sku",
+            "label": "SKU",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "l-ordered",
+            "label": "Ordered",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "l-received",
+            "label": "Received",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "l-cost",
+            "label": "Unit cost",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": ""
+            }
+          },
+          {
+            "id": "l-total",
+            "label": "Line total",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": ""
+            }
+          },
+          {
+            "id": "l-back",
+            "label": "Backordered",
+            "type": "checkbox",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-order",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Order",
+          "fieldIds": [
+            "f-order",
+            "f-no",
+            "f-supplier",
+            "f-contact",
+            "f-supref",
+            "f-buyer",
+            "f-dept",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-dates",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Dates",
+          "fieldIds": [
+            "f-ordered",
+            "f-expected",
+            "f-receivedon"
+          ]
+        }
+      },
+      {
+        "id": "b-lines",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-lines"
+        }
+      },
+      {
+        "id": "b-units",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Units",
+          "fieldIds": [
+            "f-units",
+            "f-unitsin",
+            "f-outstanding"
+          ]
+        }
+      },
+      {
+        "id": "b-money",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Cost",
+          "fieldIds": [
+            "f-subtotal",
+            "f-shipping",
+            "f-tax",
+            "f-discount",
+            "f-total",
+            "f-paid",
+            "f-balance",
+            "f-terms"
+          ]
+        }
+      },
+      {
+        "id": "b-check",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "On delivery",
+          "fieldIds": [
+            "f-check",
+            "f-checkpct",
+            "f-invoice"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-partial",
+        "name": "Partly received — chase the rest",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "os-partial"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "Only part of this order arrived. Fill in Received on each line and get a date for the rest from the supplier."
+          }
+        ]
+      },
+      {
+        "id": "a-received",
+        "name": "Received — update the shelves",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "os-received"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An order was received. Update stock on each product, then file the invoice for payment."
+          }
+        ]
+      },
+      {
+        "id": "a-cancelled",
+        "name": "Cancelled — source it elsewhere",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "os-cancelled"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An order was cancelled. Check whether anything on it is below its reorder point and buy it elsewhere."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-supplier",
+      "f-expected",
+      "f-units",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-dept",
+        "title": "By department",
+        "fieldId": "f-dept",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-subtotal",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-subtotal"
+        }
+      },
+      {
+        "id": "w-units",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-units"
+        }
+      },
+      {
+        "id": "w-unitsin",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-unitsin"
+        }
+      },
+      {
+        "id": "w-expected",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-expected"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-partial",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "os-partial"
+        }
+      },
+      {
+        "id": "w-dept",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-dept"
+        }
+      }
+    ]
+  }
+}

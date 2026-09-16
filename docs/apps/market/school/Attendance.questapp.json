@@ -1,0 +1,600 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Attendance",
+    "recordName": "Register",
+    "type": "Calendar",
+    "icon": "ti-user-check",
+    "color": "#0891b2",
+    "description": "Take a register for each class, each day. Record how many students were present, late or absent, list who was away and why, and see the attendance percentage worked out. Low attendance and unexcused absences are flagged so families are contacted the same day.",
+    "fields": [
+      {
+        "id": "f-register",
+        "label": "Register",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "7-B — Monday period 1"
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-class",
+        "label": "Class",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "7-B"
+        }
+      },
+      {
+        "id": "f-grade",
+        "label": "Grade",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-period",
+        "label": "Period",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "pd-am",
+              "label": "Morning registration",
+              "color": "#eab308"
+            },
+            {
+              "id": "pd-p1",
+              "label": "Period 1",
+              "color": "#2563eb"
+            },
+            {
+              "id": "pd-p2",
+              "label": "Period 2",
+              "color": "#16a34a"
+            },
+            {
+              "id": "pd-p3",
+              "label": "Period 3",
+              "color": "#d97706"
+            },
+            {
+              "id": "pd-p4",
+              "label": "Period 4",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "pd-p5",
+              "label": "Period 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "pd-p6",
+              "label": "Period 6",
+              "color": "#db2777"
+            },
+            {
+              "id": "pd-pm",
+              "label": "Afternoon registration",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-teacher",
+        "label": "Teacher",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "rg-todo",
+              "label": "Not taken",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "rg-taken",
+              "label": "Taken",
+              "color": "#378ADD"
+            },
+            {
+              "id": "rg-followup",
+              "label": "Follow-ups needed",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "rg-done",
+              "label": "Complete",
+              "color": "#639922"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-roll",
+        "label": "On roll",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "students"
+        }
+      },
+      {
+        "id": "f-present",
+        "label": "Present",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Include late arrivals"
+        }
+      },
+      {
+        "id": "f-late",
+        "label": "Late",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-excused",
+        "label": "Excused absences",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-unexcused",
+        "label": "Unexcused absences",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-absent",
+        "label": "Absent",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{On roll} - {Present}"
+        }
+      },
+      {
+        "id": "f-rate",
+        "label": "Attendance %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Present} * 100 / {On roll}"
+        }
+      },
+      {
+        "id": "f-steps",
+        "label": "Follow-up",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Families of unexcused absences contacted",
+            "Late arrivals recorded",
+            "Office told about any concerns"
+          ]
+        }
+      },
+      {
+        "id": "f-stepspct",
+        "label": "Follow-up progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-steps"
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-absences",
+        "name": "Absences",
+        "recordName": "Absence",
+        "fields": [
+          {
+            "id": "x-student",
+            "label": "Student",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Maya Santos"
+            }
+          },
+          {
+            "id": "x-type",
+            "label": "Type",
+            "type": "category",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                {
+                  "id": "ab-excused",
+                  "label": "Excused",
+                  "color": "#16a34a"
+                },
+                {
+                  "id": "ab-unexcused",
+                  "label": "Unexcused",
+                  "color": "#dc2626"
+                },
+                {
+                  "id": "ab-late",
+                  "label": "Late",
+                  "color": "#d97706"
+                },
+                {
+                  "id": "ab-early",
+                  "label": "Left early",
+                  "color": "#7c3aed"
+                }
+              ]
+            }
+          },
+          {
+            "id": "x-reason",
+            "label": "Reason",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Doctor appointment"
+            }
+          },
+          {
+            "id": "x-contacted",
+            "label": "Family contacted",
+            "type": "checkbox",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-register",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Register",
+          "fieldIds": [
+            "f-register",
+            "f-date",
+            "f-class",
+            "f-grade",
+            "f-period",
+            "f-teacher",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-counts",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Counts",
+          "fieldIds": [
+            "f-roll",
+            "f-present",
+            "f-late",
+            "f-excused",
+            "f-unexcused",
+            "f-absent",
+            "f-rate"
+          ]
+        }
+      },
+      {
+        "id": "b-absences",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-absences"
+        }
+      },
+      {
+        "id": "b-follow",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Follow-up",
+          "fieldIds": [
+            "f-steps",
+            "f-stepspct",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-unexcused",
+        "name": "Unexcused absence — contact the family",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-unexcused",
+          "op": ">",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-status",
+            "value": "rg-followup"
+          },
+          {
+            "type": "notify",
+            "message": "A register has unexcused absences. Contact each family today and record it in the Absences list."
+          }
+        ]
+      },
+      {
+        "id": "a-low",
+        "name": "Attendance below 85%",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-rate",
+          "op": "<",
+          "value": "85"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A class had attendance below 85%. Check whether something is going on — illness, an event, or a pattern."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-class",
+      "f-period",
+      "f-rate",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-grade",
+        "title": "By grade",
+        "fieldId": "f-grade",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-roll",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-roll"
+        }
+      },
+      {
+        "id": "w-present",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-present"
+        }
+      },
+      {
+        "id": "w-late",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-late"
+        }
+      },
+      {
+        "id": "w-unexcused",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-unexcused"
+        }
+      },
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-followup",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "rg-followup"
+        }
+      },
+      {
+        "id": "w-teacher",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-teacher"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,549 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Meeting Notes",
+    "recordName": "Meeting",
+    "type": "Documents",
+    "icon": "ti-notes",
+    "color": "#4f46e5",
+    "description": "Keep a clear record of every client meeting — who was there, what was discussed, what was decided, and who owes what by when. Action items live inside each meeting, a sentiment score shows how the client felt, and a concerned or unhappy client is flagged right away.",
+    "fields": [
+      {
+        "id": "f-meeting",
+        "label": "Meeting",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Quarterly review — Rivera Property Group"
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-contact",
+        "label": "Client",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-kind",
+        "label": "Meeting type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "mt-discovery",
+              "label": "Discovery",
+              "color": "#2563eb"
+            },
+            {
+              "id": "mt-checkin",
+              "label": "Check-in",
+              "color": "#16a34a"
+            },
+            {
+              "id": "mt-review",
+              "label": "Quarterly review",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "mt-kickoff",
+              "label": "Kickoff",
+              "color": "#0891b2"
+            },
+            {
+              "id": "mt-issue",
+              "label": "Problem resolution",
+              "color": "#dc2626"
+            },
+            {
+              "id": "mt-internal",
+              "label": "Internal",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-format",
+        "label": "Format",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "fm-person",
+              "label": "In person",
+              "color": "#d97706"
+            },
+            {
+              "id": "fm-phone",
+              "label": "Phone",
+              "color": "#16a34a"
+            },
+            {
+              "id": "fm-video",
+              "label": "Video",
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-lead",
+        "label": "Led by",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-attendees",
+        "label": "Attendees",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Names and roles, ours and theirs"
+        }
+      },
+      {
+        "id": "f-agenda",
+        "label": "Agenda",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-discussion",
+        "label": "Discussion",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "The key points, in order"
+        }
+      },
+      {
+        "id": "f-decisions",
+        "label": "Decisions",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What was agreed"
+        }
+      },
+      {
+        "id": "f-sentiment",
+        "label": "Client sentiment",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "se-great",
+              "label": "Very positive",
+              "color": "#16a34a"
+            },
+            {
+              "id": "se-good",
+              "label": "Positive",
+              "color": "#0d9488"
+            },
+            {
+              "id": "se-neutral",
+              "label": "Neutral",
+              "color": "#64748b"
+            },
+            {
+              "id": "se-concerned",
+              "label": "Concerned",
+              "color": "#d97706"
+            },
+            {
+              "id": "se-unhappy",
+              "label": "Unhappy",
+              "color": "#dc2626"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "mn-draft",
+              "label": "Notes in draft",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "mn-shared",
+              "label": "Shared with attendees",
+              "color": "#378ADD"
+            },
+            {
+              "id": "mn-open",
+              "label": "Follow-ups open",
+              "color": "#BA7517"
+            },
+            {
+              "id": "mn-closed",
+              "label": "Closed",
+              "color": "#639922"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-followup",
+        "label": "Follow-up needed",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-next",
+        "label": "Next meeting",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-recording",
+        "label": "Recording link",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-files",
+        "label": "Attachments",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-actions",
+        "name": "Action items",
+        "recordName": "Action item",
+        "fields": [
+          {
+            "id": "x-action",
+            "label": "Action",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Send the revised quote"
+            }
+          },
+          {
+            "id": "x-owner",
+            "label": "Owner",
+            "type": "user",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "x-due",
+            "label": "Due",
+            "type": "date",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "x-done",
+            "label": "Done",
+            "type": "checkbox",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-meeting",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Meeting",
+          "fieldIds": [
+            "f-meeting",
+            "f-date",
+            "f-contact",
+            "f-kind",
+            "f-format",
+            "f-lead",
+            "f-status"
+          ]
+        }
+      },
+      {
+        "id": "b-people",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Attendees and agenda",
+          "fieldIds": [
+            "f-attendees",
+            "f-agenda"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-discussion",
+            "f-decisions"
+          ]
+        }
+      },
+      {
+        "id": "b-actions",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-actions"
+        }
+      },
+      {
+        "id": "b-next",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "What happens next",
+          "fieldIds": [
+            "f-sentiment",
+            "f-followup",
+            "f-next"
+          ]
+        }
+      },
+      {
+        "id": "b-files",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Recording and files",
+          "fieldIds": [
+            "f-recording",
+            "f-files"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-unhappy",
+        "name": "Unhappy client — escalate",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-sentiment",
+          "value": "se-unhappy"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A client left a meeting unhappy. The account owner should follow up personally within a day."
+          }
+        ]
+      },
+      {
+        "id": "a-concerned",
+        "name": "Concerned client — follow up",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-sentiment",
+          "value": "se-concerned"
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-followup",
+            "value": true
+          },
+          {
+            "type": "notify",
+            "message": "A client raised concerns in a meeting. A follow-up has been flagged."
+          }
+        ]
+      },
+      {
+        "id": "a-followup",
+        "name": "Follow-up needed — keep it open",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-followup",
+          "value": true
+        },
+        "actions": [
+          {
+            "type": "set_field",
+            "fieldId": "f-status",
+            "value": "mn-open"
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-date",
+      "f-sentiment",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-kind",
+        "title": "By meeting type",
+        "fieldId": "f-kind",
+        "scope": "team"
+      },
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-touched",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "touched"
+        }
+      },
+      {
+        "id": "w-followup",
+        "type": "stages",
+        "size": 1,
+        "config": {
+          "fieldId": "f-followup"
+        }
+      },
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-sentiment",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-sentiment"
+        }
+      },
+      {
+        "id": "w-open",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "mn-open"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      }
+    ]
+  }
+}

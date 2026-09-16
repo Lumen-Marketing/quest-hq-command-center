@@ -1,0 +1,604 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Appointments",
+    "recordName": "Appointment",
+    "type": "Calendar",
+    "icon": "ti-calendar-event",
+    "color": "#0891b2",
+    "description": "Book and track client appointments — consultations, estimates, service visits and follow-ups. See the month at a glance, send confirmations and reminders from a checklist, and record the outcome of every visit so nothing falls through after the appointment ends.",
+    "fields": [
+      {
+        "id": "f-appt",
+        "label": "Appointment",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Consultation — Rivera"
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Client",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-service",
+        "label": "Service",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sv-consult",
+              "label": "Consultation",
+              "color": "#2563eb"
+            },
+            {
+              "id": "sv-estimate",
+              "label": "Estimate / assessment",
+              "color": "#d97706"
+            },
+            {
+              "id": "sv-visit",
+              "label": "Service visit",
+              "color": "#16a34a"
+            },
+            {
+              "id": "sv-followup",
+              "label": "Follow-up",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "sv-demo",
+              "label": "Demo",
+              "color": "#0891b2"
+            },
+            {
+              "id": "sv-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-time",
+        "label": "Start time",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "10:30 AM"
+        }
+      },
+      {
+        "id": "f-length",
+        "label": "Length",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "min"
+        }
+      },
+      {
+        "id": "f-where",
+        "label": "Where",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "wh-site",
+              "label": "At the client",
+              "color": "#16a34a"
+            },
+            {
+              "id": "wh-office",
+              "label": "Our office",
+              "color": "#2563eb"
+            },
+            {
+              "id": "wh-phone",
+              "label": "Phone call",
+              "color": "#d97706"
+            },
+            {
+              "id": "wh-video",
+              "label": "Video call",
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-link",
+        "label": "Meeting link",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-staff",
+        "label": "With",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ap-requested",
+              "label": "Requested",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "ap-booked",
+              "label": "Booked",
+              "color": "#378ADD"
+            },
+            {
+              "id": "ap-confirmed",
+              "label": "Confirmed",
+              "color": "#0891b2"
+            },
+            {
+              "id": "ap-completed",
+              "label": "Completed",
+              "color": "#639922"
+            },
+            {
+              "id": "ap-rescheduled",
+              "label": "Rescheduled",
+              "color": "#BA7517"
+            },
+            {
+              "id": "ap-noshow",
+              "label": "No show",
+              "color": "#E24B4A"
+            },
+            {
+              "id": "ap-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-via",
+        "label": "Booked via",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "bv-phone",
+              "label": "Phone",
+              "color": "#16a34a"
+            },
+            {
+              "id": "bv-web",
+              "label": "Website",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "bv-email",
+              "label": "Email",
+              "color": "#2563eb"
+            },
+            {
+              "id": "bv-walkin",
+              "label": "Walk-in",
+              "color": "#d97706"
+            },
+            {
+              "id": "bv-referral",
+              "label": "Referral",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-reminders",
+        "label": "Reminders",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Confirmation sent",
+            "Reminder the day before",
+            "Reminder on the day",
+            "Thank-you or follow-up sent"
+          ]
+        }
+      },
+      {
+        "id": "f-reminderpct",
+        "label": "Reminder progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-reminders"
+        }
+      },
+      {
+        "id": "f-deposit",
+        "label": "Deposit paid",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-value",
+        "label": "Estimated value",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What this appointment could be worth"
+        }
+      },
+      {
+        "id": "f-outcome",
+        "label": "Outcome",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "oc-won",
+              "label": "Booked more work",
+              "color": "#16a34a"
+            },
+            {
+              "id": "oc-followup",
+              "label": "Needs follow-up",
+              "color": "#d97706"
+            },
+            {
+              "id": "oc-none",
+              "label": "No further action",
+              "color": "#64748b"
+            },
+            {
+              "id": "oc-referred",
+              "label": "Referred elsewhere",
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-followup",
+        "label": "Follow up on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What to bring, gate codes, what was discussed"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-when",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "When and where",
+          "fieldIds": [
+            "f-appt",
+            "f-service",
+            "f-date",
+            "f-time",
+            "f-length",
+            "f-where",
+            "f-address",
+            "f-link"
+          ]
+        }
+      },
+      {
+        "id": "b-who",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Who",
+          "fieldIds": [
+            "f-contact",
+            "f-phone",
+            "f-email",
+            "f-staff",
+            "f-via"
+          ]
+        }
+      },
+      {
+        "id": "b-status",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Status",
+          "fieldIds": [
+            "f-status",
+            "f-reminders",
+            "f-reminderpct",
+            "f-deposit"
+          ]
+        }
+      },
+      {
+        "id": "b-after",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "After the appointment",
+          "fieldIds": [
+            "f-outcome",
+            "f-value",
+            "f-followup"
+          ]
+        }
+      },
+      {
+        "id": "b-notes",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Notes",
+          "fieldIds": [
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-noshow",
+        "name": "No show — rebook",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "ap-noshow"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A client did not show up. Call or text today to rebook."
+          }
+        ]
+      },
+      {
+        "id": "a-completed",
+        "name": "Completed — record the outcome",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "ap-completed"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An appointment was completed. Set the Outcome, and a Follow up on date if there is a next step."
+          }
+        ]
+      },
+      {
+        "id": "a-followup",
+        "name": "Needs follow-up — set a date",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-outcome",
+          "value": "oc-followup"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "This appointment needs a follow-up. Make sure Follow up on has a date so it shows on the calendar."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-date",
+      "f-time",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-service",
+        "title": "By service",
+        "fieldId": "f-service",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-date",
+        "type": "calendar",
+        "size": 4,
+        "config": {
+          "fieldId": "f-date"
+        }
+      },
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-value",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-value"
+        }
+      },
+      {
+        "id": "w-deposit",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-deposit"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-requested",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status",
+          "value": "ap-requested"
+        }
+      },
+      {
+        "id": "w-followup",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-followup"
+        }
+      },
+      {
+        "id": "w-outcome",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-outcome"
+        }
+      }
+    ]
+  }
+}

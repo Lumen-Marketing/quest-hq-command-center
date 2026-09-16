@@ -1,0 +1,649 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Admissions",
+    "recordName": "Application",
+    "type": "Records",
+    "icon": "ti-user-plus",
+    "color": "#16a34a",
+    "description": "Every family that asks about joining the school, from first inquiry to enrolled. Track tours, interviews and assessments, the documents each application still needs, the application fee, and where applicants heard about you. Offers, waitlists and acceptances each prompt the next step.",
+    "fields": [
+      {
+        "id": "f-applicant",
+        "label": "Applicant",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Leo Martins"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Application #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "APP-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-guardian",
+        "label": "Parent or guardian",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-phone",
+        "label": "Phone",
+        "type": "phone",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-grade",
+        "label": "Applying for",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-year",
+        "label": "School year",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "2027–2028"
+        }
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "ad-inquiry",
+              "label": "Inquiry",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "ad-tour",
+              "label": "Tour scheduled",
+              "color": "#378ADD"
+            },
+            {
+              "id": "ad-applied",
+              "label": "Application received",
+              "color": "#0891b2"
+            },
+            {
+              "id": "ad-assess",
+              "label": "Assessment and interview",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "ad-offer",
+              "label": "Offer made",
+              "color": "#BA7517"
+            },
+            {
+              "id": "ad-enrolled",
+              "label": "Enrolled",
+              "color": "#639922"
+            },
+            {
+              "id": "ad-waitlist",
+              "label": "Waitlisted",
+              "color": "#d97706"
+            },
+            {
+              "id": "ad-declined",
+              "label": "Declined",
+              "color": "#E24B4A"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-source",
+        "label": "Heard about us",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "hs-web",
+              "label": "Website",
+              "color": "#2563eb"
+            },
+            {
+              "id": "hs-referral",
+              "label": "Family referral",
+              "color": "#16a34a"
+            },
+            {
+              "id": "hs-openday",
+              "label": "Open day",
+              "color": "#d97706"
+            },
+            {
+              "id": "hs-social",
+              "label": "Social media",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "hs-walkin",
+              "label": "Walk-in",
+              "color": "#64748b"
+            },
+            {
+              "id": "hs-sibling",
+              "label": "Sibling at school",
+              "color": "#db2777"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-officer",
+        "label": "Admissions officer",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-inquiry",
+        "label": "Inquiry date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-tour",
+        "label": "Tour date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-interview",
+        "label": "Interview date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-decision",
+        "label": "Decision date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-current",
+        "label": "Current school",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-sibling",
+        "label": "Has a sibling here",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-score",
+        "label": "Assessment score",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-interviewrating",
+        "label": "Interview rating",
+        "type": "rating",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-fee",
+        "label": "Application fee",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-feepaid",
+        "label": "Fee paid",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-aid",
+        "label": "Financial aid requested",
+        "type": "checkbox",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-checklist",
+        "label": "Application checklist",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Application form",
+            "Latest report cards",
+            "Birth certificate",
+            "Recommendation letter",
+            "Assessment completed",
+            "Interview completed"
+          ]
+        }
+      },
+      {
+        "id": "f-checkpct",
+        "label": "Application progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-checklist"
+        }
+      },
+      {
+        "id": "f-files",
+        "label": "Documents",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What the family is looking for, questions they asked"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [],
+    "recordLayout": [
+      {
+        "id": "b-applicant",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Applicant",
+          "fieldIds": [
+            "f-applicant",
+            "f-no",
+            "f-grade",
+            "f-year",
+            "f-current",
+            "f-sibling"
+          ]
+        }
+      },
+      {
+        "id": "b-family",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Family",
+          "fieldIds": [
+            "f-guardian",
+            "f-phone",
+            "f-email",
+            "f-source"
+          ]
+        }
+      },
+      {
+        "id": "b-process",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Process",
+          "fieldIds": [
+            "f-stage",
+            "f-officer",
+            "f-inquiry",
+            "f-tour",
+            "f-interview",
+            "f-decision"
+          ]
+        }
+      },
+      {
+        "id": "b-assess",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Assessment",
+          "fieldIds": [
+            "f-score",
+            "f-interviewrating",
+            "f-checklist",
+            "f-checkpct"
+          ]
+        }
+      },
+      {
+        "id": "b-fees",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Fees and aid",
+          "fieldIds": [
+            "f-fee",
+            "f-feepaid",
+            "f-aid"
+          ]
+        }
+      },
+      {
+        "id": "b-files",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Documents and notes",
+          "fieldIds": [
+            "f-files",
+            "f-notes"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-offer",
+        "name": "Offer made — confirm by a deadline",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-stage",
+          "to": "ad-offer"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An offer was made. Send the offer letter with an acceptance deadline and the fee agreement."
+          }
+        ]
+      },
+      {
+        "id": "a-enrolled",
+        "name": "Enrolled — create the student record",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-stage",
+          "to": "ad-enrolled"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An applicant has enrolled. Add them to Students and pass their documents across."
+          }
+        ]
+      },
+      {
+        "id": "a-waitlist",
+        "name": "Waitlisted — tell the family",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-stage",
+          "to": "ad-waitlist"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "An applicant was waitlisted. Let the family know their position and when you expect to have news."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-guardian",
+      "f-grade",
+      "f-tour",
+      "f-stage"
+    ],
+    "views": [
+      {
+        "id": "v-stage",
+        "title": "By stage",
+        "fieldId": "f-stage",
+        "scope": "team"
+      },
+      {
+        "id": "v-grade",
+        "title": "By grade",
+        "fieldId": "f-grade",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-fee",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-fee"
+        }
+      },
+      {
+        "id": "w-feepaid",
+        "type": "stages",
+        "size": 1,
+        "config": {
+          "fieldId": "f-feepaid"
+        }
+      },
+      {
+        "id": "w-stage",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-stage"
+        }
+      },
+      {
+        "id": "w-tour",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-tour"
+        }
+      },
+      {
+        "id": "w-source",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-source"
+        }
+      },
+      {
+        "id": "w-offer",
+        "type": "records",
+        "size": 2,
+        "config": {
+          "fieldId": "f-stage",
+          "value": "ad-offer"
+        }
+      }
+    ]
+  }
+}

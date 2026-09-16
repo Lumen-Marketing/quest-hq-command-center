@@ -1,0 +1,717 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-09-15T00:00:00.000Z",
+  "app": {
+    "name": "Courses & Classes",
+    "recordName": "Course",
+    "type": "Projects",
+    "icon": "ti-books",
+    "color": "#d97706",
+    "description": "Plan and run every course the school teaches. Each course has its subject, grade, teacher, room and schedule, a capacity with seats left worked out, learning objectives, a syllabus, and a unit-by-unit plan so anyone can see how far through the curriculum a class is. Full courses and finished terms each prompt the next step.",
+    "fields": [
+      {
+        "id": "f-course",
+        "label": "Course",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "Algebra I — 8A"
+        }
+      },
+      {
+        "id": "f-code",
+        "label": "Course code",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "MATH-801"
+        }
+      },
+      {
+        "id": "f-subject",
+        "label": "Subject",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "sj-math",
+              "label": "Mathematics",
+              "color": "#2563eb"
+            },
+            {
+              "id": "sj-english",
+              "label": "English",
+              "color": "#e0552d"
+            },
+            {
+              "id": "sj-science",
+              "label": "Science",
+              "color": "#16a34a"
+            },
+            {
+              "id": "sj-social",
+              "label": "Social studies",
+              "color": "#d97706"
+            },
+            {
+              "id": "sj-languages",
+              "label": "World languages",
+              "color": "#0891b2"
+            },
+            {
+              "id": "sj-arts",
+              "label": "Arts",
+              "color": "#db2777"
+            },
+            {
+              "id": "sj-music",
+              "label": "Music",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "sj-pe",
+              "label": "Physical education",
+              "color": "#0d9488"
+            },
+            {
+              "id": "sj-cs",
+              "label": "Computer science",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "sj-other",
+              "label": "Other",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-grade",
+        "label": "Grade",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "gl-prek",
+              "label": "Pre-K",
+              "color": "#db2777"
+            },
+            {
+              "id": "gl-k",
+              "label": "Kindergarten",
+              "color": "#e0552d"
+            },
+            {
+              "id": "gl-g1",
+              "label": "Grade 1",
+              "color": "#d97706"
+            },
+            {
+              "id": "gl-g2",
+              "label": "Grade 2",
+              "color": "#eab308"
+            },
+            {
+              "id": "gl-g3",
+              "label": "Grade 3",
+              "color": "#16a34a"
+            },
+            {
+              "id": "gl-g4",
+              "label": "Grade 4",
+              "color": "#0d9488"
+            },
+            {
+              "id": "gl-g5",
+              "label": "Grade 5",
+              "color": "#0891b2"
+            },
+            {
+              "id": "gl-g6",
+              "label": "Grade 6",
+              "color": "#2563eb"
+            },
+            {
+              "id": "gl-g7",
+              "label": "Grade 7",
+              "color": "#4f46e5"
+            },
+            {
+              "id": "gl-g8",
+              "label": "Grade 8",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "gl-g9",
+              "label": "Grade 9",
+              "color": "#9333ea"
+            },
+            {
+              "id": "gl-g10",
+              "label": "Grade 10",
+              "color": "#c026d3"
+            },
+            {
+              "id": "gl-g11",
+              "label": "Grade 11",
+              "color": "#64748b"
+            },
+            {
+              "id": "gl-g12",
+              "label": "Grade 12",
+              "color": "#334155"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-teacher",
+        "label": "Teacher",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-term",
+        "label": "Term",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "tm-t1",
+              "label": "Term 1",
+              "color": "#2563eb"
+            },
+            {
+              "id": "tm-t2",
+              "label": "Term 2",
+              "color": "#16a34a"
+            },
+            {
+              "id": "tm-t3",
+              "label": "Term 3",
+              "color": "#d97706"
+            },
+            {
+              "id": "tm-summer",
+              "label": "Summer",
+              "color": "#db2777"
+            },
+            {
+              "id": "tm-year",
+              "label": "Full year",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "cr-plan",
+              "label": "Planning",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "cr-open",
+              "label": "Open for enrollment",
+              "color": "#378ADD"
+            },
+            {
+              "id": "cr-session",
+              "label": "In session",
+              "color": "#639922"
+            },
+            {
+              "id": "cr-complete",
+              "label": "Completed",
+              "color": "#0891b2"
+            },
+            {
+              "id": "cr-cancelled",
+              "label": "Cancelled",
+              "color": "#64748b"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-room",
+        "label": "Room",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-schedule",
+        "label": "Schedule",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Mon, Wed, Fri — 9:00 to 9:50"
+        }
+      },
+      {
+        "id": "f-start",
+        "label": "Start date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-end",
+        "label": "End date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-capacity",
+        "label": "Capacity",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "students"
+        }
+      },
+      {
+        "id": "f-enrolled",
+        "label": "Enrolled",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "students"
+        }
+      },
+      {
+        "id": "f-seats",
+        "label": "Seats left",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Capacity} - {Enrolled}) * {Capacity} / {Capacity}"
+        }
+      },
+      {
+        "id": "f-credits",
+        "label": "Credits",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-objectives",
+        "label": "Learning objectives",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "By the end of the course, students will be able to…"
+        }
+      },
+      {
+        "id": "f-setup",
+        "label": "Course setup",
+        "type": "checklist",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "steps": [
+            "Syllabus written",
+            "Materials and resources ready",
+            "Class list confirmed",
+            "Assessment plan set",
+            "Families told about the course"
+          ]
+        }
+      },
+      {
+        "id": "f-setuppct",
+        "label": "Setup progress",
+        "type": "progress",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "source": "f-setup"
+        }
+      },
+      {
+        "id": "f-syllabus",
+        "label": "Syllabus",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-resources",
+        "label": "Resources link",
+        "type": "url",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "collections": [
+      {
+        "id": "c-units",
+        "name": "Units",
+        "recordName": "Unit",
+        "fields": [
+          {
+            "id": "u-unit",
+            "label": "Unit",
+            "type": "text",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Unit 3 — Linear equations"
+            }
+          },
+          {
+            "id": "u-starts",
+            "label": "Starts",
+            "type": "date",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "u-weeks",
+            "label": "Weeks",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "u-status",
+            "label": "Status",
+            "type": "status",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                {
+                  "id": "us-planned",
+                  "label": "Planned",
+                  "color": "#9AA0A8"
+                },
+                {
+                  "id": "us-teaching",
+                  "label": "Teaching",
+                  "color": "#378ADD"
+                },
+                {
+                  "id": "us-taught",
+                  "label": "Taught",
+                  "color": "#7F77DD"
+                },
+                {
+                  "id": "us-assessed",
+                  "label": "Assessed",
+                  "color": "#639922"
+                }
+              ]
+            }
+          },
+          {
+            "id": "u-materials",
+            "label": "Materials",
+            "type": "file",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "multiple": true
+            }
+          }
+        ]
+      }
+    ],
+    "recordLayout": [
+      {
+        "id": "b-course",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Course",
+          "fieldIds": [
+            "f-course",
+            "f-code",
+            "f-subject",
+            "f-grade",
+            "f-teacher",
+            "f-term",
+            "f-status",
+            "f-credits"
+          ]
+        }
+      },
+      {
+        "id": "b-when",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "When and where",
+          "fieldIds": [
+            "f-room",
+            "f-schedule",
+            "f-start",
+            "f-end"
+          ]
+        }
+      },
+      {
+        "id": "b-seats",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Enrollment",
+          "fieldIds": [
+            "f-capacity",
+            "f-enrolled",
+            "f-seats"
+          ]
+        }
+      },
+      {
+        "id": "b-learning",
+        "type": "fields",
+        "size": 4,
+        "config": {
+          "title": "Learning",
+          "fieldIds": [
+            "f-description",
+            "f-objectives",
+            "f-syllabus",
+            "f-resources"
+          ]
+        }
+      },
+      {
+        "id": "b-units",
+        "type": "collection",
+        "size": 4,
+        "config": {
+          "collectionId": "c-units"
+        }
+      },
+      {
+        "id": "b-setup",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Setup",
+          "fieldIds": [
+            "f-setup",
+            "f-setuppct"
+          ]
+        }
+      },
+      {
+        "id": "b-trail",
+        "type": "fields",
+        "size": 2,
+        "config": {
+          "title": "Record",
+          "fieldIds": [
+            "f-created",
+            "f-touched"
+          ]
+        }
+      },
+      {
+        "id": "b-comments",
+        "type": "comments",
+        "size": 4,
+        "config": {}
+      }
+    ],
+    "automations": [
+      {
+        "id": "a-full",
+        "name": "Course full — close enrollment",
+        "trigger": {
+          "event": "field_is",
+          "fieldId": "f-seats",
+          "op": "<=",
+          "value": "0"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A course is full. Close enrollment or open another section, and start a waiting list."
+          }
+        ]
+      },
+      {
+        "id": "a-session",
+        "name": "In session — share the syllabus",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cr-session"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A course has started. Make sure the syllabus is uploaded and shared with students and families."
+          }
+        ]
+      },
+      {
+        "id": "a-complete",
+        "name": "Completed — enter final grades",
+        "trigger": {
+          "event": "stage_moves",
+          "fieldId": "f-status",
+          "to": "cr-complete"
+        },
+        "actions": [
+          {
+            "type": "notify",
+            "message": "A course has finished. Enter final grades in the Gradebook before report cards go out."
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-subject",
+      "f-teacher",
+      "f-seats",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-subject",
+        "title": "By subject",
+        "fieldId": "f-subject",
+        "scope": "team"
+      },
+      {
+        "id": "v-grade",
+        "title": "By grade",
+        "fieldId": "f-grade",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-enrolled",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-enrolled"
+        }
+      },
+      {
+        "id": "w-capacity",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-capacity"
+        }
+      },
+      {
+        "id": "w-added",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "added"
+        }
+      },
+      {
+        "id": "w-subject",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-subject"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-teacher",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-teacher"
+        }
+      },
+      {
+        "id": "w-start",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-start"
+        }
+      }
+    ]
+  }
+}
