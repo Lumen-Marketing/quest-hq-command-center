@@ -37,8 +37,14 @@ const APP = {
     { id: 'f3', label: 'Contact', type: 'company_contact', config: {} },
   ],
 };
+// The ids as they really are on both sides: the builder document keys the workspace
+// `ws-<uuid>`, and wb_intake_links.workspace_id is a uuid column holding the BARE one. The
+// fixture used to put the builder key in the row, which is the shape that let a broken
+// lookup pass for real: every public link answered "no longer available".
+const WS_UUID = '9f1c7b52-6d3e-4a71-8c2f-15b0d4e9a3c8';
+const WS_DOC_ID = `ws-${WS_UUID}`;
 const LINK = {
-  token: 'tok-public', company_id: 'co1', workspace_id: 'ws-1', app_id: 'app-1',
+  token: 'tok-public', company_id: 'co1', workspace_id: WS_UUID, app_id: 'app-1',
   title: 'Tell us about the job', intro: 'Two minutes.', visibility: 'public',
   passcode_hash: null, passcode_salt: null, field_ids: [], status: 'active',
   submission_count: 0, max_submissions: null, expires_at: null,
@@ -49,7 +55,7 @@ const LINK = {
 // compare-and-swap: `?submission_count=eq.3` updates only while the value really is 3, and
 // returns an empty representation when it is not. A fake that always answered "updated" would
 // hide exactly the race these counters exist to close.
-function makeDb({ link = LINK, apps = [APP], workspaceId = 'ws-1', submitFails = false } = {}) {
+function makeDb({ link = LINK, apps = [APP], workspaceId = WS_DOC_ID, submitFails = false } = {}) {
   const calls = [];
   const row = link ? { ...link } : null;
 
@@ -98,7 +104,7 @@ test('a public link hands over its fields, and nothing about the company', async
   assert.deepEqual(out.fields.map((f) => f.id), ['f1', 'f2'], 'the contact field is not fillable');
   // The response must not carry the tenant, the app id, or the secret.
   const raw = JSON.stringify(out);
-  for (const secret of ['co1', 'ws-1', 'app-1', 'passcode_hash']) {
+  for (const secret of ['co1', WS_UUID, WS_DOC_ID, 'app-1', 'passcode_hash']) {
     assert.ok(!raw.includes(secret), `the response leaks ${secret}`);
   }
 });

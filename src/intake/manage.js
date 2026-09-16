@@ -9,7 +9,9 @@
 // has to re-answer that question. See the note in api/_lib/intake.js.
 
 import { opsWorkspaceId } from '../workspace/ops-workspace-id.js';
-import { generatePasscode, generateToken, hashPasscode, makePasscodeSalt } from './passcode.js';
+import {
+  PASSCODE_LENGTH, generatePasscode, generateToken, hashPasscode, makePasscodeSalt, normalizePasscode,
+} from './passcode.js';
 
 let ctx = null;
 let view = null;
@@ -50,7 +52,7 @@ async function loadAll() {
   view.submissions = subs.error ? [] : (subs.data || []);
 }
 
-async function createLink({ visibility, title, intro, maxSubmissions }) {
+async function createLink({ visibility, title, intro, maxSubmissions, passcode: chosen }) {
   const supabase = await client();
   const token = generateToken();
   const row = {
@@ -68,7 +70,14 @@ async function createLink({ visibility, title, intro, maxSubmissions }) {
   };
   let passcode = '';
   if (visibility === 'private') {
-    passcode = generatePasscode();
+    // Theirs if they typed one, ours if they did not. Normalized first, and hashed through the
+    // same function either way, so a passcode someone chose is stored exactly like a generated
+    // one -- and matches the gate, which normalizes what the visitor types the same way.
+    const wanted = normalizePasscode(chosen);
+    if (chosen && wanted.length < PASSCODE_LENGTH) {
+      throw new Error(`A passcode needs at least ${PASSCODE_LENGTH} letters or numbers. Leave it empty and one will be made for you.`);
+    }
+    passcode = wanted || generatePasscode();
     row.passcode_salt = makePasscodeSalt();
     row.passcode_hash = await hashPasscode(passcode, row.passcode_salt);
   }
@@ -231,6 +240,15 @@ export function renderIntakeManage() {
             <label class="intake-radio"><input type="radio" name="visibility" value="public" checked> <span><b>Public</b> — anyone with the link</span></label>
             <label class="intake-radio"><input type="radio" name="visibility" value="private"> <span><b>Private</b> — a 6-character passcode is required</span></label>
           </div>
+          <!-- Shown by CSS when Private is chosen, rather than by a re-render: redrawing the form
+               to reveal one field would discard whatever had already been typed into the others. -->
+          <div class="intake-field intake-pass">
+            <label for="intake-pass">Passcode <span class="intake-unit">(optional)</span></label>
+            <input class="form-input intake-code" id="intake-pass" name="passcode" maxlength="32"
+                   autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABC234">
+            <small class="intake-hint">Leave it empty and we will make one for you. Either way it is shown
+            once, here, and only its hash is stored — so it cannot be read back afterwards.</small>
+          </div>
           <div class="intake-field">
             <label for="intake-max">Stop after this many submissions (optional)</label>
             <input class="form-input" id="intake-max" name="max" type="number" min="1" placeholder="Leave empty for no limit">
@@ -331,6 +349,7 @@ function bind() {
         visibility,
         title: read('title'),
         intro: read('intro'),
+        passcode: read('passcode'),
         maxSubmissions: Number(read('max')) || null,
       });
       await loadAll();

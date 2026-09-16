@@ -41,6 +41,22 @@ export async function loadLink(db, token) {
  * and quietly reading a second company's document on the strength of it is precisely the kind
  * of hop that should not be possible from an unauthenticated request.
  */
+/**
+ * Is this document workspace the one the link points at?
+ *
+ * The App Builder keys its workspaces `ws-<uuid>`, while the link row stores the BARE uuid --
+ * wb_intake_links.workspace_id is a uuid column, and RLS is decided from it, so the client
+ * writes it through opsWorkspaceId (src/workspace/ops-workspace-id.js). Comparing the two as
+ * written never matched, so every public link answered "no longer available" while the app sat
+ * in the document all along. The prefix is stripped from both sides rather than added to one,
+ * so a row holding either spelling resolves.
+ */
+const sameWorkspace = (docId, linkId) => {
+  const left = String(docId || "").replace(/^ws-/, "").toLowerCase();
+  const right = String(linkId || "").replace(/^ws-/, "").toLowerCase();
+  return Boolean(left) && left === right;
+};
+
 export async function loadLinkApp(db, link) {
   const res = await db(`/rest/v1/workspace_builder_state?company_id=eq.${encodeURIComponent(link.company_id)}&select=doc`, {
     headers: { Accept: 'application/json' },
@@ -49,7 +65,7 @@ export async function loadLinkApp(db, link) {
   const doc = (await res.json().catch(() => []))[0]?.doc;
   const workspaces = Array.isArray(doc?.workspaces) ? doc.workspaces : [];
 
-  const workspace = workspaces.find((item) => String(item?.id) === String(link.workspace_id));
+  const workspace = workspaces.find((item) => sameWorkspace(item?.id, link.workspace_id));
   const entry = workspace && Array.isArray(workspace.apps)
     ? workspace.apps.find((item) => String(item?.id) === String(link.app_id))
     : null;

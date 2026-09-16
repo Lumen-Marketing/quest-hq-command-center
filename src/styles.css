@@ -34858,6 +34858,21 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
    so a long list of links would push the dialog past the bottom of the window instead of
    scrolling inside it. */
 .intake-manage .modal-body { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; }
+
+/* A flex column with a height to fit in SHRINKS its children before it scrolls them, and a
+   child that cannot shrink -- text -- spills out of the box it was squashed into while the
+   next one is laid out where the squashed box ended. That is how "Link created." came to sit
+   UNDER the form below it, with the copy button unreachable: .form-message carries a
+   min-height of 20px and nothing else, so it was compressed from ~90px to 20px. Every child
+   keeps its own height; the body is what scrolls. */
+.intake-manage .modal-body > * { flex-shrink: 0; }
+
+/* The passcode box belongs to the Private choice, so it is revealed by that radio rather than
+   by a re-render -- redrawing the form to show one field would throw away whatever had already
+   been typed into the others. */
+.intake-create:not(:has(input[name="visibility"][value="private"]:checked)) .intake-pass { display: none; }
+.intake-create .intake-pass .intake-code { font-size: 18px; letter-spacing: .24em; text-align: left; }
+.intake-hint { font-size: 12px; opacity: .75; font-weight: 400; }
 .intake-manage h3 { margin: 18px 0 8px; font-size: 14px; }
 .intake-create { border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
 .intake-link-row, .intake-sub-row {
