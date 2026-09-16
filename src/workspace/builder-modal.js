@@ -32,6 +32,39 @@ function wbAppReportOptions(app) {
   return opts;
 }
 
+// An app's category is its Type. The types the create dialog offers come first, in that order;
+// a type typed freehand in Settings still gets its own category, after them, matched without
+// regard to case; an app with no type is filed last rather than left out.
+const WB_APP_TYPES = ['Contacts', 'Tasks', 'Projects', 'Records', 'Inventory', 'Documents', 'Calendar', 'Tickets', 'Invoices', 'Custom'];
+const WB_APP_TYPE_ICONS = {
+  Contacts: 'ti-address-book', Tasks: 'ti-checklist', Projects: 'ti-briefcase', Records: 'ti-database', Inventory: 'ti-packages',
+  Documents: 'ti-files', Calendar: 'ti-calendar', Tickets: 'ti-ticket', Invoices: 'ti-file-invoice', Custom: 'ti-puzzle',
+};
+const WB_UNCATEGORIZED = 'Uncategorized';
+
+function wbAppCategory(app) {
+  const raw = String(app?.type || '').trim();
+  if (!raw) return WB_UNCATEGORIZED;
+  return WB_APP_TYPES.find((t) => t.toLowerCase() === raw.toLowerCase()) || raw;
+}
+
+function wbAppCategoryIcon(name) {
+  return WB_APP_TYPE_ICONS[name] || (name === WB_UNCATEGORIZED ? 'ti-folder' : 'ti-tag');
+}
+
+// The categories present in a list of market entries, in display order, each with its apps.
+function wbMarketCategories(entries) {
+  const byKey = new Map();
+  entries.forEach((e) => {
+    const name = wbAppCategory(e.app);
+    const key = name.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, { key, name, entries: [] });
+    byKey.get(key).entries.push(e);
+  });
+  const rank = (c) => (c.name === WB_UNCATEGORIZED ? WB_APP_TYPES.length + 1 : (WB_APP_TYPES.includes(c.name) ? WB_APP_TYPES.indexOf(c.name) : WB_APP_TYPES.length));
+  return [...byKey.values()].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
+
   function renderWorkspaceBuilderModal() {
     const m = state.builderModal;
     if (!m) return '';
@@ -353,12 +386,14 @@ function wbAppReportOptions(app) {
         const loading = state.wbAppLibrary === undefined || state.wbAppLibraryLoading;
         const q = (m.q || '').trim().toLowerCase();
         const all = state.wbAppLibrary || [];
-        const apps = q ? all.filter((e) => `${e.app.name} ${e.app.description || ''} ${e.app.type || ''} ${e.companyLabel} ${e.workspaceName}`.toLowerCase().includes(q)) : all;
-        const cards = loading
-          ? '<div class="wb-sub" style="padding:24px;text-align:center"><i class="ti ti-loader"></i> Loading apps…</div>'
-          : (apps.map((e) => {
-            const meta = { icon: e.app.icon || WB_APP_ICONS[0], color: e.app.color || WB_PALETTE[1] };
-            return `<div class="wb-lib-card">
+        const categories = wbMarketCategories(all);
+        // A category that has since emptied (the library reloaded) falls back to All.
+        const active = categories.find((c) => c.key === String(m.cat || '').toLowerCase()) || null;
+        const haystack = (e) => `${e.app.name} ${e.app.description || ''} ${e.app.type || ''} ${e.companyLabel} ${e.workspaceName}`.toLowerCase();
+        const matches = (e) => !q || haystack(e).includes(q);
+        const card = (e) => {
+          const meta = { icon: e.app.icon || WB_APP_ICONS[0], color: e.app.color || WB_PALETTE[1] };
+          return `<div class="wb-lib-card" data-search="${h(haystack(e))}"${matches(e) ? '' : ' hidden'}>
               <div class="wb-lib-ic" style="background:${h(meta.color)}"><i class="ti ${h(meta.icon)}"></i></div>
               <div class="wb-lib-body">
                 <b>${h(e.app.name)}</b>
@@ -366,10 +401,28 @@ function wbAppReportOptions(app) {
               </div>
               <div class="wb-lib-actions"><button class="btn btn-sm" type="button" data-wb-lib-info data-app-id="${h(e.app.id)}"><i class="ti ti-info-circle"></i>More info</button><button class="btn btn-sm btn-primary" type="button" data-wb-lib-install data-app-id="${h(e.app.id)}"><i class="ti ti-download"></i>Install</button></div>
             </div>`;
-          }).join('') || `<div class="wb-empty wb-empty-inline"><i class="ti ti-package"></i><h3>No apps yet</h3><p>${q ? 'No shared apps match your search.' : 'No apps have been shared to the market yet. Share one from an app\'s Settings.'}</p></div>`);
+        };
+        // All: every category as its own titled group. One category: just its apps.
+        // Every app is drawn, and search only hides, so typing never costs the search box focus.
+        const groups = (active ? [active] : categories).map((c) => {
+          const anyMatch = c.entries.some(matches);
+          const title = active ? '' : `<h4 class="wb-lib-group-title"><i class="ti ${h(wbAppCategoryIcon(c.name))}"></i>${h(c.name)} <span>${c.entries.length}</span></h4>`;
+          return `<section class="wb-lib-group" data-wb-lib-group${anyMatch ? '' : ' hidden'}>${title}${c.entries.map(card).join('')}</section>`;
+        }).join('');
+        const noneMatch = !(active ? active.entries : all).some(matches);
+        const cats = categories.length ? `<div class="wb-lib-cats" role="group" aria-label="App categories">
+            <button type="button" class="wb-lib-cat ${active ? '' : 'active'}" aria-pressed="${!active}" data-wb-lib-cat=""><i class="ti ti-layout-grid"></i>All <span>${all.length}</span></button>
+            ${categories.map((c) => `<button type="button" class="wb-lib-cat ${active === c ? 'active' : ''}" aria-pressed="${active === c}" data-wb-lib-cat="${h(c.name)}"><i class="ti ${h(wbAppCategoryIcon(c.name))}"></i>${h(c.name)} <span>${c.entries.length}</span></button>`).join('')}
+          </div>` : '';
+        const cards = loading
+          ? '<div class="wb-sub" style="padding:24px;text-align:center"><i class="ti ti-loader"></i> Loading apps…</div>'
+          : (all.length
+            ? `${groups}<div class="wb-empty wb-empty-inline" id="wbLibNoMatch"${noneMatch ? '' : ' hidden'}><i class="ti ti-package"></i><h3>No matches</h3><p>No shared apps${active ? ` in ${h(active.name)}` : ''} match your search.</p></div>`
+            : '<div class="wb-empty wb-empty-inline"><i class="ti ti-package"></i><h3>No apps yet</h3><p>No apps have been shared to the market yet. Share one from an app\'s Settings.</p></div>');
         return wbModalShell('Add app', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:#0891b2"><i class="ti ti-building-store"></i></div><h3>Quest App Market</h3>`,
           `<div class="wb-sub" style="margin-bottom:12px">Install apps shared by anyone on Questbase. Installing copies its <b>fields and automations</b> into this workspace — records are not copied.</div>
-           <div class="wb-search-box" style="max-width:none;margin-bottom:14px"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-lib-search value="${h(m.q || '')}" placeholder="Search the app market…"></div>
+           <div class="wb-search-box" style="max-width:none;margin-bottom:12px"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-lib-search value="${h(m.q || '')}" placeholder="Search the app market…"></div>
+           ${loading ? '' : cats}
            <div class="wb-lib-grid" id="wbLibGrid">${cards}</div>`,
           `<button class="btn" type="button" data-wb-chooser-back><i class="ti ti-arrow-left"></i>Back</button><button class="btn" data-action="wb-modal-close">Close</button>`);
       }
@@ -386,7 +439,7 @@ function wbAppReportOptions(app) {
       return wbModalShell('Add app', '', `<div class="wb-modal-ic" style="background:${h(m.draft.color)}"><i class="ti ${h(m.draft.icon)}"></i></div><h3>Add app</h3>`,
         `<div class="wb-field"><label>App name</label><input class="wb-input" id="wbApName" value="${h(m.draft.name || '')}" placeholder="e.g. Leads, Projects, Inspections" autofocus></div>
         <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbApDesc" placeholder="What does this app track?">${h(m.draft.description || '')}</textarea></div>
-        <div class="wb-field"><label>App type <span class="wb-opt">(optional)</span></label><select class="wb-input" id="wbApType"><option value="">— Select a type —</option>${['Contacts', 'Tasks', 'Projects', 'Records', 'Inventory', 'Documents', 'Calendar', 'Tickets', 'Invoices', 'Custom'].map((t) => `<option ${m.draft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div class="wb-field"><label>App type <span class="wb-opt">(optional)</span></label><select class="wb-input" id="wbApType"><option value="">— Select a type —</option>${WB_APP_TYPES.map((t) => `<option ${m.draft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
         <div class="wb-field"><label>Icon</label>
           <div class="wb-search-box wb-icon-search"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-icon-search value="${h(m.iconQuery || '')}" placeholder="Search icons…"></div>
           <div class="wb-emoji-pick wb-icon-grid" id="wbAppIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(iconLabel(icon))}" data-wb-pick-icon="${icon}" data-icon-name="${h(icon.replace('ti-', '').replace(/-/g, ' '))}"><i class="ti ${icon}"></i></button>`).join('')}</div>

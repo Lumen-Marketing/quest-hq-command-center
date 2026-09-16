@@ -469,6 +469,18 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 .wb-lib-meta i { font-size: 13px; }
 .wb-lib-card .btn { flex: none; }
 .wb-lib-actions { display: flex; gap: 6px; flex: none; }
+/* Category buttons above the list, and the category titles inside it when showing All */
+.wb-lib-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.wb-lib-cat { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border: 1px solid var(--border, #e2d5bf); border-radius: 999px; background: var(--surface, #fffaf0); color: var(--text-2, #473f34); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.wb-lib-cat i { font-size: 14px; }
+.wb-lib-cat span { font-size: .7rem; opacity: .6; }
+.wb-lib-cat:hover { border-color: #e0552d; color: var(--text, #17130f); }
+.wb-lib-cat.active { background: #e0552d; border-color: #e0552d; color: #fff; }
+.wb-lib-cat.active span { opacity: .85; }
+.wb-lib-group { display: grid; gap: 10px; }
+.wb-lib-group + .wb-lib-group { margin-top: 8px; }
+.wb-lib-group-title { display: flex; align-items: center; gap: 7px; font-size: .86rem; margin: 0; color: var(--text-2, #473f34); }
+.wb-lib-group-title span { font-size: .72rem; font-weight: 700; background: var(--surface-3, #eef1f5); color: var(--text-muted, #72695d); border-radius: 999px; padding: 1px 8px; }
 .btn.wb-shared-on { border-color: var(--success, #16a34a); color: var(--success, #16a34a); background: color-mix(in srgb, var(--success, #16a34a) 8%, var(--surface, #fffaf0)); }
 .btn.wb-shared-on:hover { background: color-mix(in srgb, var(--success, #16a34a) 14%, var(--surface, #fffaf0)); }
 /* App detail (More info) */
