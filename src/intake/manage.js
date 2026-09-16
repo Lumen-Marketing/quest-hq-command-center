@@ -166,7 +166,25 @@ function linkRow(link) {
   `;
 }
 
+// Who sent a submission, read from its answers. The public form stopped asking "your name" and
+// "your email" on top of the app's own fields -- an app with a Name and an Email field was
+// asking for both twice -- so the sender is the first text answer, which is what an app is
+// usually titled by, and the first email answer. Older submissions still carry the columns the
+// extra questions filled, and those win.
+function senderOf(submission) {
+  const values = submission.values || {};
+  const answered = (type) => (view.app?.fields || [])
+    .find((field) => field.type === type && typeof values[field.id] === 'string' && values[field.id].trim());
+  const nameField = answered('text');
+  const emailField = answered('email');
+  return {
+    name: submission.submitted_name || (nameField ? values[nameField.id] : '') || 'Someone',
+    email: submission.submitted_email || (emailField ? values[emailField.id] : ''),
+  };
+}
+
 function submissionRow(submission) {
+  const sender = senderOf(submission);
   const byId = new Map((view.app?.fields || []).map((field) => [field.id, field]));
   const cells = Object.entries(submission.values || {}).slice(0, 6).map(([id, value]) => {
     const field = byId.get(id);
@@ -180,8 +198,8 @@ function submissionRow(submission) {
   return `
     <div class="intake-sub-row">
       <div class="intake-sub-main">
-        <strong>${h(submission.submitted_name || 'Someone')}</strong>
-        ${submission.submitted_email ? `<small>${h(submission.submitted_email)}</small>` : ''}
+        <strong>${h(sender.name)}</strong>
+        ${sender.email ? `<small>${h(sender.email)}</small>` : ''}
         <div class="intake-sub-values">${cells}</div>
       </div>
       <div class="intake-link-actions">

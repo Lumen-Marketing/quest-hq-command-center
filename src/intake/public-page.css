@@ -1,0 +1,211 @@
+/* ---- Public intake form ---------------------------------------------------------------------
+   The page a client fills in from a shared link. Loaded with the page module
+   (public-page-module.js), not the entry stylesheet: only a visitor holding a link needs it.
+
+   Inputs, labels and focus rings follow the app's own record form (.wb-input, .wb-field in
+   src/workspace/builder.css) so the two read as one product. They are restated rather than
+   reused because builder.css belongs to the signed-in app and is never loaded here. */
+
+/* Two classes, so this wins over .client-portal-public's own background whatever order the
+   sheets arrive in. flow-root keeps the card's spacing INSIDE the page: without it the margin
+   escaped the page element and showed a band of a different colour across the top. */
+.client-portal-public.intake-public {
+  display: flow-root;
+  min-height: 100vh;
+  padding: clamp(16px, 6vh, 64px) 16px 28px;
+  background: var(--bg, #efe8d9);
+  color: var(--text, #17130f);
+}
+
+.intake-card {
+  width: min(640px, 100%);
+  margin: 0 auto;
+  border: 1px solid var(--border, #e2d5bf);
+  border-radius: 16px;
+  background: var(--surface, #fffaf0);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .12);
+  overflow: hidden;
+}
+.intake-card-narrow { width: min(460px, 100%); }
+
+.intake-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 26px;
+  border-bottom: 1px solid var(--border, #e2d5bf);
+}
+.intake-app-ic {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--orange, #e66a1f);
+  color: #fff;
+  font-size: 23px;
+}
+.intake-head-text { min-width: 0; padding-top: 2px; }
+.intake-head h1 { margin: 0; font-size: clamp(1.2rem, 1rem + 1vw, 1.55rem); font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
+.intake-intro { margin: 6px 0 0; color: var(--text-muted, #70675b); font-size: .95rem; line-height: 1.5; }
+
+.intake-form { display: grid; gap: 20px; padding: 22px 26px 24px; }
+.intake-note { margin: 0; color: var(--text-muted, #70675b); font-size: .8rem; }
+.intake-q { display: grid; gap: 7px; min-width: 0; }
+.intake-label { font-size: .86rem; font-weight: 700; color: var(--text-2, #473f34); }
+.intake-public .intake-req { margin-left: 3px; color: var(--danger, #dc2626); }
+/* In the "* Required" key the star leads, so it takes no gap before it. */
+.intake-note .intake-req { margin: 0 2px 0 0; }
+
+/* 16px text: a phone zooms the whole page into any input set smaller, and then it stays zoomed. */
+.intake-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid var(--border-strong, #d3c1a7);
+  border-radius: 10px;
+  background: var(--surface, #fffaf0);
+  color: var(--text, #17130f);
+  font: inherit;
+  font-size: 16px;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.intake-input::placeholder { color: var(--text-muted, #70675b); opacity: .75; }
+.intake-input:focus { outline: none; border-color: #e0552d; box-shadow: 0 0 0 3px rgba(224, 85, 45, .22); }
+textarea.intake-input { min-height: 104px; resize: vertical; }
+.intake-short { max-width: 240px; }
+.intake-tiny { max-width: 92px; }
+
+.intake-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.intake-suffix { color: var(--text-muted, #70675b); font-size: .88rem; }
+
+/* A mark before the box: the pin on a location, the currency on money -- where the record form
+   puts them. */
+.intake-affix { display: flex; align-items: stretch; gap: 8px; }
+.intake-affix .intake-input { flex: 1; min-width: 0; }
+.intake-affix-ic {
+  flex: none;
+  min-width: 44px;
+  padding: 0 10px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong, #d3c1a7);
+  border-radius: 10px;
+  background: var(--surface-2, #f6efe4);
+  color: var(--text-muted, #70675b);
+  font-weight: 700;
+}
+.intake-affix-ic i { font-size: 17px; }
+
+.intake-select { position: relative; }
+.intake-select select { appearance: none; padding-right: 40px; cursor: pointer; }
+/* "Pick a trade" is a prompt, not an answer: muted until something is chosen, like a placeholder. */
+.intake-select select:has(option[value=""]:checked) { color: var(--text-muted, #70675b); }
+.intake-select i { position: absolute; top: 50%; right: 13px; transform: translateY(-50%); color: var(--text-muted, #70675b); pointer-events: none; }
+
+/* Chips: a category drawn as chips in the app, and tags. The real control is the radio or
+   checkbox underneath, laid over the chip so a tap anywhere on it lands. */
+.intake-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.intake-chip { position: relative; }
+.intake-chip input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.intake-chip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-strong, #d3c1a7);
+  border-radius: 999px;
+  background: var(--surface, #fffaf0);
+  font-size: .9rem;
+  font-weight: 600;
+}
+.intake-chip span[style]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--chip); }
+.intake-chip input:checked + span { border-color: #e0552d; background: color-mix(in srgb, #e0552d 11%, var(--surface, #fffaf0)); }
+.intake-chip input:focus-visible + span { outline: 2px solid #e0552d; outline-offset: 2px; }
+
+/* Stars, 5..1 in the markup and reversed on screen, so a checked star and "every star before
+   it" are the same selector: the siblings that follow it. */
+.intake-stars { display: inline-flex; flex-direction: row-reverse; justify-content: flex-end; gap: 2px; }
+.intake-stars input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.intake-stars label { padding: 2px; color: var(--border-strong, #d3c1a7); font-size: 30px; line-height: 1; cursor: pointer; }
+.intake-stars input:checked ~ label,
+.intake-stars label:hover,
+.intake-stars label:hover ~ label { color: #f59e0b; }
+.intake-stars input:focus-visible + label { outline: 2px solid #e0552d; outline-offset: 1px; border-radius: 6px; }
+
+.intake-toggle { position: relative; display: inline-flex; width: 46px; height: 26px; }
+.intake-toggle input { position: absolute; inset: 0; z-index: 1; margin: 0; opacity: 0; cursor: pointer; }
+.intake-toggle-track { position: absolute; inset: 0; border-radius: 999px; background: var(--border-strong, #d3c1a7); transition: background .15s ease; }
+.intake-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  transition: transform .15s ease;
+}
+.intake-toggle input:checked + .intake-toggle-track { background: #e0552d; }
+.intake-toggle input:checked + .intake-toggle-track::after { transform: translateX(20px); }
+.intake-toggle input:focus-visible + .intake-toggle-track { outline: 2px solid #e0552d; outline-offset: 2px; }
+
+.intake-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.intake-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger, #dc2626) 10%, var(--surface, #fffaf0));
+  color: var(--danger, #b91c1c);
+  font-size: .9rem;
+  font-weight: 600;
+}
+.intake-error i { margin-top: 2px; }
+
+.intake-actions { display: flex; justify-content: flex-end; margin-top: 2px; padding-top: 18px; border-top: 1px solid var(--border, #e2d5bf); }
+.intake-send { min-width: 150px; min-height: 44px; justify-content: center; gap: 8px; font-size: 1rem; }
+
+/* The screens that are a single message: loading, the passcode gate, thank you, unavailable. */
+.intake-state { display: grid; justify-items: center; gap: 10px; padding: 34px 28px; text-align: center; }
+.intake-state h1 { margin: 0; font-size: 1.35rem; font-weight: 800; }
+.intake-state p { margin: 0; color: var(--text-muted, #70675b); line-height: 1.5; }
+.intake-state-ic {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2, #f6efe4);
+  color: var(--text-muted, #70675b);
+  font-size: 28px;
+}
+.intake-state-ic.ok { background: color-mix(in srgb, #16a34a 14%, var(--surface, #fffaf0)); color: #16a34a; }
+.intake-state-ic.bad { background: color-mix(in srgb, #dc2626 12%, var(--surface, #fffaf0)); color: #dc2626; }
+.intake-gate-form { display: grid; gap: 12px; width: 100%; margin-top: 6px; }
+.intake-public .intake-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; letter-spacing: .3em; text-align: center; text-transform: uppercase; }
+.intake-card-narrow .intake-send { width: 100%; }
+
+.intake-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--border, #e2d5bf);
+  border-top-color: #e0552d;
+  border-radius: 50%;
+  animation: intake-spin .8s linear infinite;
+}
+@keyframes intake-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .intake-spinner { animation-duration: 2.4s; } }
+
+.intake-foot { margin: 18px 0 0; color: var(--text-muted, #70675b); font-size: .78rem; text-align: center; }
+
+@media (max-width: 520px) {
+  .intake-head, .intake-form { padding-right: 18px; padding-left: 18px; }
+  .intake-short { max-width: none; }
+  .intake-send { width: 100%; }
+}

@@ -34886,26 +34886,18 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 }
 
 /* ---- Public intake links ------------------------------------------------------------------
-   The page a client fills in holding nothing but a link, and the panel where that link is made.
-   The public half reuses .client-portal-public / .client-portal-gate, which already style an
-   unauthenticated page; only what is genuinely new is here. */
+   The panel where a link is made. The page a client fills in has its own sheet,
+   src/intake/public-page.css, loaded with that page -- only the honeypot stays here, so it is
+   off-screen even if that sheet fails to arrive and a person would otherwise see and fill it. */
 
-.intake-public .intake-form-card { max-width: 640px; text-align: left; }
 .intake-field { margin: 0 0 14px; display: flex; flex-direction: column; gap: 6px; }
 .intake-field > label { font-weight: 600; font-size: 13px; }
-.intake-req { color: var(--danger, #E24B4A); }
 .intake-unit { font-weight: 400; opacity: .65; }
 .intake-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 22px; letter-spacing: .34em; text-align: center; text-transform: uppercase;
 }
-.intake-switch, .intake-radio { display: flex; align-items: center; gap: 8px; font-weight: 400; }
-.intake-tags { display: flex; flex-wrap: wrap; gap: 8px; }
-.intake-tag {
-  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
-  border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-size: 13px;
-}
-.intake-tag:has(input:checked) { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); }
+.intake-radio { display: flex; align-items: center; gap: 8px; font-weight: 400; }
 /* Off-screen rather than display:none: some bots skip anything hidden that way, and this is
    only useful if it is filled in by something that cannot see it. */
 .intake-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }

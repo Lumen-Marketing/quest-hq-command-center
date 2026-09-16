@@ -4159,7 +4159,7 @@ function render() {
     document.title = 'Form | Questbase';
     app.innerHTML = intakeModule ? intakeModule.renderIntakePage() : '';
     queueMicrotask(() => {
-      import('./intake/public-page.js').then((mod) => {
+      import('./intake/public-page-module.js').then((mod) => {
         const first = !intakeModule;
         intakeModule = mod;
         mod.mountIntakePage(state.route.token, render);

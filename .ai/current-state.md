@@ -101,6 +101,42 @@ Latest review: 2026-09-10 (local time). Read the newest dated section first; old
   test buttons (`+1`, `+2`, `+3`) and an in-flight panel that now target only deleted apps. They
   fail gracefully ("That app has been deleted or moved") but are clutter.
 
+## 2026-09-17 The public intake form asks what Add record asks
+
+- **Same questions, drawn the same way.** `src/intake/public-page.js` now mirrors the app's
+  record form (`src/workspace/field-config-ui.js`): phone `555 123 4567` with the app's own
+  as-you-type formatting (`data-phone-format`, handled by main.js's document listener, which
+  runs on this route), email `name@email.com`, a pin beside a location with
+  `Address, city, or place`, the currency before money and the unit after a number, a category
+  drawn as chips when the app draws it as chips, stars for a rating, a switch for a checkbox.
+  `tests/intake-public-form.test.mjs` checks the three placeholders against the app's renderer,
+  so a change there fails here rather than drifting.
+- **A duration was stored wrong.** The single number box was read as minutes, so "2" meaning two
+  hours arrived as 2. It is hours and minutes now, sent as whole minutes (`durationMinutes`).
+- **"Your name" and "Your email" are gone.** An app with Name and Email fields was asking both
+  twice. The review list (`senderOf` in `src/intake/manage.js`) names a submission from its first
+  text and first email answers; older rows keep the `submitted_name`/`submitted_email` they came
+  with. The submit route still accepts both keys, so nothing in flight breaks.
+- **Deliberate differences from Add record:** a category is a fixed list, because the server
+  refuses an option a stranger invents; a location has no map picker, which needs the signed-in
+  app.
+- **The server sends two more harmless facts:** `display: 'chips'` on a chips category
+  (`publicFields`) and the app's `icon` (`linkSummary`, `ti-…` class names only, none before a
+  private link's passcode). The header now shows the app's icon and colour, as Add record's does.
+- **The passcode gate stopped typing at 12 characters**, while the share panel lets a member choose
+  up to 32 — so a longer chosen passcode could never be entered. It takes 32 now.
+- **Presentation:** a card with the app header, "* Required" key, divider and full-width Send on a
+  phone; loading, gate, thank-you and unavailable screens each get a state icon. The page is one
+  colour top to bottom (the card's margin had been escaping `main` and showing a band).
+- **Its CSS is its own lazy sheet**, `src/intake/public-page.css`, imported by
+  `src/intake/public-page-module.js`, which the router now fetches. Entry CSS was within ~2 KB of
+  its 110 KB gzip budget; the dead public-page rules removed from `src/styles.css` took it from
+  110,361 to 110,274 bytes. The honeypot rule stays in the entry sheet, so a failed lazy sheet
+  cannot expose it to a person whose answers would then be discarded as spam.
+- Verified by rendering the real markup to static files and screenshotting headlessly at
+  1280px and 390px (no server — `.ai/README.md` forbids one): no overflow, no console errors,
+  stars fill 1–3 on a click of the third, chips and the switch check.
+
 ## 2026-09-16 Public intake links: every one of them was broken
 
 Three faults on the share-a-link panel, found from one screenshot of it.

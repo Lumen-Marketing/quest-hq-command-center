@@ -242,6 +242,9 @@ export function linkSummary(link, app) {
     appName: String(app?.name || '').slice(0, 120),
     recordName: String(app?.recordName || '').slice(0, 120),
     color: /^#[0-9a-f]{3,8}$/i.test(String(app?.color || '')) ? String(app.color) : '',
+    // The app's icon for the form's header: a Tabler class name and nothing else. A private link
+    // is summarised with no app before its passcode, so it gets none until then.
+    icon: /^ti-[a-z0-9-]+$/.test(String(app?.icon || '')) ? String(app.icon) : '',
     needsPasscode: link.visibility === 'private',
   };
 }

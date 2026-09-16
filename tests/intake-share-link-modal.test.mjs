@@ -157,3 +157,44 @@ test('a typed passcode is normalized and hashed like a generated one, and a shor
   assert.ok(fn.includes('row.passcode_hash = await hashPasscode(passcode, row.passcode_salt);'), 'one hashing path for both');
   assert.ok(manage.includes("passcode: read('passcode'),"), 'and the form actually hands it over');
 });
+
+// ---- who sent it -----------------------------------------------------------------------------
+//
+// The public form stopped asking "your name" and "your email" on top of the app's own fields, so
+// the review list names a submission from its answers instead of calling everyone "Someone".
+
+const reviewWith = (submissions) => {
+  let captured = null;
+  open('co1', 'ws-1', 'app-1', {
+    wbFind: () => ({ app: { id: 'app-1', name: 'Clients', fields: [
+      { id: 'n', label: 'Name', type: 'text', config: {} },
+      { id: 'e', label: 'Email', type: 'email', config: {} },
+    ] } }),
+    setIntakeView: (next) => { captured = next; },
+    render: () => {},
+    createSupabaseClient: () => null,
+    isLiveSupabaseSession: () => false,
+    showToast: () => {},
+    wbSave: async () => {},
+    wbUid: () => 'x',
+  });
+  captured.submissions = submissions;
+  return renderIntakeManage();
+};
+
+test('a submission is named by its own Name and Email answers', () => {
+  const html = reviewWith([{ id: 's1', values: { n: 'Maya Santos', e: 'maya@example.com' } }]);
+  assert.ok(html.includes('<strong>Maya Santos</strong>'));
+  assert.ok(html.includes('<small>maya@example.com</small>'));
+});
+
+test('an older submission keeps the name it was sent with', () => {
+  const html = reviewWith([{ id: 's2', submitted_name: 'Old Sender', submitted_email: 'old@example.com', values: { n: 'Other' } }]);
+  assert.ok(html.includes('<strong>Old Sender</strong>'));
+  assert.ok(html.includes('<small>old@example.com</small>'));
+});
+
+test('with nothing to go on it still says Someone', () => {
+  const html = reviewWith([{ id: 's3', values: {} }]);
+  assert.ok(html.includes('<strong>Someone</strong>'));
+});

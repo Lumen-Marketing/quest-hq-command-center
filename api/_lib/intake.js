@@ -126,6 +126,9 @@ export function publicFields(app, fieldIds) {
             color: /^#[0-9a-f]{3,8}$/i.test(String(option?.color || '')) ? String(option.color) : '',
           }))
           .filter((option) => option.id && option.label);
+        // Chips are the category field's other display style in the app: every option laid out
+        // to tap. Passed on so the form asks the question the way the record form does.
+        if ((field.type === 'category' || field.type === 'status') && config.display === 'chips') out.display = 'chips';
       }
       return out;
     });
