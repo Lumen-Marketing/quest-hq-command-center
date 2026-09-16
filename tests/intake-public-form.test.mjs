@@ -197,3 +197,90 @@ test('the link summary carries the app icon, checked, and none before a private 
   assert.equal(linkSummary(link, { icon: 'ti-users" onmouseover="x' }).icon, '', 'only a class name crosses');
   assert.equal(linkSummary({ ...link, visibility: 'private' }, null).icon, '');
 });
+
+// ---- the map picker ----------------------------------------------------------------------------
+//
+// "can you also make a map picker on the form link". The pin beside a location opens a map --
+// search, this device's location, or a tap -- and the address lands in the Location box.
+
+const picker = await import('../src/intake/map-picker.js');
+const pickerSource = read('../src/intake/map-picker.js');
+const pageSource = read('../src/intake/public-page.js');
+
+test('the pin is a button that opens the map, and the map is fetched only when pressed', async () => {
+  const html = await open({ link: LINK, fields: FIELDS });
+  const where = question(html, 'where');
+  assert.ok(where.includes('<button type="button" class="intake-affix-ic intake-pin" data-intake-pin="where"'));
+  assert.ok(where.includes('aria-label="Pick Location on a map"'));
+  assert.ok(pageSource.includes("import('./map-picker.js')"), 'loaded on the first press');
+  assert.ok(!/^import .*map-picker/m.test(pageSource), 'and never statically, which would put it in the page chunk');
+  assert.ok(!pageSource.includes('leaflet'), 'Leaflet is the picker\'s business, not the form\'s');
+  assert.ok(pickerSource.includes("import('leaflet')"), 'and the picker loads it itself, only once opened');
+});
+
+test('it writes the address text into the form box, which is all a location field stores', () => {
+  // A workspace location field holds the address and nothing else, even when a member pins it in
+  // the app (saveLocationPicker in main.js writes `address` alone). The public picker must match,
+  // or the record would hold a shape the app does not read.
+  assert.ok(pickerSource.includes('input.value = chosen;'));
+  assert.ok(pickerSource.includes("input.dispatchEvent(new Event('input', { bubbles: true }))"));
+  assert.ok(!/name="(lat|lng)"/.test(pickerSource), 'no coordinates smuggled into the form beside it');
+  assert.equal(picker.coordsLabel(33.4484, -112.074), '33.448400, -112.074000', 'a pin with no street address uses its coordinates');
+});
+
+test('it draws over the form rather than redrawing the page, and submits nothing of its own', () => {
+  assert.ok(pickerSource.includes('document.body.append(dialog)'));
+  assert.ok(!/onChange|setState|render\(/.test(pickerSource), 'a redraw would rebuild the form empty');
+  // The page's submit listener sits on the document. A <form> in the dialog that it does not
+  // recognise would submit past it and reload the page.
+  assert.ok(!pickerSource.includes('<form'), 'Enter searches through a keydown, not a form');
+});
+
+test('it asks Nominatim politely', () => {
+  const search = new URL(picker.searchUrl('  1 Main St, Phoenix  '));
+  assert.equal(search.origin + search.pathname, 'https://nominatim.openstreetmap.org/search');
+  assert.equal(search.searchParams.get('q'), '1 Main St, Phoenix');
+  assert.equal(search.searchParams.get('limit'), '1');
+  assert.equal(search.searchParams.get('format'), 'jsonv2');
+  const reverse = new URL(picker.reverseUrl(33.4, -112.1));
+  assert.equal(reverse.pathname, '/reverse');
+  assert.equal(reverse.searchParams.get('lat'), '33.4');
+  assert.equal(reverse.searchParams.get('lon'), '-112.1');
+  // About a request a second and no search-as-you-type: searches are pressed, and a run of drags
+  // settles into one lookup, whose answer is dropped if a newer pin has replaced it.
+  const delay = Number((pickerSource.match(/REVERSE_DELAY_MS = (\d+)/) || [])[1]);
+  assert.ok(delay >= 500, 'reverse lookups are debounced');
+  assert.ok(pickerSource.includes('if (mine !== lookup || current !== dialog) return;'));
+  assert.ok(!/addEventListener\('input'/.test(pickerSource), 'no lookup per keystroke');
+});
+
+test('the site policy still lets a visitor load tiles, look up addresses and share a location', () => {
+  // All three are fetched straight from the visitor's browser. Tighten any of these in vercel.json
+  // and the public map breaks with nothing but a console line to say why.
+  const headers = JSON.parse(read('../vercel.json')).headers.flatMap((rule) => rule.headers);
+  const csp = headers.find((header) => header.key === 'Content-Security-Policy').value;
+  const directive = (name) => (csp.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name} `)) || '');
+  assert.ok(directive('img-src').includes('https://tile.openstreetmap.org'), 'map tiles');
+  assert.ok(directive('connect-src').includes('https://nominatim.openstreetmap.org'), 'address lookups');
+  const permissions = headers.find((header) => header.key === 'Permissions-Policy').value;
+  assert.ok(permissions.includes('geolocation=(self)'), 'Use my location');
+});
+
+test('a rejected submission leaves the form exactly as it was typed', () => {
+  // The page redraws from innerHTML, so redrawing on "sending" or on an error rebuilt every box
+  // empty -- a pinned location included. Only a success redraws now.
+  const submit = pageSource.slice(pageSource.indexOf('async function submit('), pageSource.indexOf('/** One delegated listener'));
+  assert.ok(!submit.includes('setState({ busy: true'), 'no redraw while sending');
+  assert.ok(!submit.includes('setState({ busy: false, error'), 'no redraw on an error');
+  assert.ok(submit.includes('paintSending(root, false, error.message)'), 'the error is painted in place');
+  assert.ok(submit.includes('setState({ busy: false, done: true })'), 'a success still moves on to thank you');
+});
+
+test('the map styles, Leaflet included, arrive with the map and not with every form', () => {
+  const formSheet = read('../src/intake/public-page.css');
+  const mapSheet = read('../src/intake/map-picker.css');
+  assert.ok(!formSheet.includes('.intake-map-overlay'), 'the dialog is not styled by the form sheet');
+  assert.ok(formSheet.includes('button.intake-pin {'), 'the pin is, because it shows before the map opens');
+  assert.ok(mapSheet.includes("@import 'leaflet/dist/leaflet.css';"), 'Leaflet\'s sheet comes with the dialog\'s');
+  assert.ok(pickerSource.includes("import('./map-picker.css')"));
+});

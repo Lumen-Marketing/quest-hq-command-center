@@ -27,10 +27,9 @@ const setState = (patch) => { state = { ...state, ...patch }; onChange(); };
 // rating. Somebody filling this in from a link is answering the same questions as somebody
 // adding the record by hand, and should not meet a rougher version of them.
 //
-// Two deliberate differences, both because a stranger is not a member:
-//   - A category is a fixed list. The record form lets a member type a new option; here the
-//     server refuses one (api/_lib/intake.js), so offering the box would only produce an error.
-//   - A location has no map picker. That needs the signed-in app; the pin marks the field.
+// One deliberate difference, because a stranger is not a member: a category is a fixed list.
+// The record form lets a member type a new option; here the server refuses one
+// (api/_lib/intake.js), so offering the box would only produce an error.
 
 const chipsFor = (field) => (field.type === 'category' || field.type === 'status')
   && field.display === 'chips' && (field.options || []).length > 0;
@@ -54,9 +53,12 @@ function fieldControl(field) {
     // on this route too: the same formatting as every phone box in the app.
     case 'phone':
       return `<input class="intake-input" type="tel" inputmode="tel" autocomplete="tel" data-phone-format${name} placeholder="555 123 4567"${required}>`;
+    // The pin opens a map (./map-picker.js, fetched on first press along with Leaflet), as the pin
+    // beside a location does in the app. It writes the address into this box, which is all a
+    // location field stores.
     case 'location':
       return `<div class="intake-affix">
-        <span class="intake-affix-ic" aria-hidden="true"><i class="ti ti-map-pin"></i></span>
+        <button type="button" class="intake-affix-ic intake-pin" data-intake-pin="${h(field.id)}" title="Pick on a map" aria-label="${h(`Pick ${field.label || 'the location'} on a map`)}"><i class="ti ti-map-pin" aria-hidden="true"></i></button>
         <input class="intake-input" type="text" autocomplete="street-address"${name} placeholder="Address, city, or place"${required}>
       </div>`;
     case 'date':
@@ -275,11 +277,30 @@ async function unlock(passcode) {
   }
 }
 
+// The form is NOT redrawn while it sends, or when the server turns it back. The page redraws
+// from innerHTML, so a redraw rebuilds every box empty: a rejected submission used to throw away
+// everything the visitor had typed, and a pinned location with it. Only the Send button and the
+// error line change, in place. A success does redraw, because the form is finished with.
+function paintSending(root, busy, message) {
+  const button = root.querySelector('.intake-send');
+  if (button) {
+    button.disabled = busy;
+    button.innerHTML = `<i class="ti ti-send" aria-hidden="true"></i>${busy ? 'Sending…' : 'Send'}`;
+  }
+  root.querySelector('.intake-error')?.remove();
+  if (message) {
+    root.querySelector('.intake-actions')?.insertAdjacentHTML('beforebegin',
+      `<div class="intake-error" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i><span>${h(message)}</span></div>`);
+  }
+}
+
 // No "your name" or "your email" of its own any more. The form asks exactly what the app's
 // record form asks, so an app with a Name and an Email field was asking for both twice. Who sent
 // a submission is read back from those answers in the review list (src/intake/manage.js).
 async function submit(root) {
-  setState({ busy: true, error: '' });
+  state.busy = true;
+  state.error = '';
+  paintSending(root, true, '');
   const values = collect(root, state.fields || []);
   try {
     await call('/api/wb-intake-submit', {
@@ -295,7 +316,9 @@ async function submit(root) {
     });
     setState({ busy: false, done: true });
   } catch (error) {
-    setState({ busy: false, error: error.message });
+    state.busy = false;
+    state.error = error.message;
+    paintSending(root, false, error.message);
   }
 }
 
@@ -312,6 +335,19 @@ export function mountIntakePage(token, rerender) {
       if (state?.busy) return;
       if (gateForm) unlock(gateForm.querySelector('[name="passcode"]')?.value || '');
       else submit(mainForm);
+    });
+    document.addEventListener('click', (event) => {
+      const pin = event.target.closest?.('[data-intake-pin]');
+      if (!pin) return;
+      event.preventDefault();
+      const input = pin.closest('.intake-affix')?.querySelector('input');
+      import('./map-picker.js')
+        .then((mod) => mod.openMapPicker(input, pin))
+        .catch(() => {
+          // Say so on the pin rather than doing nothing: the box beside it still takes a typed address.
+          pin.disabled = true;
+          pin.title = 'The map could not load. Type the address instead.';
+        });
     });
   }
   if (state?.token !== token) openIntake(token);

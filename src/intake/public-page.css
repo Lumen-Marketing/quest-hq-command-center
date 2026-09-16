@@ -209,3 +209,10 @@ textarea.intake-input { min-height: 104px; resize: vertical; }
   .intake-short { max-width: none; }
   .intake-send { width: 100%; }
 }
+
+/* The pin beside a location is a button: it opens the map picker (./map-picker.js), whose
+   dialog brings its own sheet. */
+button.intake-pin { font: inherit; cursor: pointer; transition: border-color .12s ease, color .12s ease; }
+button.intake-pin:hover { border-color: #e0552d; color: #e0552d; }
+button.intake-pin:focus-visible { outline: 2px solid #e0552d; outline-offset: 2px; }
+button.intake-pin:disabled { cursor: not-allowed; opacity: .55; }

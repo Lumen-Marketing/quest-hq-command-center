@@ -1,0 +1,68 @@
+/* ---- The map picker (./map-picker.js) -------------------------------------------------------
+   Loaded with the picker, not with the form: most visitors never open the map, and Leaflet's own
+   sheet is only worth fetching for those who do. It is pulled in here, rather than by a second
+   import beside Leaflet in map-picker.js, so that the picker names no module path main.js also
+   owns. The pin marker itself (.quest-map-pin) is styled in the entry sheet.
+
+   The dialog is laid over the form rather than drawn by a re-render, so nothing already typed is
+   lost while the map is open. */
+@import 'leaflet/dist/leaflet.css';
+
+.intake-map-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, .5);
+  overscroll-behavior: contain;
+}
+.intake-map {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--surface, #fffaf0);
+  color: var(--text, #17130f);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, .35);
+}
+.intake-map-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border, #e2d5bf); }
+.intake-map-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.05rem; font-weight: 800; }
+.intake-map-head h2 i { color: #e0552d; }
+.intake-map-x {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border, #e2d5bf);
+  border-radius: 9px;
+  background: var(--surface, #fffaf0);
+  color: var(--text-muted, #70675b);
+  font-size: 18px;
+  cursor: pointer;
+}
+.intake-map-x:hover { border-color: #e0552d; color: #e0552d; }
+.intake-map-search { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px; }
+.intake-map-search .intake-input { flex: 1 1 220px; min-width: 0; }
+.intake-map-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; }
+/* Tall enough to aim a pin at a roof; flex so a short window gives the map what is left. */
+.intake-map-canvas { flex: 1 1 auto; height: 52vh; min-height: 260px; max-height: 460px; background: var(--surface-2, #f6efe4); }
+.intake-map-status { margin: 0; padding: 10px 18px 0; color: var(--text-muted, #70675b); font-size: .85rem; }
+.intake-map-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 18px 16px; }
+.intake-map-picked { flex: 1 1 240px; min-width: 0; margin: 0; font-size: .92rem; font-weight: 700; overflow-wrap: anywhere; }
+.intake-map-picked:empty { display: none; }
+.intake-map-actions { display: flex; gap: 8px; margin-left: auto; }
+
+/* A phone gets the whole screen: a map in a floating box that small is too small to aim with. */
+@media (max-width: 520px) {
+  .intake-map-overlay { padding: 0; place-items: stretch; }
+  .intake-map { width: 100%; height: 100%; max-height: none; border-radius: 0; }
+  .intake-map-canvas { height: auto; max-height: none; }
+  .intake-map-search .intake-map-btn { flex: 1 1 40%; }
+  .intake-map-actions { width: 100%; }
+  .intake-map-actions .btn { flex: 1; }
+}

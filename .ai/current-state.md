@@ -117,9 +117,26 @@ Latest review: 2026-09-10 (local time). Read the newest dated section first; old
   twice. The review list (`senderOf` in `src/intake/manage.js`) names a submission from its first
   text and first email answers; older rows keep the `submitted_name`/`submitted_email` they came
   with. The submit route still accepts both keys, so nothing in flight breaks.
-- **Deliberate differences from Add record:** a category is a fixed list, because the server
-  refuses an option a stranger invents; a location has no map picker, which needs the signed-in
-  app.
+- **One deliberate difference from Add record:** a category is a fixed list, because the server
+  refuses an option a stranger invents.
+- **A map picker on the location pin** (added the same day). `src/intake/map-picker.js`, fetched on
+  the first press, with Leaflet only then: search an address, use this device's location, or tap
+  or drag the pin. It writes the address TEXT into the form's box, because that is all a
+  workspace location field stores even when pinned in the app (`saveLocationPicker`); a pin with
+  no street address writes its coordinates. Tiles and addresses come straight from
+  OpenStreetMap and Nominatim in the visitor's browser, which the CSP already allowed; reverse
+  lookups are debounced (600 ms) and a stale answer is dropped, per Nominatim's one-a-second
+  policy. The dialog is laid over the form, not drawn by a re-render. Its styles, Leaflet's
+  included, are `src/intake/map-picker.css`, loaded with it. `tests/extracted-module-references`
+  reads a path string like `leaflet/dist/leaflet.css` as a use of main.js's `leaflet` binding,
+  which is why Leaflet's sheet is `@import`ed from that CSS file rather than imported in the JS.
+- **A rejected submission no longer wipes the form.** The page redraws from innerHTML, and
+  `submit` redrew on "sending" and again on an error, so a server refusal rebuilt every box
+  empty. The Send button and error line now change in place; only a success redraws.
+- Verified end to end against the BUILT bundle with no server: a headless browser answered the
+  fake origin from `dist/` by request interception, mocked the intake API, and used the real
+  tiles and Nominatim. Search, tap, Use this location, Use my location, Escape, a refused send
+  keeping every value, phone formatting, and a full-screen picker at 390px all behaved.
 - **The server sends two more harmless facts:** `display: 'chips'` on a chips category
   (`publicFields`) and the app's `icon` (`linkSummary`, `ti-…` class names only, none before a
   private link's passcode). The header now shows the app's icon and colour, as Add record's does.
