@@ -157,7 +157,13 @@ export function renderIntakePage() {
   else if (state.fields?.length) body = form();
   else if (state.link?.needsPasscode) body = gate();
   else body = '<section class="client-portal-gate loading"><h1>Opening form</h1></section>';
-  return `<main class="client-portal-public open intake-public">${body}</main>`;
+  // NOT `open`. That modifier exists for the client-portal document annotator, which is a
+  // fixed full-screen shell that scrolls inside itself: it carries position:fixed, inset:0
+  // and overflow:hidden. Worn by a page that is simply a long card, it pinned the form to the
+  // viewport and threw away everything below the fold -- an intake form of any real length
+  // could not be filled in, because it could not be reached. The base class is a normal
+  // scrolling page (min-height:100vh), which is what every other public page here uses.
+  return `<main class="client-portal-public intake-public">${body}</main>`;
 }
 
 // ---- talking to the two routes ---------------------------------------------------------------

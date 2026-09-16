@@ -130,6 +130,14 @@ Three faults on the share-a-link panel, found from one screenshot of it.
   normalizes the visitor's entry to; a typed one shorter than `PASSCODE_LENGTH` is refused.
   Only the hash is stored, as before.
 
+- **The public form could not be scrolled** (same day, after the fixes above reached production).
+  `renderIntakePage` wore `client-portal-public open`. That modifier belongs to the client-portal
+  document annotator — a fixed full-screen shell that scrolls inside itself — so it carries
+  `position: fixed`, `inset: 0` and `overflow: hidden`. On a page that is just a long card those
+  pinned the form to the viewport and discarded everything past the fold, so any intake form
+  longer than a screen could not be filled in. The base class, which every other public page
+  here uses, is an ordinary scrolling page. Guarded by `tests/intake-public-page.test.mjs`.
+
 Covered by `tests/intake-share-link-modal.test.mjs` (11) and `tests/wb-intake-api.test.mjs`
 (17). Not committed or deployed at the time of writing, and not exercised against the live
 site: `.ai/README.md` rules out a local server, so the fix for a link opening correctly is
