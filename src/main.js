@@ -15151,10 +15151,13 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
     + `<button class="wb-topbar-arrow" type="button" data-wb-topbar-scroll="-1" title="Scroll left" aria-label="Scroll apps left"><i class="ti ti-chevron-left"></i></button>`
     + `<button class="wb-topbar-arrow" type="button" data-wb-topbar-scroll="1" title="Scroll right" aria-label="Scroll apps right"><i class="ti ti-chevron-right"></i></button>`
     + `</div>`;
+  // Beside the paging arrows but outside them: the arrows are hidden when nothing overflows,
+  // and this button keeps one place whether or not the strip happens to fit today.
+  const allBtn = `<button class="wb-topbar-arrow wb-topbar-all" type="button" data-wb-topbar-all aria-expanded="false" aria-controls="wbAllApps" aria-haspopup="true" title="Show all apps" aria-label="Show all apps"><i class="ti ti-layout-grid" aria-hidden="true"></i></button>`;
   const addBtn = can('workspaces.manage', companyId)
     ? `<button class="wb-topbar-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus" aria-hidden="true"></i><span>Add app</span></button>`
     : '';
-  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps"><div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0"${canReorderApps ? ' data-wb-reorder="1"' : ''}>${strip}</div>${nav}${addBtn}</nav>`;
+  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps"><div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0"${canReorderApps ? ' data-wb-reorder="1"' : ''}>${strip}</div>${allBtn}${nav}${addBtn}</nav>`;
 }
 
 // Where the app strip was scrolled to. Kept in a variable rather than on the element:
@@ -15401,6 +15404,20 @@ function wbMountTopbar() {
     else if (right > viewRight) track.scrollLeft = right - track.clientWidth + pad;
   }
   sync();
+}
+
+/**
+ * Open the all-apps grid, or close it again.
+ *
+ * The panel itself is a module fetched at first press: it draws itself from the strip's own
+ * tabs, so nothing it needs has to travel from here, and the entry chunk keeps its budget.
+ */
+function wbToggleAllApps(button) {
+  const bar = document.querySelector('[data-wb-topbar]');
+  if (!bar) return;
+  import('./workspace/all-apps.js')
+    .then((mod) => mod.toggleAllApps(bar, button))
+    .catch((error) => console.error('All apps failed to load', error));
 }
 
 function wbScrollTopbar(direction) {
@@ -20598,6 +20615,7 @@ function mountWorkspaceBuilder() {
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));
+    bind('[data-wb-topbar-all]', (el) => wbToggleAllApps(el));
     bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp }));
     bind('[data-new-app]', () => openWbAppChooser(companyId, workspaceId));
     // Workspace activity feed (dashboard home): publisher + posts.
@@ -21643,8 +21661,16 @@ function wbMountModal() {
   if (libSearch) libSearch.oninput = () => {
     m.q = libSearch.value;
     const q = libSearch.value.trim().toLowerCase();
-    overlay.querySelectorAll('#wbLibGrid .wb-lib-card').forEach((card) => { card.hidden = !!q && !card.textContent.toLowerCase().includes(q); });
+    let shown = 0;
+    overlay.querySelectorAll('#wbLibGrid [data-wb-lib-group]').forEach((group) => {
+      let groupShown = 0;
+      group.querySelectorAll('.wb-lib-card').forEach((card) => { card.hidden = !!q && !(card.dataset.search || '').includes(q); if (!card.hidden) groupShown += 1; });
+      group.hidden = !groupShown;
+      shown += groupShown;
+    });
+    const noMatch = overlay.querySelector('#wbLibNoMatch'); if (noMatch) noMatch.hidden = shown > 0;
   };
+  overlay.querySelectorAll('[data-wb-lib-cat]').forEach((b) => { b.onclick = () => { m.cat = b.dataset.wbLibCat; render(); }; });
   const iconSearch = overlay.querySelector('[data-wb-icon-search]');
   if (iconSearch) {
     const filterIcons = (val) => {

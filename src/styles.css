@@ -31707,6 +31707,62 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-topbar-add:hover { border-color: var(--orange); color: var(--orange); }
 .wb-topbar-tab:focus-visible,
 .wb-topbar-add:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+/* The all-apps grid: every app in the workspace at once, under the strip that scrolls.
+   Anchored to .wb-topbar, which is sticky and therefore already a positioned ancestor, so the
+   panel travels with the bar instead of being left behind up the page. */
+.wb-topbar-all[aria-expanded="true"] { border-color: var(--orange); color: var(--orange); background: var(--surface-2); }
+.wb-allapps {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  left: 24px;
+  right: 24px;
+  max-height: min(62vh, 520px);
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  background: var(--surface);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, .18);
+}
+.wb-allapps-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.wb-allapps-title { display: flex; align-items: center; gap: 7px; margin: 0; font-size: .95rem; color: var(--text); }
+.wb-allapps-title span { font-size: .72rem; font-weight: 700; background: var(--surface-2); color: var(--text-muted); border-radius: 999px; padding: 1px 8px; }
+.wb-allapps-search { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 150px; max-width: 280px; margin-left: auto; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text-muted); }
+.wb-allapps-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--text); font: inherit; font-size: .85rem; padding: 7px 0; }
+.wb-allapps-close { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text-muted); font-size: 16px; cursor: pointer; }
+.wb-allapps-close:hover { border-color: var(--orange); color: var(--orange); }
+.wb-allapps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+.wb-allapps-tile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: .78rem;
+  font-weight: 700;
+  text-align: left;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.wb-allapps-tile:hover { background: var(--surface-2); color: var(--text); }
+.wb-allapps-tile.active { border-color: var(--orange); color: var(--text); }
+/* The name is the one thing that must not be cut mid-word, so it wraps to a second line
+   rather than being clipped -- the grid row grows with it. */
+.wb-allapps-name { min-width: 0; overflow-wrap: anywhere; }
+.wb-allapps-tile:focus-visible,
+.wb-allapps-close:focus-visible,
+.wb-topbar-all:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.wb-allapps-none { margin: 10px 2px 0; font-size: .82rem; color: var(--text-muted); }
+@media (max-width: 640px) {
+  .wb-allapps { left: 8px; right: 8px; }
+  .wb-allapps-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+}
+
 
 /* The tab being dragged: lifted, and translucent enough to see where it will land. */
 .wb-topbar-apps .wb-topbar-tab.is-dragging {
@@ -34858,7 +34914,6 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
    so a long list of links would push the dialog past the bottom of the window instead of
    scrolling inside it. */
 .intake-manage .modal-body { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; }
-
 /* A flex column with a height to fit in SHRINKS its children before it scrolls them, and a
    child that cannot shrink -- text -- spills out of the box it was squashed into while the
    next one is laid out where the squashed box ended. That is how "Link created." came to sit
@@ -34866,13 +34921,12 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
    min-height of 20px and nothing else, so it was compressed from ~90px to 20px. Every child
    keeps its own height; the body is what scrolls. */
 .intake-manage .modal-body > * { flex-shrink: 0; }
-
 /* The passcode box belongs to the Private choice, so it is revealed by that radio rather than
    by a re-render -- redrawing the form to show one field would throw away whatever had already
    been typed into the others. */
 .intake-create:not(:has(input[name="visibility"][value="private"]:checked)) .intake-pass { display: none; }
 .intake-create .intake-pass .intake-code { font-size: 18px; letter-spacing: .24em; text-align: left; }
-.intake-hint { font-size: 12px; opacity: .75; font-weight: 400; }
+.intake-hint { font-size: 12px; opacity: .75; font-weight: 400; }
 .intake-manage h3 { margin: 18px 0 8px; font-size: 14px; }
 .intake-create { border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
 .intake-link-row, .intake-sub-row {
