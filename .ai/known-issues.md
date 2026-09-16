@@ -1,5 +1,23 @@
 # Known issues and risks
 
+## The in-app company delete may abort on the system-role guard (unverified)
+
+Found by reading, not reproduced. `delete_company_workspace` deletes the company row and lets
+`roles` and `company_memberships` cascade. `app_private.guard_system_role` refuses to delete the
+Owner and Member system roles unless `is_company_owner()` holds for the caller — and that reads the
+caller's active owner **membership**. If the membership rows cascade away before the roles do, the
+guard sees no owner and raises *"Owner and Member are the roles every company starts with and
+cannot be deleted"*, rolling the whole delete back.
+
+Whether that happens depends on the order Postgres fires the two cascades, which was not checked:
+the catalog query to confirm it was declined on 2026-09-15. The routine was written in July, before
+the guard existed, so it was never exercised against it. When company `111` was deleted the same
+day, the roles were removed explicitly first to avoid the question.
+
+To settle it: as an Owner of a disposable company with no business data, press Delete company in
+the app. If it fails with that message, delete `roles` for the company before the `companies` row
+inside the routine, while the owner membership still exists.
+
 ## Physical form-upload removal still needs a controlled fixture
 
 Rechecked 2026-09-10 (QB-RV-07): Vercel runtime logs confirm a scheduled GET returned 200.
