@@ -8,7 +8,7 @@
 
 import { defineEndpoint } from './_lib/endpoint.js';
 import { HttpError } from './_lib/http-security.js';
-import { claimSubmissionSlot, loadIntake, releaseSubmissionSlot } from './_lib/intake-db.js';
+import { claimSubmissionSlot, loadIntake, notifySubmission, releaseSubmissionSlot } from './_lib/intake-db.js';
 import { IntakeValueError, cleanIntakeValues, lockedReason, verifyPasscode } from './_lib/intake.js';
 
 export default defineEndpoint(
@@ -33,7 +33,7 @@ export default defineEndpoint(
     }
 
     const token = String(body.token || '').trim();
-    const { link, fields } = await loadIntake(db, token, { withFields: true });
+    const { link, app, fields } = await loadIntake(db, token, { withFields: true });
 
     // The gate is enforced again here, not just on open: the open call is what the page uses,
     // and a submit that trusted it would let anybody post to a private link by skipping it.
@@ -82,6 +82,11 @@ export default defineEndpoint(
       await releaseSubmissionSlot(db, link.token);
       throw new HttpError(500, 'Could not send this form.');
     }
+
+    // Somebody is told. Awaited so the work finishes before the function is frozen, but its
+    // result is not checked: the answers are saved either way, and see notifySubmission.
+    const saved = (await insert.json().catch(() => []))[0];
+    await notifySubmission(db, { link, app, submissionId: saved?.id });
 
     return { submitted: true };
   },

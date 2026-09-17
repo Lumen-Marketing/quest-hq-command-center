@@ -55,8 +55,13 @@ async function loadAll() {
 async function createLink({ visibility, title, intro, maxSubmissions, passcode: chosen }) {
   const supabase = await client();
   const token = generateToken();
+  // Who to tell when somebody fills this in. The submit route reads it (notifySubmission in
+  // api/_lib/intake-db.js); links made before this was recorded fall back to the company owner.
+  // profiles.id IS the auth user id, so this is the same value a notification is addressed to.
+  const { data: auth } = await supabase.auth.getUser().catch(() => ({ data: null }));
   const row = {
     token,
+    created_by: auth?.user?.id || null,
     company_id: view.companyId,
     // The uuid, not the `ws-` builder key: the column is a uuid and the row's permission is
     // decided from it. See opsWorkspaceId.

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import openHandler from '../api/wb-intake-open.js';
 import submitHandler from '../api/wb-intake-submit.js';
@@ -55,7 +56,7 @@ const LINK = {
 // compare-and-swap: `?submission_count=eq.3` updates only while the value really is 3, and
 // returns an empty representation when it is not. A fake that always answered "updated" would
 // hide exactly the race these counters exist to close.
-function makeDb({ link = LINK, apps = [APP], workspaceId = WS_DOC_ID, submitFails = false } = {}) {
+function makeDb({ link = LINK, apps = [APP], workspaceId = WS_DOC_ID, submitFails = false, owner = null, notifyFails = false } = {}) {
   const calls = [];
   const row = link ? { ...link } : null;
 
@@ -81,6 +82,13 @@ function makeDb({ link = LINK, apps = [APP], workspaceId = WS_DOC_ID, submitFail
     }
     if (path.startsWith('/rest/v1/workspace_builder_state?')) {
       return { ok: true, async json() { return [{ doc: { workspaces: [{ id: workspaceId, apps }] } }]; } };
+    }
+    if (path.startsWith('/rest/v1/companies?')) {
+      return { ok: true, async json() { return [{ primary_owner_profile_id: owner }]; } };
+    }
+    if (path === '/rest/v1/notifications') {
+      if (notifyFails) return { ok: false, status: 500, async json() { return {}; } };
+      return { ok: true, async json() { return [{}]; } };
     }
     if (path === '/rest/v1/wb_intake_submissions') {
       if (submitFails) return { ok: false, status: 500, async json() { return {}; } };
@@ -304,4 +312,88 @@ test('a disallowed origin is refused before any work happens', async () => {
   }), r, { db });
   assert.equal(r.statusCode, 403);
   assert.deepEqual(calls, []);
+});
+
+// ---- somebody is told --------------------------------------------------------------------------
+//
+// Before this, a submission landed in the staging table and nothing else happened: the only place
+// it appeared was the share-link panel of that one app, which somebody had to open on purpose.
+
+const CREATOR = '8f14e45f-ce9a-4c2b-9a4b-2f0d3c1b7e55';
+const OWNER = '2b7e1516-28ae-4d2a-a6ab-f7158809cf4f';
+const notificationFrom = (calls) => {
+  const call = calls.find((c) => c.path === '/rest/v1/notifications');
+  return call ? JSON.parse(call.body) : null;
+};
+
+test('a submission notifies the member who made the link', async () => {
+  const { db, calls } = makeDb({ link: { ...LINK, created_by: CREATOR } });
+  const r = res();
+  await submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'Henderson', f2: '555' } } }), r, { db });
+  assert.equal(r.statusCode, 200);
+
+  const note = notificationFrom(calls);
+  assert.ok(note, 'nobody was told');
+  assert.equal(note.recipient_profile_id, CREATOR);
+  assert.equal(note.type, 'form.intake', 'files under Forms in the inbox');
+  assert.equal(note.source_type, 'wb_intake_submission');
+  assert.equal(note.source_id, 'sub-1', 'points at the submission that arrived');
+  assert.ok(note.href.includes('/workspaces?app_id=app-1&workspace=ws-'), 'opens the app it belongs to');
+  assert.match(note.body, /Prospects/, 'names the app');
+});
+
+test('the notification carries none of what the visitor typed', async () => {
+  // Their answers are already in the submission, behind the workspace permission. A notification
+  // row travels further -- a popover now, a digest later -- and does not need to carry them.
+  const { db, calls } = makeDb({ link: { ...LINK, created_by: CREATOR } });
+  const r = res();
+  await submitHandler(req('POST', {
+    body: { token: 'tok-public', values: { f1: 'Henderson', f2: '555' }, name: 'Maya Santos', email: 'maya@example.com' },
+  }), r, { db });
+  const raw = JSON.stringify(notificationFrom(calls));
+  for (const secret of ['Henderson', '555', 'Maya Santos', 'maya@example.com']) {
+    assert.ok(!raw.includes(secret), 'the notification leaks ' + secret);
+  }
+});
+
+test('a link made before creators were recorded falls back to the company owner', async () => {
+  const { db, calls } = makeDb({ owner: OWNER });
+  const r = res();
+  await submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'Henderson' } } }), r, { db });
+  assert.equal(r.statusCode, 200);
+  assert.equal(notificationFrom(calls)?.recipient_profile_id, OWNER);
+});
+
+test('with nobody to tell, the submission still lands', async () => {
+  const { db, calls } = makeDb({ owner: null });
+  const r = res();
+  await submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'Henderson' } } }), r, { db });
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.json(), { submitted: true });
+  assert.equal(notificationFrom(calls), null);
+});
+
+test('a notification that cannot be written never fails the submission', async () => {
+  // The visitor has already sent their answers and been told so. An error here would invite them
+  // to send everything a second time.
+  const { db, calls } = makeDb({ link: { ...LINK, created_by: CREATOR }, notifyFails: true });
+  const r = res();
+  await submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'Henderson' } } }), r, { db });
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.json(), { submitted: true });
+  assert.ok(calls.some((c) => c.path === '/rest/v1/wb_intake_submissions'), 'the answers were stored');
+});
+
+test('nobody is told about a submission that was refused', async () => {
+  const { db, calls } = makeDb({ link: { ...LINK, created_by: CREATOR }, submitFails: true });
+  const r = res();
+  await submitHandler(req('POST', { body: { token: 'tok-public', values: { f1: 'Henderson' } } }), r, { db });
+  assert.equal(r.statusCode, 500);
+  assert.equal(notificationFrom(calls), null);
+});
+
+test('a new link records who made it, so the right person is told', () => {
+  const manage = readFileSync(new URL('../src/intake/manage.js', import.meta.url), 'utf8');
+  assert.ok(manage.includes('created_by: auth?.user?.id || null,'), 'the link records its creator');
+  assert.ok(manage.includes('supabase.auth.getUser()'), 'read from the signed-in session');
 });

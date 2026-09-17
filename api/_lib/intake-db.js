@@ -4,6 +4,8 @@
 // the service-role fetch -- because the whole point is reading a company document that the
 // caller has no permission to see any part of.
 
+import { randomUUID } from 'node:crypto';
+
 import { HttpError } from './http-security.js';
 import { LOCKOUT_MINUTES, MAX_PASSCODE_ATTEMPTS, linkUnavailableReason, publicFields } from './intake.js';
 
@@ -188,6 +190,64 @@ export async function clearFailedPasscodes(db, token) {
  * submission row. Counting after the insert is what let concurrent posts overshoot a link
  * that was only ever meant to be filled in once.
  */
+/**
+ * Tell somebody a submission is waiting.
+ *
+ * Nothing did, before this. The row landed in wb_intake_submissions and the only place it showed
+ * was the share-link panel of that one app, which somebody had to open on purpose -- so a client
+ * could fill in a form and the business never find out.
+ *
+ * WHO: the member who made the link. Links made before `created_by` was filled in have nobody on
+ * them, so the company's owner is the fallback; a slightly wrong reader beats no reader. The badge
+ * and the waiting list in the app are what reach everybody else.
+ *
+ * WHAT: not a word of what the visitor typed. Their answers are already in the submission the
+ * reviewer is about to read, behind the workspace permission; a notification row travels further
+ * (a popover now, a digest later) and does not need to carry them.
+ *
+ * BEST EFFORT, always: the visitor has already sent their answers and been told so. A
+ * notification that cannot be written must not turn that into an error they could act on by
+ * sending everything a second time.
+ */
+export async function notifySubmission(db, { link, app, submissionId }) {
+  try {
+    let recipient = String(link?.created_by || '').trim();
+    if (!recipient) {
+      const owner = await db(`/rest/v1/companies?id=eq.${encodeURIComponent(link.company_id)}&select=primary_owner_profile_id`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!owner?.ok) return false;
+      const row = (await owner.json().catch(() => []))[0];
+      recipient = String(row?.primary_owner_profile_id || '').trim();
+    }
+    if (!recipient) return false;
+
+    const appName = String(app?.name || 'an app').slice(0, 120);
+    // The same shape companyPath builds on the client: the workspace key there is the builder's
+    // `ws-<uuid>`, while the column holds the bare uuid.
+    const href = `/company/${encodeURIComponent(link.company_id)}/workspaces`
+      + `?app_id=${encodeURIComponent(link.app_id)}&workspace=ws-${encodeURIComponent(link.workspace_id)}`;
+    const written = await db('/rest/v1/notifications', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: `notification-${randomUUID()}`,
+        company_id: link.company_id,
+        recipient_profile_id: recipient,
+        // A `form.` root files it under Forms in the inbox, which is what this is.
+        type: 'form.intake',
+        title: 'A form submission is waiting',
+        body: `Somebody filled in the share link for ${appName}. Open the app to add it as a record.`,
+        href,
+        source_type: 'wb_intake_submission',
+        source_id: String(submissionId || ''),
+      }),
+    });
+    return Boolean(written?.ok);
+  } catch {
+    return false;
+  }
+}
+
 export async function claimSubmissionSlot(db, link) {
   const max = link.max_submissions == null ? null : Number(link.max_submissions);
 
