@@ -15584,9 +15584,13 @@
   {
    "name": "wb_transfer_clear_atomic",
    "version": "20260909183829"
+  },
+  {
+   "name": "maintenance_ledger_covers_the_recycle_purge",
+   "version": "20260917232430"
   }
  ],
- "captured_at": "2026-09-09T18:38:53.856286+00:00",
+ "captured_at": "2026-09-17T23:24:30.000000+00:00",
  "relationships": [
   {
    "name": "accounts_company_id_fkey",

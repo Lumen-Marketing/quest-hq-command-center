@@ -101,6 +101,35 @@ Latest review: 2026-09-10 (local time). Read the newest dated section first; old
   test buttons (`+1`, `+2`, `+3`) and an in-flight panel that now target only deleted apps. They
   fail gracefully ("That app has been deleted or moved") but are clutter.
 
+## 2026-09-17 The recycle-bin purge writes down that it ran
+
+The audit's second finding, fixed. `maintenance_job_runs` was pinned to one job by a CHECK, so the
+nightly recycle-bin purge -- the job that deletes files and rows for good -- left no trace at all,
+and a stopped purge looked exactly like a quiet one.
+
+- Migration `20260917223000_maintenance_ledger_covers_the_recycle_purge.sql`, applied live under
+  that same name (version `20260917232430`), per the rule in
+  [migration names](database/migration-names.md). It widens the job CHECK to
+  `('form_upload_purge', 'recycle_bin_purge')` and takes the hardcoded job out of
+  `purge_maintenance_job_runs`, which had meant rows from any other job would never be pruned.
+  Nothing else changes: the stage vocabulary already carried `started`, `completed` and
+  `unexpected`, `unexpected_failure` was already an allowed code, and the table stays
+  service-role only.
+- `api/recycle-bin-purge.js` now prunes the ledger, records the run, and closes it with counts:
+  `success`, `partial` with `storage_remove_incomplete` when a file refuses to go, or `failed` with
+  `unexpected` when the run breaks. It **fails closed** -- if the run cannot be recorded, nothing is
+  deleted, because deleting somebody's files with no record that it happened is worse than skipping
+  a night. Its client is injectable now, the same seam `api/form-upload-purge.js` offers, so all of
+  that is exercised rather than read (`tests/recycle-purge-run-ledger.test.mjs`).
+- **The RingCentral sync was deliberately left out.** It already stamps `last_sync_at`,
+  `consecutive_failures` and `last_error` per company in `ringcentral_sync_state`, and at a run
+  every fifteen minutes it would add 96 rows a day of evidence that exists somewhere better.
+- The catalog snapshot was **checked rather than recaptured**: every array in it was compared
+  against live first (103 public tables, 312 policies, 92 functions, 261 foreign keys, 6 buckets,
+  6 extensions, 2 cron jobs, 105 triggers) and all of it still matched, and this migration changes
+  only a CHECK constraint, which the snapshot does not record, and one function body whose
+  signature and grants are unchanged. So the migration row and `captured_at` are the whole diff.
+
 ## 2026-09-17 Somebody is told when a form submission arrives
 
 The gap the audit turned up: a submission landed in `wb_intake_submissions` and nothing else
