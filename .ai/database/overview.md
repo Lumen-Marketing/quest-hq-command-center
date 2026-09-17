@@ -240,3 +240,4 @@ the original tenant/workspace, and the source module's current permission check.
 - [Storage](storage.md)
 - [Refresh queries](introspection.sql)
 - [Machine snapshot](snapshot.json)
+- [Migration names: repository against database](migration-names.md)
