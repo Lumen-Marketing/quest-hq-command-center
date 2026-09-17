@@ -101,6 +101,46 @@ Latest review: 2026-09-10 (local time). Read the newest dated section first; old
   test buttons (`+1`, `+2`, `+3`) and an in-flight panel that now target only deleted apps. They
   fail gracefully ("That app has been deleted or moved") but are clutter.
 
+## 2026-09-17 System audit
+
+Checked against live Supabase and Vercel, the repository, and the deployed site. No new confirmed
+defect; the one thing that was wrong was this folder's own manifest.
+
+- **Live state.** Supabase ACTIVE_HEALTHY, Postgres 17.6.1.127, us-west-1. The newest applied
+  migration is still `wb_transfer_clear_atomic` (20260909183829), so the schema has not moved
+  since the 2026-09-09 snapshot and the catalog map remains current. Production serves `ff1840e`;
+  smoke passed 36/36 routes with 4/4 entry assets.
+- **Manifest was eight days stale** and named `7349574` as the deployed commit, ten commits
+  behind. Refreshed from today's verification. `vercel_deployment_id` is now null rather than a
+  stale id: listing deployments over the connected Vercel tool is refused (403), so the deployed
+  commit is evidenced by the smoke check reading the SHA out of the served assets instead.
+- **Security advisors, three findings, all understood.** 7 x `rls_enabled_no_policy` are
+  service-role-only tables (rate limits, logs, upload intents, maintenance runs, recovery map,
+  transfer requests) where no policy means no client may read them. 64 SECURITY DEFINER functions
+  are executable by `authenticated`, which is the deliberate architecture; every one pins
+  `search_path`, and the 7 whose bodies do not name a guard helper literally were read and are
+  guarded through `app_private.is_quest_admin`, `app_private.is_company_member` or
+  `current_profile_role`. Leaked-password protection stays off on the free plan (known issue).
+- **Performance advisors:** 198 unused indexes and nothing else -- no `auth_rls_initplan`, no
+  multiple-permissive-policy findings. Unused is expected at this traffic; not a reason to drop
+  them.
+- **Perimeter, checked against production:** all six security headers present; the three cron
+  routes answer 401 unauthenticated; the public token routes refuse an unknown token (404/400/405)
+  without leaking anything.
+- **Dependencies:** `npm audit --omit=dev` reports 0 vulnerabilities. Five packages are behind:
+  `@supabase/supabase-js` 2.110.2 -> 2.116.0, `jszip` and `pdfjs-dist` patch/minor, `lucide-static`
+  and `vite` a major each.
+- **Bundle budget is the tightest constraint in the repository.** Entry JavaScript is
+  363,298 of 364,544 gzip bytes -- 1.2 KB of headroom. Entry CSS is 110,274 of 112,640. The next
+  feature that touches the entry chunk has to extract something first.
+- **Maintenance:** `form_upload_purge` ran every day from 2026-09-10 to 2026-09-17, all `success`.
+  The recycle-bin purge and the RingCentral sync write no row to `maintenance_job_runs`, so their
+  runs cannot be confirmed from the database -- only their absence of complaints.
+- **Migration naming diverges from the repository.** 186 rows in `supabase_migrations` against 175
+  files, and 33 applied names have no file of that name (many are the same change under a
+  different name, e.g. `wb_add_item_comment` against the repo's `wb_item_comment_rpc`). Content,
+  not name, is the traceable link. Worth a reconciliation pass before anyone relies on the names.
+
 ## 2026-09-17 The public intake form asks what Add record asks
 
 - **Same questions, drawn the same way.** `src/intake/public-page.js` now mirrors the app's

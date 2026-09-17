@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-09T18:53:17.000Z",
-  "generated_from_commit": "7349574c9409dff2b6c5bdbb65a1d8f026ad12c0",
+  "generated_at": "2026-09-17T21:48:36.000Z",
+  "generated_from_commit": "ff1840edb39bc1933a2fb1375608673bd25b8ddc",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "7349574c9409dff2b6c5bdbb65a1d8f026ad12c0",
+    "main_commit_at_capture": "ff1840edb39bc1933a2fb1375608673bd25b8ddc",
     "latest_migration": "20260909182840_recover_legacy_wb_trash_snapshots.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-09-09T18:38:53.856286+00:00",
+    "supabase_verified_at": "2026-09-17T21:48:36.000Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
@@ -18,13 +18,13 @@
       "name": "wb_transfer_clear_atomic",
       "version": "20260909183829"
     },
-    "vercel_verified_at": "2026-09-09T18:53:17.000Z",
+    "vercel_verified_at": "2026-09-17T21:48:36.000Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
-    "vercel_deployment_id": "dpl_FEVnQG1QYgwo7zTrzeWiVUr765xx",
+    "vercel_deployment_id": null,
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "7349574c9409dff2b6c5bdbb65a1d8f026ad12c0",
-    "github_verified_at": "2026-09-09T18:53:17.000Z",
+    "vercel_deployed_commit": "ff1840edb39bc1933a2fb1375608673bd25b8ddc",
+    "github_verified_at": "2026-09-17T21:48:36.000Z",
     "github_production_guardian_run": null
   },
   "refresh_commands": {
