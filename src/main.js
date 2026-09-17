@@ -2635,6 +2635,9 @@ const state = {
   // which is the common ancestor the three-way merge needs to tell an addition
   // apart from a deletion.
   wbDocVersions: {},
+  // Submissions waiting to be added, per company: the count on an app in the strip and the list
+  // on the workspace home. Loaded by ensureIntakePendingLoaded, dropped when one is dealt with.
+  wbIntakePending: {},
   wbDocBase: {},
   // The same revision's RECORDS, as one fingerprint each rather than a second copy of them.
   // The base existed to answer "did this record change since the last save", and answering
@@ -4024,6 +4027,7 @@ function openIntakeManage(companyId, workspaceId, appId) {
     mod.open(companyId, workspaceId, appId, {
       createSupabaseClient, isLiveSupabaseSession, render, showToast, wbFind, wbSave, wbUid,
       setIntakeView: (value) => { state.intakeView = value; },
+      onSubmissionsChanged: () => wbIntakePendingReload(companyId),
     });
   // Caught, because the alternative is a button that does nothing and says nothing. A fetched
   // module can fail to arrive, and this one is reached from a single click with no other path.
@@ -13789,6 +13793,83 @@ function ensureWorkspaceBuilderLoaded(companyId) {
   })();
   return false;
 }
+/**
+ * Submissions waiting to be added, for every app in the company at once.
+ *
+ * The share-link panel has always listed them for ONE app, and only while somebody had it open.
+ * This is what puts a count on the app in the strip and a list on the workspace home, so a form
+ * that arrived overnight is visible without opening anything.
+ *
+ * Read with the member's own permission: RLS lets a submission be read by whoever may view the
+ * workspace's records, so a refusal leaves the list empty rather than failing the page.
+ */
+function ensureIntakePendingLoaded(companyId) {
+  const key = canonicalCompanyId(companyId);
+  if (state.wbIntakePending[key]) return;
+  state.wbIntakePending[key] = { rows: [] };
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) return;
+  (async () => {
+    const result = await client.from('wb_intake_submissions')
+      .select('id,app_id,created_at,submitted_name,submitted_email,values')
+      .eq('company_id', key)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (result.error) return;
+    state.wbIntakePending[key] = { rows: result.data || [] };
+    render();
+  })().catch(() => { /* an empty list is the right failure here */ });
+}
+
+/** Drop the cache so the next paint re-reads it, after one is accepted or discarded. */
+function wbIntakePendingReload(companyId) {
+  delete state.wbIntakePending[canonicalCompanyId(companyId)];
+  ensureIntakePendingLoaded(companyId);
+}
+
+const wbIntakePendingRows = (companyId) => state.wbIntakePending[canonicalCompanyId(companyId)]?.rows || [];
+const wbIntakePendingFor = (companyId, appId) => wbIntakePendingRows(companyId).filter((row) => row.app_id === appId).length;
+
+function wbLocateAppById(companyId, appId) {
+  for (const workspace of wbDoc(companyId)?.workspaces || []) {
+    const app = (workspace.apps || []).find((entry) => entry.id === appId);
+    if (app) return app;
+  }
+  return null;
+}
+
+// Who sent it, read from the answers themselves: the same reading the review list uses, because
+// the public form stopped asking for a name of its own.
+function wbIntakeSender(companyId, row) {
+  const named = String(row.submitted_name || '').trim();
+  if (named) return named;
+  const app = wbLocateAppById(companyId, row.app_id);
+  const field = (app?.fields || []).find((f) => f.type === 'text' && String(row.values?.[f.id] || '').trim());
+  return field ? String(row.values[field.id]).trim() : 'Someone';
+}
+
+// The waiting list, at the top of the workspace home. Drawn only when something is waiting and
+// only for somebody who can act on it; otherwise the page is exactly as it was.
+function wbIntakeWaiting(companyId, workspace) {
+  if (!can('workspaces.manage', companyId)) return '';
+  const rows = wbIntakePendingRows(companyId);
+  if (!rows.length) return '';
+  const cards = rows.slice(0, 6).map((row) => {
+    const app = wbLocateAppById(companyId, row.app_id);
+    return `<li class="wb-waiting-row">
+      <span class="wb-waiting-ic" style="background:${h(app?.color || '#0891b2')}"><i class="ti ${h(app?.icon || 'ti-forms')}" aria-hidden="true"></i></span>
+      <span class="wb-waiting-text"><b>${h(wbIntakeSender(companyId, row))}</b><small>${h(app?.name || 'an app')} · ${h(wbTimeAgo(row.created_at))}</small></span>
+      <button class="btn btn-sm" type="button" data-wb-intake-review="${h(row.app_id)}" data-workspace-id="${h(workspace.id)}">Review</button>
+    </li>`;
+  }).join('');
+  const more = rows.length > 6 ? `<p class="wb-waiting-more">and ${rows.length - 6} more</p>` : '';
+  return `<section class="wb-waiting" aria-label="Form submissions waiting to be added">
+    <h3><i class="ti ti-inbox" aria-hidden="true"></i>Waiting to be added <span>${rows.length}</span></h3>
+    <ul class="wb-waiting-list">${cards}</ul>${more}
+  </section>`;
+}
+
 function wbCloneDoc(doc) {
   return doc ? JSON.parse(JSON.stringify(doc)) : null;
 }
@@ -14178,7 +14259,7 @@ function wbViewCompanyHome(companyId, workspace) {
 function wbFeedColumn(companyId, workspace) {
   const canManage = can('workspaces.manage', companyId);
   const composer = canManage ? wbComposer(companyId) : '';
-  return `<div class="wb-feed-wrap">${composer}${wbFeedPicker(workspace)}${wbFeedStream(companyId, workspace)}</div>`;
+  return `<div class="wb-feed-wrap">${wbIntakeWaiting(companyId, workspace)}${composer}${wbFeedPicker(workspace)}${wbFeedStream(companyId, workspace)}</div>`;
 }
 
 /**
@@ -15139,7 +15220,11 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
     const linkMark = linked ? '<span class="wb-topbar-link" title="Linked app — shares data with another workspace"><i class="ti ti-link" aria-hidden="true"></i></span>' : '';
     // draggable="false" so grabbing a tab does not start the browser's own link drag, which
      // would hijack the gesture before the strip ever sees it.
-    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router draggable="false" data-wb-app-id="${h(a.id)}" title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"${active ? ' data-wb-topbar-active' : ''}><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
+    // A submission nobody has added yet is counted on the app it belongs to.
+    const waiting = wbIntakePendingFor(companyId, a.id);
+    const waitingMark = waiting ? `<span class="wb-topbar-waiting" title="${waiting} waiting to be added">${waiting > 9 ? '9+' : waiting}</span>` : '';
+    const waitingTitle = waiting ? ` - ${waiting} waiting to be added` : '';
+    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router draggable="false" data-wb-app-id="${h(a.id)}" title="${h(a.name)}${linked ? ' (linked)' : ''}${waitingTitle}" aria-current="${active ? 'page' : 'false'}"${active ? ' data-wb-topbar-active' : ''}><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}${waitingMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
   });
   // Activity slots in wherever it was last dropped. Clamped rather than trusted: an app deleted
   // since the drag leaves an index past the end, and first is where it has always been.
@@ -20598,7 +20683,7 @@ function mountWorkspaceBuilder() {
   const nav = (next) => navigate(companyPath('workspaces', next, companyId));
   const bind = (selector, handler, eventName = 'onclick') => document.querySelectorAll(selector).forEach((el) => { el[eventName] = handler.bind(null, el); });
   // The top app bar is on both the dashboard and app views; size it to fit.
-  if (state.route?.section === 'workspaces') wbMountTopbar();
+  if (state.route?.section === 'workspaces') { wbMountTopbar(); ensureIntakePendingLoaded(companyId); }
   // The record PAGE renders the same url-field markup the record modal does, and its Copy and
   // QR buttons were never bound -- they drew fine and did nothing. Bound against the document
   // here because this runs after every workspace paint, modal or not.
@@ -20618,6 +20703,7 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-topbar-all]', (el) => wbToggleAllApps(el));
     bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp }));
     bind('[data-new-app]', () => openWbAppChooser(companyId, workspaceId));
+    bind('[data-wb-intake-review]', (el) => openIntakeManage(companyId, el.dataset.workspaceId || workspaceId, el.dataset.wbIntakeReview));
     // Workspace activity feed (dashboard home): publisher + posts.
     wbMountComposer(companyId);
     bind('[data-wb-compose-share]', () => wbComposerShare(companyId));

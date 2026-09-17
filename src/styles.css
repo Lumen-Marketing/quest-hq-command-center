@@ -31684,6 +31684,43 @@ a.wb-cal-more:hover { color: var(--orange); }
   flex: none;
 }
 .wb-topbar-ic-home { background: linear-gradient(135deg, var(--orange), #f0883e); }
+/* A submission nobody has added yet: a count on the app it belongs to, and a list of them on the
+   workspace home. Both live in this sheet rather than the lazy builder one, because the strip and
+   the home page are drawn before that sheet arrives. */
+.wb-topbar-waiting {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--orange, #e66a1f);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--surface, #fffaf0);
+  font-size: .62rem;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+}
+.wb-waiting {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border, #e2d5bf);
+  border-left: 3px solid var(--orange, #e66a1f);
+  border-radius: 12px;
+  background: var(--surface, #fffaf0);
+}
+.wb-waiting h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: .95rem; }
+.wb-waiting h3 span { font-size: .72rem; font-weight: 800; background: var(--orange, #e66a1f); color: #fff; border-radius: 999px; padding: 1px 8px; }
+.wb-waiting-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.wb-waiting-row { display: flex; align-items: center; gap: 10px; }
+.wb-waiting-ic { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 9px; color: #fff; font-size: 15px; }
+.wb-waiting-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wb-waiting-text b { font-size: .88rem; overflow-wrap: anywhere; }
+.wb-waiting-text small { font-size: .76rem; color: var(--text-muted, #70675b); }
+.wb-waiting-row .btn { flex: none; }
+.wb-waiting-more { margin: 10px 0 0; font-size: .78rem; color: var(--text-muted, #70675b); }
 .wb-topbar-home { flex: none; }
 
 .wb-topbar-add {

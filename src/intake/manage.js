@@ -131,6 +131,8 @@ async function accept(id) {
     .update({ status: 'accepted', accepted_item_id: item.id, reviewed_at: stamp })
     .eq('id', id);
   view.submissions = view.submissions.filter((row) => row.id !== id);
+  // The count on the app in the strip and the list on the workspace home read the same rows.
+  ctx.onSubmissionsChanged?.();
   ctx.showToast(`Added to ${app.name}.`, 'local', 'Workspaces');
 }
 
@@ -143,6 +145,7 @@ async function discardSubmission(id) {
     .update({ status: 'rejected', reviewed_at: new Date().toISOString() })
     .eq('id', id);
   view.submissions = view.submissions.filter((row) => row.id !== id);
+  ctx.onSubmissionsChanged?.();
 }
 
 // ---- markup ----------------------------------------------------------------------------------

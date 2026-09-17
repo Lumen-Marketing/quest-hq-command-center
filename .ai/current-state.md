@@ -101,6 +101,32 @@ Latest review: 2026-09-10 (local time). Read the newest dated section first; old
   test buttons (`+1`, `+2`, `+3`) and an in-flight panel that now target only deleted apps. They
   fail gracefully ("That app has been deleted or moved") but are clutter.
 
+## 2026-09-17 Somebody is told when a form submission arrives
+
+The gap the audit turned up: a submission landed in `wb_intake_submissions` and nothing else
+happened. The only place it appeared was the share-link panel of one app, which a member had to
+open deliberately. Fifteen links are live and two submissions have ever arrived.
+
+- **The alert.** `notifySubmission` in `api/_lib/intake-db.js`, called by the submit route after the
+  row is stored, writes a `form.intake` notification -- the inbox the app already streams live.
+  It goes to `wb_intake_links.created_by`, and to `companies.primary_owner_profile_id` for the
+  fifteen links that predate that column being filled in. `src/intake/manage.js` now records the
+  creator from the signed-in session (`profiles.id` IS the auth user id, which is what a
+  notification is addressed to).
+- **It carries none of the visitor's answers**, only the app's name. The answers are already in the
+  submission, behind the workspace permission; a notification row travels further.
+- **Best effort, always.** The visitor has been told their answers were sent; a failure to notify
+  must not turn that into an error they would act on by sending everything again. A refused
+  submission notifies nobody.
+- **The count and the list**, for everybody else: `ensureIntakePendingLoaded` reads pending
+  submissions once per company with the member's own permission (RLS decides; a refusal leaves the
+  list empty), `wbIntakePendingFor` puts a count on the app in the strip -- which the all-apps grid
+  inherits, because it clones those tabs -- and `wbIntakeWaiting` lists them above the feed on the
+  workspace home for anyone with `workspaces.manage`, each row opening the panel that accepts it.
+  Accepting or discarding calls back through `onSubmissionsChanged` so the count cannot go stale.
+- Entry chunk cost about 650 gzip bytes, against the 11 KB the Vite 8 upgrade freed the same day.
+- Covered by `tests/wb-intake-api.test.mjs` (7 new) and `tests/intake-waiting-inbox.test.mjs` (7).
+
 ## 2026-09-17 System audit
 
 Checked against live Supabase and Vercel, the repository, and the deployed site. No new confirmed
