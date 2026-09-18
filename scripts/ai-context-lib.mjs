@@ -80,6 +80,34 @@ export function latestMigrationFilename(names) {
     .at(-1) || '';
 }
 
+// How far main may move past the manifest's capture before it is worth saying so out loud.
+// Not zero, and it cannot be: a manifest is written before the commit that carries it, so its
+// capture always names an earlier commit than HEAD. One or two is that lag; several is drift.
+export const BRAIN_DRIFT_COMMIT_THRESHOLD = 3;
+
+// Paths whose movement makes the brain's live picture doubtful. A QA spreadsheet or a docs edit
+// does not; a migration, an endpoint, the build or the deployment config does.
+export const BRAIN_MATERIAL_PATHS = Object.freeze([
+  'src', 'api', 'supabase/migrations', 'scripts', 'vercel.json', 'index.html', 'package.json',
+]);
+
+/**
+ * A WARNING, never an error, and deliberately so.
+ *
+ * The 2026-09-17 audit found this manifest naming a commit ten behind; two days later it was six
+ * behind again. Nothing in this validator could catch either, because it checks that timestamps
+ * parse and are under 45 days old -- not that they describe the commit anybody is actually running.
+ *
+ * It stays a warning because clearing it means re-verifying live Supabase and Vercel state, which
+ * needs network and credentials that a test run legitimately may not have. Failing the build would
+ * mean a laptop without database access could not commit a typo fix.
+ */
+export function describeBrainDrift(materialCommitCount, threshold = BRAIN_DRIFT_COMMIT_THRESHOLD) {
+  if (!Number.isSafeInteger(materialCommitCount) || materialCommitCount <= threshold) return null;
+  return 'the manifest was captured ' + materialCommitCount
+    + ' material commits ago; re-verify live state and refresh .ai/manifest.json';
+}
+
 export function validateManifest(manifest, latestMigration) {
   const errors = [];
   if (!manifest || typeof manifest !== 'object') return ['manifest must be an object'];

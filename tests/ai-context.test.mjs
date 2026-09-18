@@ -6,6 +6,9 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  BRAIN_DRIFT_COMMIT_THRESHOLD,
+  BRAIN_MATERIAL_PATHS,
+  describeBrainDrift,
   findBrokenMarkdownLinks,
   findSensitiveContent,
   latestMigrationFilename,
@@ -39,6 +42,29 @@ test('manifest validation requires sources, timestamps, and the latest repositor
     live: { ...manifest.live, supabase_verified_at: '2000-01-01T00:00:00.000Z' },
   }, manifest.repository.latest_migration).join('\n'), /stale/i);
   assert.match(validateManifest(manifest, '202607121000_new_change.sql').join('\n'), /latest migration/);
+});
+
+test('brain drift is reported past the threshold and silent within it', () => {
+  // The manifest went stale twice in three days -- ten commits behind on 2026-09-17, six again on
+  // 2026-09-19 -- and nothing here could catch it: this validator checks that timestamps parse and
+  // are under 45 days old, never that they describe the commit anybody is running.
+  assert.equal(describeBrainDrift(0), null);
+  assert.equal(describeBrainDrift(BRAIN_DRIFT_COMMIT_THRESHOLD), null, 'the lag a manifest cannot avoid stays quiet');
+  assert.match(describeBrainDrift(BRAIN_DRIFT_COMMIT_THRESHOLD + 1), /material commits ago/);
+  assert.match(describeBrainDrift(11), /11 material commits/);
+
+  // Not a number, so nothing is known and nothing is claimed: no repository, a shallow CI clone, or
+  // a capture commit this checkout never fetched all arrive here.
+  assert.equal(describeBrainDrift(null), null);
+  assert.equal(describeBrainDrift(Number.NaN), null);
+  assert.equal(describeBrainDrift(undefined), null);
+
+  // Documentation and spreadsheets move without making the live picture doubtful; these do not.
+  for (const required of ['supabase/migrations', 'api', 'src', 'vercel.json']) {
+    assert.ok(BRAIN_MATERIAL_PATHS.includes(required), required + ' counts as material');
+  }
+  assert.ok(!BRAIN_MATERIAL_PATHS.includes('docs'));
+  assert.ok(!BRAIN_MATERIAL_PATHS.includes('.ai'), 'refreshing the brain must not itself read as drift');
 });
 
 test('adapter validation requires every supported AI entry point to use the canonical README', () => {
