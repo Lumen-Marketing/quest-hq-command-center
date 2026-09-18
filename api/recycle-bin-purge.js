@@ -35,9 +35,13 @@ async function startRun(client) {
 
 // Counts only: what was selected, what went, and where it stopped. No object paths, company ids or
 // item labels -- the same rule the form-upload purge's ledger follows.
+//
+// It RETURNS the result instead of discarding it. A close that fails leaves the row at 'started'
+// for ever, which this job's own tests call indistinguishable from a run still going, so every
+// caller checks it and logs a sanitized code -- the shape api/form-upload-purge.js already uses.
 async function finishRun(client, id, evidence) {
-  if (!id) return;
-  await client.from('maintenance_job_runs')
+  if (!id) return { error: null };
+  return client.from('maintenance_job_runs')
     .update({
       finished_at: new Date().toISOString(),
       status: evidence.status,
@@ -61,6 +65,13 @@ export default async function handler(request, response, overrides = {}) {
 
   const client = overrides.client || serverClient();
   let runId = null;
+  // Hoisted on purpose. These are what the ledger reports if the run breaks AFTER the loop below
+  // has already destroyed things -- at either sweep, say. Scoped inside the try they were
+  // invisible to the catch, which therefore wrote zeros: a night that deleted somebody's files for
+  // good was recorded as having touched nothing, the single outcome this ledger exists to make
+  // impossible. They are counts, never identifiers.
+  let selected = 0;
+  let removedFiles = 0;
   try {
     // Bound the ledger before accepting work, then record that this run started. Fail closed if
     // either fails: deleting people's files with no record that it happened is the one outcome
@@ -72,6 +83,7 @@ export default async function handler(request, response, overrides = {}) {
     if (retained.error) throw retained.error;
     runId = await startRun(client);
   } catch {
+    console.error('recycle_bin_purge_ledger_start_failed');
     return response.status(500).json({ error: 'Recycle purge failed.' });
   }
 
@@ -85,22 +97,28 @@ export default async function handler(request, response, overrides = {}) {
       .order('restore_until', { ascending: true })
       .limit(BATCH_SIZE);
     if (expired.error) throw expired.error;
+    // Counted before the loop runs, so a break part-way through still reports what was in hand.
+    selected = (expired.data || []).length;
 
-    let removedFiles = 0;
-    const failures = [];
+    // Two different failures, kept apart. They used to share one list, so a refused ROW delete was
+    // reported as a storage problem and sent whoever read it to the bucket. An item whose file went
+    // but whose row would not counts as neither removed nor untouched: the sweep below finishes it.
+    const storageFailures = [];
+    const rowFailures = [];
     for (const item of expired.data || []) {
       const objectPath = String(item.snapshot?.object_path || '').trim();
       if (objectPath) {
         const removed = await client.storage.from(JOB_FILE_BUCKET).remove([objectPath]);
         if (removed.error) {
-          failures.push(item.id);
+          storageFailures.push(item.id);
           continue;
         }
       }
       const deleted = await client.rpc('recycle_permanently_delete_item', { p_item_id: item.id });
-      if (deleted.error) failures.push(item.id);
+      if (deleted.error) rowFailures.push(item.id);
       else removedFiles += 1;
     }
+    const failureCount = storageFailures.length + rowFailures.length;
 
     const purged = await client.rpc('purge_expired_recycle_bin', { p_limit: 500 });
     if (purged.error) throw purged.error;
@@ -111,27 +129,39 @@ export default async function handler(request, response, overrides = {}) {
     const purgedRecords = await client.rpc('purge_expired_wb_records', { p_limit: 500 });
     if (purgedRecords.error) throw purgedRecords.error;
 
-    const selected = (expired.data || []).length;
-    await finishRun(client, runId, {
-      // 'partial' when a file refused to go: the run did its work, but not all of it.
-      status: failures.length ? 'partial' : 'success',
+    const finished = await finishRun(client, runId, {
+      // 'partial' when something refused to go: the run did its work, but not all of it.
+      status: failureCount ? 'partial' : 'success',
       selected,
       deleted: removedFiles,
-      stage: failures.length ? 'storage_remove' : 'completed',
-      errorCode: failures.length ? 'storage_remove_incomplete' : null,
+      // Name the bucket only when the bucket is what refused. A failed row delete has no stage of
+      // its own -- this ledger's CHECK vocabulary was written for the form-upload purge, which has
+      // no such step -- and inventing one is a migration, not a rename, so it reports the honest
+      // 'unexpected' rather than the specific untruth it used to. `.ai/known-issues.md` carries
+      // what that migration is; `.ai/plans/maintenance-ledger-row-delete-stage.proposed.sql` is it.
+      stage: storageFailures.length ? 'storage_remove' : (rowFailures.length ? 'unexpected' : 'completed'),
+      errorCode: storageFailures.length ? 'storage_remove_incomplete' : (rowFailures.length ? 'unexpected_failure' : null),
     });
-    return response.status(failures.length ? 207 : 200).json({
+    if (finished.error) console.error('recycle_bin_purge_ledger_finish_failed');
+    return response.status(failureCount ? 207 : 200).json({
       removed_file_items: removedFiles,
       purged_database_items: Number(purged.data || 0),
       purged_app_records: Number(purgedRecords.data || 0),
-      failed_file_items: failures.length,
+      failed_file_items: storageFailures.length,
+      failed_row_deletes: rowFailures.length,
     });
   } catch {
     // The ledger is the only place a failed night is written down, so it is closed before the
-    // response even though the work itself is already lost.
-    await finishRun(client, runId, {
-      status: 'failed', selected: 0, deleted: 0, stage: 'unexpected', errorCode: 'unexpected_failure',
-    }).catch(() => {});
+    // response even though the work itself is already lost -- and closed with the REAL counts,
+    // because by the time we are here the loop may have destroyed a great deal.
+    const failed = await finishRun(client, runId, {
+      status: 'failed',
+      selected,
+      deleted: removedFiles,
+      stage: 'unexpected',
+      errorCode: 'unexpected_failure',
+    }).catch(() => ({ error: new Error('finish threw') }));
+    if (failed?.error) console.error('recycle_bin_purge_ledger_finish_failed');
     return response.status(500).json({ error: 'Recycle purge failed.' });
   }
 }

@@ -33,8 +33,21 @@ const res = () => ({
  *
  * `expired` are the bin rows it finds, `storageFails` the paths whose file refuses to go,
  * `ledgerStartFails` refuses to record the run at all, and `purgeThrows` breaks the work itself.
+ *
+ * `sweepFails` breaks a sweep that runs AFTER the deletion loop, which is the only way to reach a
+ * failure with real destruction already behind it -- `purgeThrows` breaks the candidate select, so
+ * nothing has been deleted by the time it fires and zero counts look correct there.
+ * `ledgerFinishFails` refuses the closing update.
  */
-function makeClient({ expired = [], storageFails = [], ledgerStartFails = false, purgeThrows = false } = {}) {
+function makeClient({
+  expired = [],
+  storageFails = [],
+  ledgerStartFails = false,
+  purgeThrows = false,
+  sweepFails = false,
+  ledgerFinishFails = false,
+  rowDeleteFails = [],
+} = {}) {
   const runs = [];
   const rpcs = [];
   const client = {
@@ -48,7 +61,10 @@ function makeClient({ expired = [], storageFails = [], ledgerStartFails = false,
               : { error: null, data: { id: 'run-1' } }) }) };
           },
           update(patch) {
-            return { eq: async (column, value) => { runs.push({ finished: true, id: value, column, ...patch }); return { error: null }; } };
+            return { eq: async (column, value) => {
+              runs.push({ finished: true, id: value, column, ...patch });
+              return { error: ledgerFinishFails ? new Error('no') : null };
+            } };
           },
         };
       }
@@ -63,7 +79,12 @@ function makeClient({ expired = [], storageFails = [], ledgerStartFails = false,
     },
     rpc: async (name, args) => {
       rpcs.push({ name, args });
-      if (name === 'recycle_permanently_delete_item') return { error: null, data: null };
+      if (name === 'recycle_permanently_delete_item') {
+        return rowDeleteFails.includes(args?.p_item_id)
+          ? { error: new Error('row would not go') }
+          : { error: null, data: null };
+      }
+      if (sweepFails && name === 'purge_expired_recycle_bin') return { error: new Error('statement timeout') };
       return { error: null, data: 0 };
     },
     storage: {
@@ -124,6 +145,105 @@ test('a run that breaks mid-way is closed as failed rather than left open', asyn
   assert.equal(done.status, 'failed');
   assert.equal(done.stage, 'unexpected');
   assert.equal(done.error_code, 'unexpected_failure');
+});
+
+test('a row that will not go is not reported as a storage problem', async () => {
+  // Both failures shared one list, so a refused ROW delete closed the run as 'storage_remove' /
+  // 'storage_remove_incomplete' and sent whoever read it to a bucket that was perfectly fine.
+  // There is no stage for this half -- the ledger's vocabulary was written for the form-upload
+  // purge, which never deletes a row -- so it says 'unexpected', which is vague but true. The
+  // accurate value needs a migration: .ai/plans/maintenance-ledger-row-delete-stage.proposed.sql.
+  const { client, finished } = makeClient({
+    expired: [{ id: 'a', snapshot: { object_path: 'a.pdf' } }, { id: 'b', snapshot: { object_path: 'b.pdf' } }],
+    rowDeleteFails: ['b'],
+  });
+  const r = res();
+  await handler(req(), r, { client });
+  assert.equal(r.statusCode, 207);
+  assert.equal(r.payload.failed_file_items, 0, 'no file refused to go');
+  assert.equal(r.payload.failed_row_deletes, 1);
+
+  const done = finished();
+  assert.equal(done.status, 'partial');
+  assert.equal(done.stage, 'unexpected');
+  assert.equal(done.error_code, 'unexpected_failure');
+  assert.notEqual(done.error_code, 'storage_remove_incomplete');
+  assert.equal(done.selected_count, 2);
+  assert.equal(done.deleted_count, 1, 'the item whose row survived is not counted as removed');
+});
+
+test('when the bucket is the half that refused, the run still names the bucket', async () => {
+  const { client, finished } = makeClient({
+    expired: [{ id: 'a', snapshot: { object_path: 'keeps.pdf' } }, { id: 'b', snapshot: { object_path: 'b.pdf' } }],
+    storageFails: ['keeps.pdf'],
+    rowDeleteFails: ['b'],
+  });
+  const r = res();
+  await handler(req(), r, { client });
+  const done = finished();
+  // Both halves failed here, and the storage one happens first, so it is the one reported.
+  assert.equal(done.stage, 'storage_remove');
+  assert.equal(done.error_code, 'storage_remove_incomplete');
+  assert.equal(r.payload.failed_file_items, 1);
+  assert.equal(r.payload.failed_row_deletes, 1);
+  assert.equal(done.deleted_count, 0);
+});
+
+test('a night that breaks after the deletions still says what it destroyed', async () => {
+  // The counts used to be written as zeros here, because they were declared inside the try and the
+  // catch could not see them. So a run that permanently deleted a bin full of files and then hit a
+  // timeout on the sweep recorded having touched nothing -- the exact outcome this ledger exists to
+  // prevent, produced by the ledger itself. The files are gone either way; the record is the point.
+  const expired = [
+    { id: 'a', snapshot: { object_path: 'a.pdf' } },
+    { id: 'b', snapshot: { object_path: 'b.pdf' } },
+    { id: 'c', snapshot: { object_path: 'c.pdf' } },
+  ];
+  const { client, rpcs, finished } = makeClient({ expired, sweepFails: true });
+  const r = res();
+  await handler(req(), r, { client });
+  assert.equal(r.statusCode, 500);
+
+  const destroyed = rpcs.filter((call) => call.name === 'recycle_permanently_delete_item').length;
+  assert.equal(destroyed, 3, 'the loop really did delete all three for good');
+
+  const done = finished();
+  assert.equal(done.status, 'failed');
+  assert.equal(done.stage, 'unexpected');
+  assert.equal(done.error_code, 'unexpected_failure');
+  assert.equal(done.selected_count, 3);
+  assert.equal(done.deleted_count, 3);
+});
+
+test('a partial run that breaks later reports only what actually went', async () => {
+  // Same path, but one file refused to go first: the ledger must not round that up to everything
+  // selected, and deleted_count <= selected_count is a CHECK the database would reject anyway.
+  const expired = [
+    { id: 'a', snapshot: { object_path: 'keeps.pdf' } },
+    { id: 'b', snapshot: { object_path: 'goes.pdf' } },
+  ];
+  const { client, finished } = makeClient({ expired, storageFails: ['keeps.pdf'], sweepFails: true });
+  const r = res();
+  await handler(req(), r, { client });
+  const done = finished();
+  assert.equal(done.selected_count, 2);
+  assert.equal(done.deleted_count, 1);
+  assert.ok(done.deleted_count <= done.selected_count);
+});
+
+test('a ledger close that fails is not swallowed', async () => {
+  // finishRun discarded the update result, so a refused close left the row at 'started' for ever
+  // and nothing anywhere said so -- the same silence the whole feature was built to end.
+  const errors = [];
+  const realError = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    const { client } = makeClient({ expired: [{ id: 'a', snapshot: {} }], ledgerFinishFails: true });
+    await handler(req(), res(), { client });
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(errors.includes('recycle_bin_purge_ledger_finish_failed'), 'the refused close was logged');
 });
 
 test('with nowhere to record the run, nothing is deleted', async () => {
