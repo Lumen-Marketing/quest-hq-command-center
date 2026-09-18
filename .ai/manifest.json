@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-17T21:48:36.000Z",
-  "generated_from_commit": "ff1840edb39bc1933a2fb1375608673bd25b8ddc",
+  "generated_at": "2026-09-18T22:41:45.000Z",
+  "generated_from_commit": "8ee29a3af53ff1e42126bc93b430e4de839ec747",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "ff1840edb39bc1933a2fb1375608673bd25b8ddc",
+    "main_commit_at_capture": "8ee29a3af53ff1e42126bc93b430e4de839ec747",
     "latest_migration": "20260917223000_maintenance_ledger_covers_the_recycle_purge.sql"
   },
   "live": {
@@ -18,13 +18,13 @@
       "name": "maintenance_ledger_covers_the_recycle_purge",
       "version": "20260917232430"
     },
-    "vercel_verified_at": "2026-09-17T21:48:36.000Z",
+    "vercel_verified_at": "2026-09-18T22:41:45.000Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
     "vercel_deployment_id": null,
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "ff1840edb39bc1933a2fb1375608673bd25b8ddc",
-    "github_verified_at": "2026-09-17T21:48:36.000Z",
+    "vercel_deployed_commit": "8ee29a3af53ff1e42126bc93b430e4de839ec747",
+    "github_verified_at": "2026-09-18T22:41:45.000Z",
     "github_production_guardian_run": null
   },
   "refresh_commands": {

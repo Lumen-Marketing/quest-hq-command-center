@@ -2,6 +2,93 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-19 The purge ledger was erasing the one thing it existed to record
+
+Three defects in `api/recycle-bin-purge.js`, shipped 2026-09-17 and found by reading it against the
+sibling job it was modelled on. The first is the serious one, and it inverted the feature's whole
+purpose.
+
+- **A run that broke after the deletions recorded having deleted nothing.** `selected` and
+  `removedFiles` were declared inside the `try`, so the `catch` could not see them and wrote
+  literal zeros. Break at either sweep -- both of which run *after* the loop that destroys files
+  and rows for good -- and the ledger said the night touched nothing. Proved before fixing, with a
+  client whose `purge_expired_recycle_bin` times out: three files removed from the bucket, three
+  `recycle_permanently_delete_item` calls made, `selected_count: 0, deleted_count: 0`. The counters
+  are now hoisted and `selected` is counted before the loop, so a break part-way through still
+  reports what was in hand.
+- **A failed close was silent.** `finishRun` discarded the result of its own `update`, so a refused
+  close left the row at `status='started'` for ever -- which this job's tests call
+  indistinguishable from a run still going. It now returns the result, every caller checks it, and
+  a refusal logs `recycle_bin_purge_ledger_finish_failed`. The start path logs too.
+- **Why all three existed:** `api/form-upload-purge.js`, one file over, already had the answer. It
+  carries counts through the throw on an error class, reads them back in `failureEvidence`, and
+  checks `finished.error` at every call site. The newer job was written without that shape; this
+  restores it rather than inventing a second one.
+- **The third defect is fixed as far as the database allows.** A failed *row* delete was labelled
+  `storage_remove` / `storage_remove_incomplete`, pointing at a bucket that was fine. The two
+  failures are now separate lists: storage keeps the storage stage, a refused row reports
+  `unexpected` / `unexpected_failure` -- vague, but true -- and the response carries
+  `failed_row_deletes` beside `failed_file_items`. An item whose file went but whose row would not
+  is counted as neither removed nor untouched, which is what it is.
+  The accurate stage still needs a migration: `maintenance_job_runs` was written for the
+  form-upload purge, which never deletes a row, so its CHECK vocabulary has no value meaning one
+  refused to. `npm run tenancy:check` refuses any migration dated after the snapshot's 2026-09-17
+  capture, and refreshing that snapshot needs live catalog access this session did not have -- so
+  the migration is written and waiting at
+  [plans/maintenance-ledger-row-delete-stage.proposed.sql](plans/maintenance-ledger-row-delete-stage.proposed.sql),
+  additive, with its apply order. Faking a capture date to land it today was the alternative and
+  was not taken: the gate's own message calls a green matrix over a stale snapshot a false
+  assurance, and it is right.
+- **Tests.** Five new in `tests/recycle-purge-run-ledger.test.mjs` (11 total). The suite could not
+  express the first defect at all: `purgeThrows` fails the candidate *select*, before anything is
+  deleted, where zero counts are correct -- which is why it was never caught. `makeClient` gained
+  `sweepFails` and `ledgerFinishFails`. `rowDeleteFails` makes a single row refuse. All three fixes were mutated back -- the
+  zeroed counts, the swallowed close, the one shared failure list -- and each time only the tests
+  that name that fix failed.
+- **A fourth suspicion was checked and dismissed.** If a file is removed and its row delete then
+  fails, the object is gone while the row still says active. `purge_expired_recycle_bin` skips a
+  file item while its object exists and purges the row once it is gone, so the sweep later in the
+  same run clears it. Self-healing by design; no defect.
+- **`npm run ai:check` now notices when this folder falls behind.** It warns -- never fails -- when
+  `main_commit_at_capture` is more than three commits behind HEAD counting only material paths
+  (`src`, `api`, `supabase/migrations`, `scripts`, `vercel.json`, `index.html`, `package.json`).
+  Three, because a manifest is written before the commit that carries it and can never name it. It
+  stays a warning because clearing it means re-verifying live Supabase and Vercel, which a checkout
+  without credentials cannot do. Against history it fires on both real incidents: eleven material
+  commits at the 2026-09-17 audit, four yesterday. Git lives in `check-ai-context.mjs` so the
+  library stays pure; no repository, a shallow clone or an unfetched capture all mean silence.
+
+## 2026-09-19 Release verification, and the bundle constraint that is no longer one
+
+No code change. Yesterday's three features went out on the Git integration and nobody had confirmed
+it, so this is the confirmation -- plus a correction to a number in the audit below that would
+otherwise misdirect the next change.
+
+- **Production serves `8ee29a3`**, the head of `main`. Smoke passed 36/36 routes with 5/5 entry
+  assets, and the expected-SHA assertion matched, so the served bundle is the committed one.
+  `main` and `origin/main` are level and the tree is clean. 5,207 tests pass; the build passes.
+- **The manifest had named `ff1840e` as deployed**, five commits behind -- two days after the
+  2026-09-17 audit found the same field eight days and ten commits stale. Refreshed from today's
+  verification. The Supabase fields were left at their 2026-09-17 capture because nothing
+  re-verified them today; no migration has been added since.
+- **`npm run ai:check` cannot catch this.** It validates that each `*_verified_at` parses and is
+  under 45 days old, and that `latest_migration` matches the newest file -- nothing ties
+  `vercel_deployed_commit` or `main_commit_at_capture` to what `main` actually is. A manifest can
+  therefore be arbitrarily many commits behind and still pass. Checking the deployed commit needs
+  the network and does not belong in the validator, but the distance between HEAD and
+  `main_commit_at_capture` is local and knowable, and is what went wrong both times.
+- **The entry bundle is not the tightest constraint any more.** The audit below records 1.2 KB of
+  headroom and calls it the repository's tightest; measured today from a clean build, entry
+  JavaScript is **354,708 of 364,544** gzip bytes -- **9,836 free** -- and entry CSS is
+  **110,260 of 112,640**, 2,380 free. The Vite 8 major in `6447210` is what gave it back, which
+  the intake entry predicted at the time and nobody measured afterwards. Read that audit line as
+  the historical record it is: the next feature does **not** have to extract something first.
+- **What that does not change:** the standing refusal of a seventh budget raise in
+  `scripts/bundle-budget-lib.mjs`, and the work it is conditioned on -- the four App Builder modal
+  functions, 64.9 KB, behind a dynamic import with their 66 dependencies injected through a `ctx`.
+  Headroom returning is not that refactor being done, and a nine-kilobyte cushion is roughly one
+  busy day of features.
+
 ## 2026-09-15 Thirty sample apps for the Quest App Market
 
 - "Create 10 applications that I can install or use for my CRM … as a sample product on the Quest

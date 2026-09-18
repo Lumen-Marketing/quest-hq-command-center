@@ -18,6 +18,26 @@ To settle it: as an Owner of a disposable company with no business data, press D
 the app. If it fails with that message, delete `roles` for the company before the `companies` row
 inside the routine, while the owner membership still exists.
 
+## The purge ledger has no stage for a failed row delete
+
+Narrowed on 2026-09-19. The nightly recycle-bin purge removes an item's file, then deletes its row.
+Those are two different failures, and until that date both were reported as `storage_remove` /
+`storage_remove_incomplete` -- naming a bucket that was fine. `api/recycle-bin-purge.js` now keeps
+the two apart and reports `unexpected` / `unexpected_failure` when the row is the half that refused,
+which is vague but true, and the response carries `failed_row_deletes` separately from
+`failed_file_items`.
+
+What remains is the accurate value. `maintenance_job_runs` was written for the form-upload purge,
+which never deletes a row, so its CHECK vocabulary has nothing that means one refused to. Adding
+`row_delete` and `row_delete_incomplete` is a migration, and `npm run tenancy:check` refuses any
+migration dated after `database/snapshot.json`'s capture (2026-09-17) while refreshing that snapshot
+needs live catalog access. The migration is written and waiting at
+[maintenance-ledger-row-delete-stage.proposed.sql](plans/maintenance-ledger-row-delete-stage.proposed.sql),
+with its apply order: it is additive, so it lands before the client that writes the new values.
+
+The item itself does not linger in a half state: `purge_expired_recycle_bin` skips a file item while
+its object still exists and purges the row once it is gone, so the sweep in the same run clears it.
+
 ## Physical form-upload removal still needs a controlled fixture
 
 Rechecked 2026-09-10 (QB-RV-07): Vercel runtime logs confirm a scheduled GET returned 200.
