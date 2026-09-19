@@ -2,6 +2,22 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-19 Released and verified
+
+The three commits above are deployed. `main` moved `8ee29a3..edf7834` as a fast-forward, Vercel's
+Git integration built it, and production served the new bundle about fifteen seconds later. Smoke
+passed 36/36 routes with 5/5 entry assets and the expected-SHA assertion matched `edf7834`, so what
+is serving is what was committed. Production Guardian's last scheduled run succeeded
+(2026-09-18T20:57:13Z).
+
+The purge fixes reach a real run tonight: the endpoint is scheduled `20 3 * * *` UTC, so the first
+night under the corrected ledger is 2026-09-19 03:20 UTC. That run is the thing to read next --
+`maintenance_job_runs` should hold a `recycle_bin_purge` row closed with honest counts, and a row
+left at `started` would now be evidence of the close path failing rather than silence.
+
+Nothing schema-side moved, so the Supabase capture stands at 2026-09-17 and the migration waiting in
+`plans/` is unchanged.
+
 ## 2026-09-19 The purge ledger was erasing the one thing it existed to record
 
 Three defects in `api/recycle-bin-purge.js`, shipped 2026-09-17 and found by reading it against the
