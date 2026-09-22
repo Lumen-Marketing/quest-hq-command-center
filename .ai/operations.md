@@ -25,8 +25,10 @@ merge survivors from matching names, email addresses or phone numbers.
 
 1. Make a scoped branch or isolated worktree change.
 2. Run npm run check.
-3. Merge the verified change into main and push main to GitHub. A pull request may be used when review is requested, but is not required by the direct-delivery workflow.
-4. Let Vercel's Git integration deploy main directly.
+3. Open a pull request into main. As of 2026-09-22, main is branch-protected: a PR, 1 approving
+   review, and a passing `test-and-build` check are required before merge — direct pushes to main
+   are blocked, including for admins. See [Repo governance](../docs/GOVERNANCE.md).
+4. Let Vercel's Git integration deploy main directly after merge.
 5. Confirm the Vercel deployment is READY and points at the merged commit.
 6. Run the production smoke command against the deployed URL and expected main SHA.
 7. Confirm the scheduled Production Guardian remains healthy.

@@ -98,6 +98,32 @@ The rejected alternative — keeping ids in the document and values in the rows 
 migration and remains the cheaper rollback, but it leaves the bin's shape split across two stores
 and gives a scheduled sweep nothing coherent to read.
 
+## Main is branch-protected, and stewardship of that gate is temporary and named
+
+Decided 2026-09-22. `main` had no branch protection: any collaborator with push access could
+commit straight to it, and CI existed but nothing required it to pass before code reached
+production's deploy branch. Twenty-two branches had accumulated with no per-branch owner and no
+`CODEOWNERS` file, so it was not knowable from the repo alone who should review what.
+
+`main` now requires a pull request, 1 approving review, and a passing `test-and-build` check
+before merge; force pushes and branch deletion are blocked; `enforce_admins` is on, so there is no
+silent bypass for admins either. This does not change the direct-deployment model — Vercel still
+deploys `main` directly and there is still no staging server — it only changes how a change is
+allowed to reach `main`.
+
+`CODEOWNERS` exists but is intentionally inert: every path is marked `TBD`. Owners must not be
+inferred from `git log` authorship, because touching a path is not the same claim as owning it.
+Alexia holds temporary stewardship of governance itself (the protection rule, active-work
+coordination via GitHub issues, branch cleanup decisions, and `CODEOWNERS` intake) until the team
+confirms permanent lanes — recorded in `docs/GOVERNANCE.md`, not here, because it is expected to
+change hands and this file is for decisions that hold.
+
+Of the 22 branches audited at the time, 18 had zero commits that were not already reachable from
+`main` — contained, not necessarily "shipped," since a merge-train can drain a branch without
+anyone closing it. Those are recorded as cleanup candidates and were deliberately left undeleted
+pending owner confirmation, per the stated boundary that unmerged-or-unconfirmed branches are not
+unilaterally removed.
+
 ## Vendor-neutral project brain
 
 The canonical context lives in .ai rather than a vendor-specific instruction file. Vendor adapters only point to .ai/README.md. This keeps AI handoffs and future human handoffs consistent across tools.
