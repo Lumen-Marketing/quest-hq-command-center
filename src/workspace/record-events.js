@@ -111,9 +111,23 @@ export function createRecordEvents(ctx) {
     // Defaults to "yes" on purpose. Suppressing an alarm is destructive -- the reminder is gone
     // and nobody is told -- so the absence of a check must never silence one.
     recordIsLive = () => true,
+    // Same guard the presence channel and realtime-domain refresh already use: a render rebuilds
+    // the page from state, and a half-typed field lives only in the DOM, so a poll landing mid-type
+    // must not render out from under it. Defaults to "never interrupts" so existing callers/tests
+    // that do not pass it keep today's behavior.
+    renderWouldInterrupt = () => false,
   } = ctx;
 
   const inFlight = new Set();
+
+  /** Render now, or -- same terms as the presence/realtime-refresh guard -- shortly after. */
+  function renderWhenSafe() {
+    if (renderWouldInterrupt()) {
+      setTimeout(renderWhenSafe, 1500);
+      return;
+    }
+    render();
+  }
 
   /** The rows held for a company, and a fetch started if there are none yet. */
   function companyEvents(companyId) {
@@ -141,7 +155,7 @@ export function createRecordEvents(ctx) {
         const rows = data || [];
         state.wbEvents = { ...(state.wbEvents || {}), [companyId]: rows };
         inFlight.delete(companyId);
-        render();
+        renderWhenSafe();
         return rows;
       }, () => {
         state.wbEvents = { ...(state.wbEvents || {}), [companyId]: [] };
@@ -207,7 +221,7 @@ export function createRecordEvents(ctx) {
     // The held rows are stale the moment one is claimed: it must not go off again on the next
     // pass, and the calendars stop showing it as waiting.
     forgetCompanyEvents(companyId);
-    render();
+    renderWhenSafe();
     return announced;
   }
 
