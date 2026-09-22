@@ -2,6 +2,24 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-22 Branch protection and a prevention layer on main
+
+`main` now requires: a pull request (no direct pushes), 1 approving review, the `test-and-build`
+check passing, and no force pushes or branch deletion. `enforce_admins` is on, so this applies to
+admins too — the [Direct deployment workflow](operations.md) note that a PR "is not required" is
+superseded for `main`; local build/test commands and the deploy-from-`main` model are unchanged,
+only the path onto `main` changed.
+
+Alexia holds temporary stewardship of repo governance (branch protection, active work
+coordination, branch cleanup decisions, PR flow, `CODEOWNERS` intake) until the team confirms
+permanent ownership — see `docs/GOVERNANCE.md`. `CODEOWNERS` exists as a placeholder with every
+path marked TBD; do not infer real owners from git history.
+
+Of 22 branches audited, 3 carry unmerged work needing an owner and a PR
+(`feat/task-setup-back-button`, `quest-hq-command-center-for-deployment`, and the already-open
+`docs/code-review-d050fd9`); 18 were fully contained in `main` and are recorded as cleanup
+candidates in `docs/GOVERNANCE.md`, held pending owner sign-off — none deleted.
+
 ## 2026-09-19 Released and verified
 
 The three commits above are deployed. `main` moved `8ee29a3..edf7834` as a fast-forward, Vercel's
@@ -1101,6 +1119,7 @@ fixed here. The eighth needs a schema decision and is recorded under known issue
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.
 - The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
+- `main` is branch-protected as of 2026-09-22 (PR + 1 review + `test-and-build` required, `enforce_admins` on, no force-push/deletion). See the 2026-09-22 entry above and `docs/GOVERNANCE.md`.
 
 ## Supabase
 
