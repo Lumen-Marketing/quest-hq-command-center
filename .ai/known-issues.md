@@ -1,5 +1,70 @@
 # Known issues and risks
 
+## questbase.io signs a returning visitor in with no prompt (needs owner/device verification)
+
+Reported 2026-09-22 by Abraham: typing questbase.io and hitting enter logged him straight in,
+with no credential prompt. Found by reading, not reproduced.
+
+`createSupabaseClient()` (src/main.js) calls `createSupabaseJsClient(CONFIG.supabaseUrl,
+CONFIG.supabaseKey)` with no auth options, so it runs on supabase-js defaults:
+`persistSession: true`, `autoRefreshToken: true`, session stored in `localStorage`.
+`initializeAuth()` calls `client.auth.getSession()` on every load and silently restores any
+valid, unexpired session it finds there — this is standard "stay signed in" behavior, not a
+custom bypass. No demo/bypass code path was found in `signInWithPassword`, `signInWithOAuth`,
+or the OAuth redirect handling; the only non-Supabase auth mode is the explicit `local-basic`
+demo session, unrelated unless that is what was active.
+
+This is very likely a persisted session on a device Abraham has signed into before, which is
+expected behavior, not a hole — but that has not been confirmed. Do not change session
+persistence, token lifetime, or add a "remember me" gate until it is confirmed whether this
+happened on a device/browser he had genuinely never signed into. If so, this becomes a
+security-posture product decision (shorter session/refresh-token lifetime, or an opt-in
+persistence toggle), not a quick patch.
+
+To settle it: ask whether it was his own previously-used browser/device and whether he had
+ever clicked Sign out there. No code change should be proposed until that is answered.
+
+## Typing into a field can silently wipe what was just typed (code-grounded, not yet live-reproduced)
+
+Reported 2026-09-22 by Abraham. Found by reading; matches an already-fixed bug class in this
+same codebase, not reproduced live.
+
+The app does a wholesale re-render (`render()` rebuilds `app.innerHTML` from state) on many
+triggers; anything mid-typing lives only in the DOM, so a re-render at the wrong moment erases
+it silently. This exact failure was already found and fixed twice — `src/main.js` around
+`shouldDeferRealtimeRefresh` / `renderWouldInterrupt` / `anEditableIsFocused` (lines
+45637–45797) names the symptom verbatim: "a colleague opening the app in another tab used to
+wipe whatever was typed into an open form... the field I entered suddenly disappeared... it
+looked random." The fix defers the render (retrying ~1.5s later) whenever
+`document.activeElement` is an `INPUT`/`TEXTAREA`/content-editable. It is applied at exactly
+two call sites: the presence-channel handler and the realtime-domain-refresh handler
+(`src/main.js`, `src/data/realtime-policy.js`).
+
+It is **not** applied in `src/workspace/record-events.js`, the reminder/notification poller
+run every 60 seconds by `wbEventsPoll`. Both its `render()` calls — line 144 (first data load)
+and line 210 (a due reminder fires) — are unconditional, with no `anEditableIsFocused()` check.
+This fits the "random"-feeling report: it only surfaces when the poll finds something to
+announce while the user happens to be typing, an intermittent overlap rather than a
+consistent repro.
+
+Files inspected: `src/workspace/record-page.js`, `src/main.js` (`shouldDeferRealtimeRefresh`,
+`renderWouldInterrupt`, `anEditableIsFocused`), `src/data/realtime-policy.js`,
+`src/workspace/record-events.js`.
+
+To reproduce: create a `wb_record_events` row due within the next minute for a test company,
+open any record, and type continuously into any field for 60+ seconds without clicking away;
+if the field clears or reverts mid-type, that confirms this path.
+
+Safe fix path: wrap both `render()` calls in `record-events.js` with the same
+`renderWouldInterrupt()` gate already used in `main.js` (defer and retry ~1.5s if an editable
+element is focused), passed into the module the same way `render` already is. Small and
+directly precedented by the two existing fixes — recommended branch:
+`fix/record-events-render-guard`. Not applied here; this entry is diagnosis only.
+
+If the eventual live repro doesn't match (different field, different timing), the next
+suspect is another still-unguarded `render()` call site elsewhere in the app rather than this
+one.
+
 ## The in-app company delete may abort on the system-role guard (unverified)
 
 Found by reading, not reproduced. `delete_company_workspace` deletes the company row and lets
