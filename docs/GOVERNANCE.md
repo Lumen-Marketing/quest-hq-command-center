@@ -4,6 +4,18 @@ Working rule, effective 2026-09-22: **`main` is protected. Fixes go through name
 
 This is a prevention layer, not a slowdown — it exists so active fixes don't collide with or break production.
 
+## Temporary stewardship
+
+Alexia (alexiavalen304@gmail.com) temporarily owns repo governance as of 2026-09-22, until the repo is workable, cleaned up, and safe to hand off. This covers:
+- Branch protection configuration
+- Active work coordination (issue #15 and successors)
+- Branch cleanup decisions (including the cleanup-candidate list below)
+- PR flow and merge decisions on governance-related changes
+- `CODEOWNERS` placeholder maintenance
+- Ownership intake from the team
+
+Permanent ownership will be assigned once the team confirms where they are currently assigned or where they'd like to be assigned. Until then, `CODEOWNERS` entries stay `TBD` and are not to be filled in from inference — only from an owner's explicit confirmation.
+
 ## Branch protection on `main` (active)
 - Pull request required before merging (no direct pushes)
 - 1 approving review required
