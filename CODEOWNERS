@@ -1,0 +1,9 @@
+# Ownership map for quest-hq-command-center
+# Placeholder — paths are marked TBD until confirmed with the team.
+# Do not infer owners from git history; update this file only from explicit owner confirmation.
+
+src/                        # TBD
+supabase/                   # TBD
+.github/workflows/          # TBD
+.ai/project-brain/          # TBD
+# TaskManagement integration — path TBD, owner TBD
