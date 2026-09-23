@@ -2,6 +2,24 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 Operational health map on the dashboard
+
+The owner needs to see where everything stands without reading every task. The Executive and
+Operations dashboards now carry an **Operational health map** second, after Calls (saved dashboards
+get it at the top through the new-widget introduction path): one calm container per
+operational workspace the viewer can see (Main, Prospecting, Under Writing, Sales, Production for
+Quest Roofing), each with a health level, its open count and only the signals that are non-zero.
+Clicking a container opens that workspace's Tasks.
+
+Levels come from existing task fields, highest wins: **Stuck** (Stuck status or the task app's
+"I'm stuck" flag) → **Urgent** (overdue, or critical/urgent priority) → **Needs review** (In
+review) → **Watch** (due today, or no activity since before today) → **Good**. A workspace with
+nothing open reads "No open work". No schema or query change: HQ already loads every task the
+viewer can see across workspaces. `normalizeTask` now keeps the `stuck` flag for reading;
+`taskPayload` still never writes it. Existing saved dashboards get the widget once through the
+`dashboardSeenWidgets` introduction path. "No update" here counts task activity only, because
+thread posts are not loaded by the host. Covered by `tests/operational-health-map.test.mjs`.
+
 ## 2026-09-22 Branch protection and a prevention layer on main
 
 `main` now requires: a pull request (no direct pushes), 1 approving review, the `test-and-build`

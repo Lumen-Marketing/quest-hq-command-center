@@ -35206,3 +35206,96 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 @media (max-width: 640px) {
   .lazy-surface-error { align-items: flex-start; flex-direction: column; margin: 12px; }
 }
+
+/* ---- Operational health map (dashboard) ------------------------------------------------------
+   One calm container per workspace. The level colour appears only as a thin edge and the chip,
+   so the map reads at a glance without turning into a wall of colour. */
+.health-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.health-zone {
+  --health: var(--border-strong);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.health-zone::before {
+  content: "";
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--health);
+}
+
+.health-zone:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.health-zone.health-stuck { --health: var(--red); }
+.health-zone.health-urgent { --health: var(--orange); }
+.health-zone.health-review { --health: var(--blue); }
+.health-zone.health-watch { --health: var(--amber); }
+.health-zone.health-good { --health: var(--green); }
+
+.health-zone-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.health-zone-head strong {
+  overflow: hidden;
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.health-level {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--health) 14%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.health-level i { color: var(--health); font-size: 13px; }
+
+.health-zone-open { color: var(--muted); font-size: 12px; }
+.health-zone-open b { margin-right: 3px; color: var(--text); font-size: 20px; font-weight: 800; }
+
+.health-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.health-signals b { margin-right: 3px; color: var(--text); }
+
+.health-calm { margin: 0; color: var(--muted); font-size: 12px; }
