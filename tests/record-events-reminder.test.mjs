@@ -13,9 +13,12 @@ import { createRecordEvents } from '../src/workspace/record-events.js';
 const ago = (mins) => new Date(Date.now() - mins * 60000).toISOString();
 const ahead = (mins) => new Date(Date.now() + mins * 60000).toISOString();
 
-function bench({ rows = [], claimed = null, claimError = null } = {}) {
+function bench({
+  rows = [], claimed = null, claimError = null, renderWouldInterrupt,
+} = {}) {
   const notified = [];
   const updates = [];
+  const rendered = [];
   const state = {};
   /** The chain the query builder makes, thin enough to see what was asked for. */
   const table = {
@@ -46,10 +49,11 @@ function bench({ rows = [], claimed = null, claimError = null } = {}) {
     createSupabaseClient: () => ({ from: () => table }),
     isLiveSupabaseSession: () => true,
     notifyLocalEvent: (...args) => notified.push(args),
-    render: () => {},
+    render: () => rendered.push(true),
+    ...(renderWouldInterrupt ? { renderWouldInterrupt } : {}),
   });
   return {
-    mod, state, notified, updates,
+    mod, state, notified, updates, rendered,
   };
 }
 
@@ -144,6 +148,26 @@ test('with no live session it does nothing rather than guessing', async () => {
     render: () => {},
   });
   assert.deepEqual(await mod.checkReminders('co1'), []);
+});
+
+test('an announced reminder renders when nothing would be interrupted', async () => {
+  // checkReminders always re-fetches through loadCompanyEvents rather than the cached reader, so
+  // an announced reminder renders twice on a cold cache: once for the fresh load, once for the
+  // announcement. Both are unguarded before this change and both go through renderWhenSafe now.
+  const b = bench({ rows: [row()], renderWouldInterrupt: () => false });
+  await b.mod.checkReminders('co1');
+  assert.equal(b.rendered.length, 2);
+});
+
+test('an announced reminder does not render out from under someone mid-type', async () => {
+  // Same guard the presence channel and realtime-domain refresh already use: a render rebuilds
+  // the page from state, so this poll landing while a field is focused must not fire immediately.
+  // Interrupting only the two checks this exact call makes (load + announcement), then clearing,
+  // keeps the real retry timers this exercises from rescheduling themselves forever.
+  let calls = 0;
+  const b = bench({ rows: [row()], renderWouldInterrupt: () => calls++ < 2 });
+  await b.mod.checkReminders('co1');
+  assert.equal(b.rendered.length, 0, 'the render must be deferred while a field is focused');
 });
 
 test('the rows are held per company, and read back without another fetch', async () => {

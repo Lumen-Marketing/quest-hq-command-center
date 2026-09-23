@@ -4048,6 +4048,9 @@ function wbEventsPoll() {
     wbEventsModule = wbEventsModule || mod.createRecordEvents({
       activeProfileId: () => activeSession().profile?.id || '',
       appHref, companyPath, createSupabaseClient, isLiveSupabaseSession, notifyLocalEvent, render, state,
+      // Same guard the presence channel and realtime-domain refresh already use, so this poll
+      // cannot wipe a field somebody is mid-typing (see renderWouldInterrupt).
+      renderWouldInterrupt,
       // Deleting a record does not delete the calls scheduled on it -- they are rows in their own
       // table, and a record is a fragment of a JSON document with nothing to cascade from.
       recordIsLive: (companyId, row) => {
