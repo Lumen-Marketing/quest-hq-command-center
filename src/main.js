@@ -12585,9 +12585,16 @@ function renderJobEditor(companyId, job) {
   return questLoader('Loading job form');
 }
 
+// Embedded TaskManagement stays the default. ?task_ui=native opts in for a platform admin or an
+// active company Owner/Admin -- a view choice only: native reads and writes the same
+// public.tasks rows through normalizeTask/taskPayload, and RLS still scopes every one.
 function nativeTasksModuleEnabled(route) {
-  return CONFIG.nativeTasksModule
-    || (state.platformAdmin === true && route?.params?.get('task_ui') === 'native');
+  if (CONFIG.nativeTasksModule) return true;
+  if (route?.params?.get('task_ui') !== 'native') return false;
+  if (state.platformAdmin === true) return true;
+  const profile = activeSession()?.profile;
+  const membership = profile ? membershipForProfile(route.companyId || activeCompanyId(), profile.id) : null;
+  return membership?.status === 'active' && ['owner', 'admin'].includes(String(membership.role).toLowerCase());
 }
 
 function taskPath(params = {}, companyId = activeCompanyId()) {

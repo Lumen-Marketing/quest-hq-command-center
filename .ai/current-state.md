@@ -2,6 +2,18 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 Company Owners/Admins can opt into native Tasks
+
+`?task_ui=native` on the Tasks route used to switch to the native Tasks module for platform
+admins only. It now also works for an active company Owner or Admin, so the people running a
+company can use native Tasks while the embedded TaskManagement app remains everyone's default.
+`VITE_NATIVE_TASKS_MODULE` still defaults to `false`, and nobody leaves the embedded app without
+the explicit parameter. Native Tasks is a second view over the same `public.tasks` rows
+(`normalizeTask` / `taskPayload`, `company_id`, `workspace_id`, `project_id`), not a second model.
+Known limit: native has no watchers, subtasks, comments or per-task time. Editing a task that
+uses a custom per-type status or type (from the embedded Task setup) in native resets it to
+`todo` / `admin`.
+
 ## 2026-09-22 Tasks no longer says "Access pending" to people Questbase lets in
 
 An Owner with access to all five workspaces opened Tasks and got the embedded app's
