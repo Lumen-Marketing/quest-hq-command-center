@@ -197,3 +197,23 @@ audit rows can identify the real branch.
 New sub-minute sessions are discarded and new sessions over sixteen hours require confirmation.
 Existing suspicious rows are flagged but not rewritten because the correct timestamps cannot be
 reconstructed safely. Corrections belong in an audited owner workflow.
+
+## TaskManagement email dispatch follow-up
+
+Status: Known follow-up, not blocking Task Management V1 usability.
+
+Context:
+- Task Management V1 is usable.
+- Test task creation, detail view, refresh persistence, and public.tasks persistence were confirmed.
+- In-app notification worked.
+- Email dispatch showed “Email not sent.”
+
+Known source:
+- Toast source: `taskmanagement/js/controllers/AppController.js:2058`
+- The toast appears when email delivery returns a real failure, not when email is simply skipped.
+
+Follow-up:
+- Check the `notify-email` Supabase function logs.
+- Check email provider settings in the Questbase Supabase project.
+- Look for console line: `[notify] email delivery failed: …`
+- HQ operations notes indicate email delivery checks were deferred on 2026-09-10.
