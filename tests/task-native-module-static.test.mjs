@@ -28,6 +28,16 @@ test('native Tasks is feature flagged and keeps the deployed embed fallback', ()
   assert.match(router, /renderEmbeddedTasksPage\(route, companyId\)/);
 });
 
+test('company Owners/Admins can opt into native Tasks while embedded stays the default', () => {
+  const gate = sourceBetween('function nativeTasksModuleEnabled(route)', 'function taskPath');
+  assert.match(gate, /if \(CONFIG\.nativeTasksModule\) return true;/);
+  // Without the explicit opt-in nobody leaves the embedded default, whatever their role.
+  assert.match(gate, /if \(route\?\.params\?\.get\('task_ui'\) !== 'native'\) return false;/);
+  assert.match(gate, /if \(state\.platformAdmin === true\) return true;/);
+  assert.match(gate, /membership\?\.status === 'active'/);
+  assert.match(gate, /\['owner', 'admin'\]\.includes\(String\(membership\.role\)\.toLowerCase\(\)\)/);
+});
+
 test('native Tasks renders list, board, detail, create, and edit inside Command Center', () => {
   const nativePage = sourceBetween('function renderNativeTasksPage(route, companyId)', 'function renderEmbeddedTasksPage');
   assert.match(nativePage, /filteredTasks\(companyId, job\?\.id\)/);

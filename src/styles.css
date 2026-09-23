@@ -35299,3 +35299,12 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 .health-signals b { margin-right: 3px; color: var(--text); }
 
 .health-calm { margin: 0; color: var(--muted); font-size: 12px; }
+
+/* The shell's first column must always equal the fixed sidebar's width. An older
+   max-width:1180px rule pinned it to 218px while the sidebar stayed 264px, so the
+   sidebar covered 46px of content between 981px and 1180px wide. */
+@media (min-width: 981px) {
+  .quest-app:not(.sidebar-collapsed) {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+}

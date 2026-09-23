@@ -32,6 +32,10 @@ App.commandCenterIntegration = {
   basePath: commandCenterBasePath,
   workspaceId: (routeParams.get('workspace_id') || '').trim(),
   projectId: (routeParams.get('project_id') || '').trim(),
+  // Questbase's tasks.manage / tasks.view answer for this workspace, handed over by
+  // renderEmbeddedTasksPage. App.can reads it only when the legacy profiles.role names
+  // no task role; RLS still decides every read and write.
+  taskAccess: ['manage', 'view'].includes(routeParams.get('task_access')) ? routeParams.get('task_access') : '',
   returnUrl: sameOriginUrl((routeParams.get('return_url') || '').trim(), defaultReturnUrl),
 };
 
