@@ -316,6 +316,8 @@
   }
 
   layouts.table = {
+    // Exposed for tests only: the row builder is pure apart from `view`.
+    _qtRow: qtRow,
     // Once-per-session wiring for the STATIC .list-header filter buttons
     // (app.html) — they exist only while the Table layout is shown, but the
     // elements persist in the DOM, so guard against re-binding on re-mount.
