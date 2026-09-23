@@ -147,6 +147,18 @@ App.effectiveRole = function effectiveRole() {
   return r === 'sales' ? 'worker' : r;
 };
 
+// Hosted in Questbase, task access is the workspace's tasks.manage / tasks.view -- the
+// keys the tasks RLS policies enforce -- passed in as ?task_access=. It applies only when
+// profiles.role names no task role ('member', the Questbase default), so a real legacy
+// role keeps its own list. No clock, role or task-setup keys: Questbase owns those.
+App.HOSTED_TASK_PERMISSIONS = {
+  manage: ['app.use', 'tasks.view', 'tasks.write', 'home.view'],
+  view: ['app.use', 'tasks.view', 'home.view'],
+};
+
 App.can = function can(permission) {
-  return (App.ROLE_PERMISSIONS[App.effectiveRole()] || []).includes(permission);
+  const own = App.ROLE_PERMISSIONS[App.effectiveRole()];
+  if (own) return own.includes(permission);
+  const cc = App.commandCenterIntegration || {};
+  return ((cc.hosted && App.HOSTED_TASK_PERMISSIONS[cc.taskAccess]) || []).includes(permission);
 };

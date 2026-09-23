@@ -12658,6 +12658,12 @@ function renderEmbeddedTasksPage(route, companyId) {
 
   const params = new URLSearchParams({ embed: '1' });
   params.set('workspace_id', workspaceId);
+  // The task app's own gate reads the legacy profiles.role, which defaults to 'member' --
+  // a value it grants nothing. Hand it the workspace task permission instead -- the same
+  // keys the tasks RLS policies check, so this only unlocks the UI the database allows.
+  const taskAccess = can('tasks.manage', companyId, workspaceId) ? 'manage'
+    : (can('tasks.view', companyId, workspaceId) ? 'view' : '');
+  if (taskAccess) params.set('task_access', taskAccess);
   if (job) params.set('project_id', job.id);
   params.set('return_url', window.location.href);
   // Forward CC's deep-link params to the task app's own hash routes so every

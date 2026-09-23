@@ -2,6 +2,27 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-22 Tasks no longer says "Access pending" to people Questbase lets in
+
+An Owner with access to all five workspaces opened Tasks and got the embedded app's
+"Access pending — your account is currently Member" screen. The embedded app gated on its own
+legacy `profiles.role`, which defaults to `'member'`, a value its `ROLE_PERMISSIONS` grants
+nothing. Questbase roles live in `company_memberships` and never reach that column, so every
+account whose legacy role was never hand-set to a task-app role was locked out of Tasks.
+Verified in the live frame: `role = "member"`, `approved = true`.
+
+The database was never the problem. The tasks RLS policies (`tasks workspace read/insert/update/delete`,
+confirmed in the 2026-09-17 snapshot) check `is_workspace_member` plus `tasks.view` /
+`tasks.manage`, not `profiles.role`. Only the app's own gate disagreed with them.
+
+`renderEmbeddedTasksPage` now passes `task_access=manage|view` from the same `can()` the native
+Tasks path uses. `App.can` in the task app falls back to it only when running inside Questbase
+**and** the legacy role names no task role. `manage` grants app use and task read/write; `view`
+grants read only. Neither grants clock, roles or task setup, which Questbase owns. Profiles that
+do carry a legacy task role (worker, admin, and so on) keep exactly their old permissions. The
+parameter is client-side, so it can only reveal UI; every read and write is still RLS-checked.
+Covered by `tests/taskapp-workspace-permission-gate.test.mjs`.
+
 ## 2026-09-22 Branch protection and a prevention layer on main
 
 `main` now requires: a pull request (no direct pushes), 1 approving review, the `test-and-build`
