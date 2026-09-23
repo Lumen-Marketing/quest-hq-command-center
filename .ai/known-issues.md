@@ -131,6 +131,26 @@ its browsing context. The feature-flagged native
 store is still not wired as the default. The AI assistant endpoint and any draft loss caused by a
 reload inside the vendored Tasks application must be fixed in that separate application.
 
+## Embedded Tasks access comes from Questbase only at the entry gate
+
+Since 2026-09-22 a `'member'` legacy profile gets into embedded Tasks through the workspace's
+`tasks.manage` / `tasks.view` (`task_access`). The app's role-name checks still use the legacy
+role. So such a user sees every task RLS returns (not the worker-only filter), and never sees the
+Delete button, although RLS lets `tasks.manage` delete. The host's `can()` answers at company
+level while RLS checks the workspace, so a mismatch can show a control the database then refuses.
+Nothing leaks either way; this closes when roles move off `profiles.role` entirely.
+
+## Preview deployments point at the old standalone task database
+
+Checked 2026-09-22 from each deployment's public `taskmanagement/env.json`: production
+(`www.questbase.io`) serves `rqundirizvojpzhljtdn`, but the latest Vercel Preview deployment serves
+`qqvmcsvdxhgjooirznrj`, the retired standalone TaskManagement project that must not be used or
+mutated. The Preview environment's `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` evidently still
+name the old project, and both the host and the embedded Tasks app read those variables. So a
+preview cannot sign in Questbase accounts, and anything tested there reads and writes the old
+task data. Do not use previews for Questbase task or auth testing until someone with access to the
+`abetheclosers-projects` Vercel team points the Preview variables at the Questbase project.
+
 ## Workspace SMS is intentionally unavailable
 
 Outbound and inbound endpoints now return 501 before authentication, database access or provider
