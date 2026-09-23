@@ -2,6 +2,16 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 A Stuck view shows every blocked task in one place
+
+The task app could already mark work blocked, either with the Stuck status or the "I'm stuck"
+flag (`task.stuck`: reason, blocked-on person, time; migration 063). But finding blocked work
+meant scanning the whole list for the red STUCK badge. A **Stuck** quick view now sits beside
+Urgent, Today and Overdue in the Tasks menu, the mobile drawer and the bottom nav, with a live
+count. It lists open tasks in the Stuck status or flagged stuck; done work never appears. The
+header reads "Blocked: needs help or a decision". No schema change: `TaskModel.getFiltered` gains
+a `stuck` view and `badgeCounts` a `stuck` count. Covered by `tests/task-stuck-view.test.mjs`.
+
 ## 2026-09-23 Task copy steers updates toward what happened, what's next, blockers and proof
 
 The owner could not see what was happening across people and jobs without chasing everyone,

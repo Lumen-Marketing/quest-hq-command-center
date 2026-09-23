@@ -128,6 +128,7 @@ App.TaskListView = class TaskListView {
       'hot':       { eyebrow: 'Critical + Urgent',  title: 'Urgent tasks' },
       'today':     { eyebrow: 'Today',              title: 'Due today' },
       'overdue':   { eyebrow: 'Past due',           title: 'Overdue' },
+      'stuck':     { eyebrow: 'Blocked: needs help or a decision', title: 'Stuck' },
       'watching':  { eyebrow: 'Tasks you\'re watching', title: 'Watching' },
       'time:mine':      { eyebrow: 'Time tracking', title: 'My time' },
       'time:resource':  { eyebrow: 'Time tracking', title: 'Team workload' },

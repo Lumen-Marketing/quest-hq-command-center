@@ -21,7 +21,7 @@ App.BottomNavView = class BottomNavView {
 
     // The task views the "Tasks" tab should light up for (mirrors the desktop
     // primary-nav "Tasks ▾" matches list).
-    this.taskViews = ['all', 'mine', 'hot', 'today', 'overdue', 'watching'];
+    this.taskViews = ['all', 'mine', 'hot', 'today', 'overdue', 'stuck', 'watching'];
 
     this.render();
     this.subscribe();

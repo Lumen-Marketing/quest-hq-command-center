@@ -624,6 +624,7 @@ App.AppController = class AppController {
       hot: count('hot'),
       today: count('today'),
       overdue: count('overdue'),
+      stuck: count('stuck'),
       watching: count('watching'),
     };
   }

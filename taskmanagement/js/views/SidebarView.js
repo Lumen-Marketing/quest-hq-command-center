@@ -223,6 +223,7 @@ App.SidebarView = class SidebarView {
     if (canView('hot'))       views.push({ view: 'hot',       label: 'Urgent',   icon: 'ti-bolt',           count: c.hot || null });
     if (canView('today'))     views.push({ view: 'today',     label: 'Today',    icon: 'ti-flame',          count: c.today || null });
     if (canView('overdue'))   views.push({ view: 'overdue',   label: 'Overdue',  icon: 'ti-alert-triangle', count: c.overdue || null });
+    if (canView('stuck'))     views.push({ view: 'stuck',     label: 'Stuck',    icon: 'ti-alert-hexagon',  count: c.stuck || null });
     if (canView('watching'))  views.push({ view: 'watching',  label: 'Watching', icon: 'ti-eye',            count: c.watching || null });
     if (canView('time:mine')) views.push({ view: 'time:mine', label: 'My time',  icon: 'ti-clock' });
     if (canView('wallboard')) views.push({ view: 'wallboard', label: 'Wallboard',icon: 'ti-device-tv' });

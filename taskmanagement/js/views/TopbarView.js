@@ -171,9 +171,10 @@ App.TopbarView = class TopbarView {
         { view: 'hot',      label: 'Urgent',    icon: 'ti-bolt',           count: vc.hot },
         { view: 'today',    label: 'Today',     icon: 'ti-flame',          count: vc.today },
         { view: 'overdue',  label: 'Overdue',   icon: 'ti-alert-triangle', count: vc.overdue },
+        { view: 'stuck',    label: 'Stuck',     icon: 'ti-alert-hexagon',  count: vc.stuck },
         { view: 'watching', label: 'Watching',  icon: 'ti-eye',            count: vc.watching },
       ].filter(it => canView(it.view));
-      items.push({ key: 'tasks', label: 'Tasks', dropdown: taskItems, matches: ['all', 'mine', 'hot', 'today', 'overdue', 'watching'] });
+      items.push({ key: 'tasks', label: 'Tasks', dropdown: taskItems, matches: ['all', 'mine', 'hot', 'today', 'overdue', 'stuck', 'watching'] });
     }
     if (canView('projects')) items.push({ key: 'projects', label: 'Projects', view: 'projects' });
     if (teamItems.length) items.push({ key: 'team', label: 'Team', dropdown: teamItems, matches: teamItems.map(t => t.view) });

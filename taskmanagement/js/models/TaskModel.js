@@ -155,6 +155,8 @@ App.TaskModel = class TaskModel {
     // `t.due &&`: due === '' must not read as overdue ('' < any ISO date).
     else if (view === 'overdue') tasks = tasks.filter(t => t.due && t.due < t0 && !App.taxonomy.isDone(t));
     else if (view === 'watching') tasks = tasks.filter(t => (t.watchers || []).includes(currentUser));
+    // Stuck: the Stuck status or an "I'm stuck" flag (task.stuck, migration 063), unless done.
+    else if (view === 'stuck') tasks = tasks.filter(t => !App.taxonomy.isDone(t) && (t.status === 'hold' || !!t.stuck));
     else if (view.startsWith('company:')) {
       const c = view.split(':')[1];
       tasks = tasks.filter(t => App.utils.taskInCompany(t, c));
