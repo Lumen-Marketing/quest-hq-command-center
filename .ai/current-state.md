@@ -2,6 +2,34 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 Ops cockpit views, clearer task rows and a calmer notification bell
+
+The operating model is team → ops review (Alexia) → escalate to the owner only when needed. The
+task app now gives the reviewer the views for that, all built from existing data with no schema,
+permission or delivery change:
+
+- **Task rows:** the STUCK badge names who the task is blocked on, with the reason on hover, and
+  also covers tasks flagged "I'm stuck". Each open task shows its latest change muted under the
+  title ("Kristin uploaded the agreement · 2h ago"). `tests/task-row-visibility.test.mjs`.
+- **Cockpit views** in the Tasks menu, mobile drawer and bottom nav, with counts and top-bar titles:
+  - Needs review: open tasks in the In review status. The header says it means ops verifies the
+    update, proof or next step.
+  - No update today: open tasks whose newest activity, creation or thread post is before today in
+    HQ time. Thread posts don't write `task.activity`, so `App.commentTouch` is filled from the
+    existing recent-comments query (primed at boot, cached 60s) and on every post.
+  - Recently completed: done within the last 7 days by `completed_at`.
+  - Stuck, Today and Overdue already existed, and group-by-assignee covers "by owner".
+  - `tests/task-ops-cockpit.test.mjs`.
+- **Notification bell (Questbase host):** back-to-back identical notifications (one edit fanned
+  out several times) collapse into one row with a ×N count, and 12 distinct items show instead of
+  12 copies. The meta line drops the generic "Inbox" label and is lighter. Display only: rows,
+  read state and delivery are unchanged, so the unread badge still counts every copy.
+  `tests/notification-grouping.test.mjs`.
+
+Task setup for Quest Roofing was also changed in the app (data, not code): types renamed to Lead /
+Follow-up, Invoice / Payment and Software / Web, a Job / Field Work type added (key `field_work`),
+and every type now runs Pending (default) → Working on it → Stuck → In review → Done.
+
 ## 2026-09-23 A Stuck view shows every blocked task in one place
 
 The task app could already mark work blocked, either with the Stuck status or the "I'm stuck"

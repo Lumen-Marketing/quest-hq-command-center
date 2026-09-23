@@ -2028,7 +2028,20 @@ button { cursor: pointer; }
 .notification-item small {
   margin-bottom: 5px;
   font-size: 11px;
-  font-weight: 950;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* "×5": identical notifications collapsed into one row (groupRepeatedNotifications). */
+.notification-item .notification-repeat {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  color: inherit;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .notification-item strong {
@@ -31720,7 +31733,8 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-waiting-text b { font-size: .88rem; overflow-wrap: anywhere; }
 .wb-waiting-text small { font-size: .76rem; color: var(--text-muted, #70675b); }
 .wb-waiting-row .btn { flex: none; }
-.wb-waiting-more { margin: 10px 0 0; font-size: .78rem; color: var(--text-muted, #70675b); }
+.wb-waiting-more { margin: 10px 0 0; font-size: .78rem; color: var(--text-muted, #70675b); }
+
 .wb-topbar-home { flex: none; }
 
 .wb-topbar-add {
@@ -34955,7 +34969,9 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
    been typed into the others. */
 .intake-create:not(:has(input[name="visibility"][value="private"]:checked)) .intake-pass { display: none; }
 .intake-create .intake-pass .intake-code { font-size: 18px; letter-spacing: .24em; text-align: left; }
-.intake-hint { font-size: 12px; opacity: .75; font-weight: 400; }
+.intake-hint { font-size: 12px; opacity: .75; font-weight: 400; }
+
+
 .intake-manage h3 { margin: 18px 0 8px; font-size: 14px; }
 .intake-create { border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
 .intake-link-row, .intake-sub-row {
