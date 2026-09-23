@@ -2,6 +2,16 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 The expanded sidebar no longer covers content at laptop widths
+
+The fixed sidebar (`.deck`, `width: var(--sidebar-width)`, 264px expanded) sat 46px over the page
+between 981px and 1180px wide. An older `@media (max-width: 1180px)` rule still pinned the
+expanded shell column to 218px, and its higher specificity beat the newer `.quest-app` rules. One
+rule at the end of `src/styles.css` now ties the expanded desktop column to `--sidebar-width`
+above 980px. Collapsed mode (72px rail in an 84px column) and the mobile layout are unchanged;
+consolidating the layered `.quest-app` definitions is left for the navigation cleanup. Covered by
+`tests/shell-sidebar-column.test.mjs`.
+
 ## 2026-09-23 Company Owners/Admins can opt into native Tasks
 
 `?task_ui=native` on the Tasks route used to switch to the native Tasks module for platform
