@@ -12585,9 +12585,16 @@ function renderJobEditor(companyId, job) {
   return questLoader('Loading job form');
 }
 
+// Embedded TaskManagement stays the default. ?task_ui=native opts in for a platform admin or an
+// active company Owner/Admin -- a view choice only: native reads and writes the same
+// public.tasks rows through normalizeTask/taskPayload, and RLS still scopes every one.
 function nativeTasksModuleEnabled(route) {
-  return CONFIG.nativeTasksModule
-    || (state.platformAdmin === true && route?.params?.get('task_ui') === 'native');
+  if (CONFIG.nativeTasksModule) return true;
+  if (route?.params?.get('task_ui') !== 'native') return false;
+  if (state.platformAdmin === true) return true;
+  const profile = activeSession()?.profile;
+  const membership = profile ? membershipForProfile(route.companyId || activeCompanyId(), profile.id) : null;
+  return membership?.status === 'active' && ['owner', 'admin'].includes(String(membership.role).toLowerCase());
 }
 
 function taskPath(params = {}, companyId = activeCompanyId()) {
@@ -12658,6 +12665,12 @@ function renderEmbeddedTasksPage(route, companyId) {
 
   const params = new URLSearchParams({ embed: '1' });
   params.set('workspace_id', workspaceId);
+  // The task app's own gate reads the legacy profiles.role, which defaults to 'member' --
+  // a value it grants nothing. Hand it the workspace task permission instead -- the same
+  // keys the tasks RLS policies check, so this only unlocks the UI the database allows.
+  const taskAccess = can('tasks.manage', companyId, workspaceId) ? 'manage'
+    : (can('tasks.view', companyId, workspaceId) ? 'view' : '');
+  if (taskAccess) params.set('task_access', taskAccess);
   if (job) params.set('project_id', job.id);
   params.set('return_url', window.location.href);
   // Forward CC's deep-link params to the task app's own hash routes so every
