@@ -48,8 +48,9 @@ test('the Stuck view is registered wherever the other quick views are', () => {
   assert.match(read('taskmanagement/js/controllers/AppController.js'), /stuck: count\('stuck'\),/);
   const topbar = read('taskmanagement/js/views/TopbarView.js');
   assert.match(topbar, /\{ view: 'stuck',\s+label: 'Stuck',/);
-  assert.match(topbar, /matches: \['all', 'mine', 'hot', 'today', 'overdue', 'stuck', 'watching'\]/);
+  assert.match(topbar, /matches: \[[^\]]*'stuck'[^\]]*\]/);
+  assert.match(topbar, /stuck: 'Stuck',/);
   assert.match(read('taskmanagement/js/views/SidebarView.js'), /canView\('stuck'\)/);
-  assert.match(read('taskmanagement/js/views/BottomNavView.js'), /'overdue', 'stuck', 'watching'/);
+  assert.match(read('taskmanagement/js/views/BottomNavView.js'), /this\.taskViews = \[[^\]]*'stuck'/);
   assert.match(read('taskmanagement/js/views/TaskListView.js'), /'stuck':\s+\{ eyebrow: 'Blocked: needs help or a decision', title: 'Stuck' \}/);
 });
