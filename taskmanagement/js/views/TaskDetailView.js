@@ -1069,7 +1069,7 @@ App.TaskDetailView = class TaskDetailView {
     const rows = comments.length
       ? comments.map(c => this._commentRow(c)).join('')
       : (t._commentsLoaded
-          ? `<div class="cm-empty">No comments yet. Start the conversation.</div>`
+          ? `<div class="cm-empty">No updates yet. Post what happened, what's next, or what's blocking it.</div>`
           : `<div class="cm-empty">Loading comments…</div>`);
     const draft = (this._commentDraft && this._commentDraft[t.id]) || '';
     // Composer kind (Slice C). A segmented control chooses how the post is
@@ -1084,13 +1084,13 @@ App.TaskDetailView = class TaskDetailView {
     return `
       <div class="cm-list">${rows}</div>
       <div class="cm-composer">
-        <textarea id="cmInput" class="cm-input" rows="2" placeholder="Write an update or @mention…">${esc(draft)}</textarea>
+        <textarea id="cmInput" class="cm-input" rows="2" placeholder="What happened? What's next? Blocked by anything? Paste a photo/proof link. @mention to notify.">${esc(draft)}</textarea>
         <div id="cmMentionMenu" class="cm-mention-menu hidden" role="listbox"></div>
         <div class="cm-actions">
           <div class="td2-cm-tools" role="tablist">
             ${kindBtn('call', 'Log call', 'ti-phone')}
             ${kindBtn('note', 'Note', 'ti-note')}
-            <button class="td2-cm-tool" type="button" data-cm-soon="Attachments" aria-label="Attach file" title="Attachments — coming soon"><i class="ti ti-paperclip"></i></button>
+            <button class="td2-cm-tool" type="button" data-cm-soon="Attachments" data-cm-soon-hint="For now, paste a photo or file link in your update." aria-label="Attach file" title="Attachments coming soon: paste a photo or file link in your update for now"><i class="ti ti-paperclip"></i></button>
             <button class="td2-cm-tool" type="button" data-cm-soon="Voice notes" aria-label="Voice note" title="Voice notes — coming soon"><i class="ti ti-microphone"></i></button>
           </div>
           <button id="cmSend" class="btn btn-primary cm-send" type="button">Post</button>
@@ -1246,7 +1246,7 @@ App.TaskDetailView = class TaskDetailView {
     // pic; not wired to a feature yet, so acknowledge the tap rather than fail silently.
     this.pane.querySelectorAll('.td2-cm-tools [data-cm-soon]').forEach(btn => btn.addEventListener('click', () => {
       const tv = this.controller && this.controller.toastView;
-      if (tv && tv.show) tv.show({ title: btn.getAttribute('data-cm-soon') + ' — coming soon' });
+      if (tv && tv.show) tv.show({ title: btn.getAttribute('data-cm-soon') + ' — coming soon', sub: btn.getAttribute('data-cm-soon-hint') || undefined });
     }));
 
     const persistDraft = () => {
@@ -1401,7 +1401,7 @@ App.TaskDetailView = class TaskDetailView {
       build: (panel, h) => {
         panel.innerHTML = `
           <div class="td2-am-h">I'm stuck</div>
-          <textarea class="td2-stuck-input" rows="2" maxlength="500" placeholder="What's blocking this?"></textarea>
+          <textarea class="td2-stuck-input" rows="2" maxlength="500" placeholder="What's blocking this, and what decision or help do you need?"></textarea>
           <div class="td2-stuck-pick-lbl">Blocked on</div>
           <div class="td2-am-list td2-stuck-people">
             ${people.map(p => `<button class="td2-am-item" data-id="${App.utils.escapeHtml(p.id)}" type="button">
@@ -1602,7 +1602,7 @@ App.TaskDetailView = class TaskDetailView {
 
             <div class="te-sec">
               <div class="te-sec-h"><span class="te-n">02</span><span class="te-t">Description</span></div>
-              <textarea id="edit-desc" class="te-desc" rows="5" maxlength="5000" placeholder="Add context, links, scope…">${App.utils.escapeHtml(d.description)}</textarea>
+              <textarea id="edit-desc" class="te-desc" rows="5" maxlength="5000" placeholder="What needs to happen? Include details, location, client, photos needed, or next step.">${App.utils.escapeHtml(d.description)}</textarea>
             </div>
 
             <div class="te-sec">

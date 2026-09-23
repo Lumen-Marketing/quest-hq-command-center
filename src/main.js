@@ -1619,9 +1619,9 @@ function persistDealStages() { DEAL_STAGES = DEAL_STAGES.filter((stage) => stage
 const ACCOUNT_TYPES = ['Customer', 'Prospect', 'Partner', 'Vendor'];
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task', 'stage_change', 'system'];
 const JOB_TABS = ['list', 'calendar', 'pipeline', 'profile'];
-const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
+const TASK_STATUSES = ['pending', 'todo', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
-const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
+const TASK_TYPES = ['lead', 'bid', 'field_work', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
 const CALENDAR_EVENT_TYPES = ['Company event', 'Job visit / inspection', 'Estimate appointment', 'Install / field work', 'Internal meeting', 'Personal reminder'];
 const CALENDAR_FILTER_TYPES = ['Task due', 'Invoice due', 'Approval', 'Time'].concat(CALENDAR_EVENT_TYPES);
 const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
@@ -47534,23 +47534,24 @@ function compactUnique(values) {
 
 function statusLabel(status) {
   return {
-    todo: 'To do',
+    todo: 'Working on it',
     pending: 'Pending',
-    hold: 'On hold',
-    review: 'Review',
+    hold: 'Stuck',
+    review: 'In review',
     done: 'Done',
   }[status] || titleCase(status);
 }
 
 function taskTypeLabel(type) {
   return {
-    lead: 'Lead',
-    bid: 'Bid',
+    lead: 'Lead / Follow-up',
+    bid: 'Bid / Estimate',
+    field_work: 'Job / Field Work',
     admin: 'Admin',
-    invoicing: 'Invoicing',
+    invoicing: 'Invoice / Payment',
     ar: 'AR',
     meeting: 'Meeting',
-    web_dev: 'Web dev',
+    web_dev: 'Software / Web',
   }[type] || titleCase(type);
 }
 

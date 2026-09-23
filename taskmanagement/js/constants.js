@@ -19,13 +19,13 @@ App.COMPANIES = {
 };
 
 App.TASK_TYPES = {
-  lead:      { id: 'lead',      label: 'Lead',            cls: 'type-lead'      },
+  lead:      { id: 'lead',      label: 'Lead / Follow-up', cls: 'type-lead'      },
   bid:       { id: 'bid',       label: 'Bid / Estimate',  cls: 'type-bid'       },
   admin:     { id: 'admin',     label: 'Admin',           cls: 'type-admin'     },
-  invoicing: { id: 'invoicing', label: 'Invoicing',       cls: 'type-invoicing' },
+  invoicing: { id: 'invoicing', label: 'Invoice / Payment', cls: 'type-invoicing' },
   ar:        { id: 'ar',        label: 'AR',              cls: 'type-ar'        },
   meeting:   { id: 'meeting',   label: 'Meeting',         cls: 'type-meeting'   },
-  web_dev:   { id: 'web_dev',   label: 'Web development', cls: 'type-web-dev'   },
+  web_dev:   { id: 'web_dev',   label: 'Software / Web',  cls: 'type-web-dev'   },
 };
 
 // Job scope tag shown alongside Type. Combo-box choices in the New task popup.
@@ -39,8 +39,8 @@ App.TASK_LABELS = {
 };
 
 App.STATUSES = {
-  todo:    { label: 'Working on it', cls: 'status-doing' },
   pending: { label: 'Pending',       cls: 'status-pending' },
+  todo:    { label: 'Working on it', cls: 'status-doing' },
   hold:    { label: 'Stuck',         cls: 'status-hold' },
   review:  { label: 'In review',     cls: 'status-review' },
   done:    { label: 'Done',          cls: 'status-done' },

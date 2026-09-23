@@ -2,6 +2,29 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 Task copy steers updates toward what happened, what's next, blockers and proof
+
+The owner could not see what was happening across people and jobs without chasing everyone,
+partly because the task app never asked for it. Copy only, no schema or behavior change:
+
+- New/edit task description placeholder: "What needs to happen? Include details, location,
+  client, photos needed, or next step."
+- Update composer: "What happened? What's next? Blocked by anything? Paste a photo/proof link.
+  @mention to notify." The empty thread says the same. The stuck prompt now asks what decision
+  or help is needed.
+- Attachments in updates are still not built. The paperclip now says so and tells people to
+  paste a photo or file link instead.
+- Questbase now uses the task app's status words (Working on it, Stuck, In review) instead of
+  To do / On hold / Review, and lists statuses Pending first.
+- Questbase knows a `field_work` type ("Job / Field Work"), and the type labels match the new
+  names (Lead / Follow-up, Bid / Estimate, Invoice / Payment, Software / Web). The real type and
+  status rows are per company in `task_types` / `task_type_statuses` and are renamed, added and
+  reordered in the task app's Task setup screen. Without `field_work` in `TASK_TYPES`, a task
+  saved through a host path (native Tasks, Quick Create, recycle restore) would fall back to
+  `admin`.
+
+Covered by `tests/task-visibility-copy.test.mjs`.
+
 ## 2026-09-22 Branch protection and a prevention layer on main
 
 `main` now requires: a pull request (no direct pushes), 1 approving review, the `test-and-build`
