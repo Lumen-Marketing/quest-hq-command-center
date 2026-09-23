@@ -5,7 +5,7 @@ import { JOB_TILE_PARTS } from '../jobs/dashboard-model.js';
 
 export function createWidgetRegistry(ctx) {
   const {
-    accountName, companyFinanceInvoices, companyTasks, dashboardJobsParts, renderModalShell, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardJobsWidget, renderDashboardHorizontalBars, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
+    accountName, companyFinanceInvoices, companyTasks, dashboardJobsParts, renderModalShell, renderOperationalHealthMap, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardJobsWidget, renderDashboardHorizontalBars, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
   } = ctx;
 
   // Which parts the home dashboard's Jobs card shows. Same tick-boxes as the workspace
@@ -41,6 +41,13 @@ export function createWidgetRegistry(ctx) {
     const commercialJobs = ctx.jobs.filter((job) => /commercial|storage|office|retail/i.test(String(job.job_type || job.name || '')));
     const collectedPct = ctx.fin.invoiced ? Math.round((ctx.fin.collected / ctx.fin.invoiced) * 100) : 0;
     const widgets = {
+      health: {
+        title: 'Operational health map',
+        group: 'Operations',
+        span: true,
+        sub: 'Where work stands in each workspace. Open one to see its tasks.',
+        render: () => renderOperationalHealthMap(companyId),
+      },
       calls: {
         title: 'Phones right now',
         group: 'Operations',
