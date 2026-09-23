@@ -145,6 +145,12 @@
   color: var(--qt-red-dark); margin-top: 4px;
 }
 #taskViewWrap.qt-skin .qt-stuckbadge i { font-size: 12px; }
+/* Last change on the task, muted under the title: answers "what changed?" without opening it. */
+#taskViewWrap.qt-skin .qt-lastupd {
+  margin-top: 3px; font-size: 11.5px; font-weight: 500; line-height: 1.3; color: var(--qt-ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#taskViewWrap.qt-skin .qt-lastupd b { font-weight: 650; color: var(--qt-ink-soft); }
 
 /* inline-edit + display cells */
 #taskViewWrap.qt-skin .qt-cellbtn {
