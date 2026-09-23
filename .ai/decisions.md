@@ -2137,3 +2137,12 @@ The company-search matcher and the detailed plugin-disabled page are interaction
 now arrive through dynamic imports when Search or that exceptional route is opened. This paid for
 the QA features without raising the entry JavaScript ceiling and keeps the existing bundle-budget
 refusal intact.
+
+## Dashboards move toward a configurable Company Operating Map (2026-09-23)
+
+Direction, not an approved build: health and cockpit views should grow into a per-company
+operational blueprint (zones, paths, handoffs, bottlenecks, health overlays, owner/status, drill
+down) rather than a card grid. Zones must come from each company's own configuration; nothing may
+assume roofing stages. The owner gets a clean snapshot, and the ops reviewer gets the cockpit.
+Details and the step-by-step path are in
+[docs/design/company-operating-map.md](../docs/design/company-operating-map.md).
