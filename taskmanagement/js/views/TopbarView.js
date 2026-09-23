@@ -4,6 +4,7 @@ window.App = window.App || {};
 const TITLES = {
   all: 'All tasks', mine: 'My tasks', hot: 'Urgent', today: 'Today',
   overdue: 'Overdue', watching: 'Watching',
+  stuck: 'Stuck', review: 'Needs review', noupdate: 'No update today', recent: 'Recently completed',
   'time:mine': 'My time', 'time:resource': 'Team workload',
   'team:hierarchy': 'Team chart', approvals: 'Approvals', 'admin:clock': 'Clock dashboard',
   'admin:task-setup': 'Task setup', 'admin:reports': 'Problem reports',
@@ -171,9 +172,13 @@ App.TopbarView = class TopbarView {
         { view: 'hot',      label: 'Urgent',    icon: 'ti-bolt',           count: vc.hot },
         { view: 'today',    label: 'Today',     icon: 'ti-flame',          count: vc.today },
         { view: 'overdue',  label: 'Overdue',   icon: 'ti-alert-triangle', count: vc.overdue },
+        { view: 'stuck',    label: 'Stuck',     icon: 'ti-alert-hexagon',  count: vc.stuck },
+        { view: 'review',   label: 'Needs review', icon: 'ti-eye-check',  count: vc.review },
+        { view: 'noupdate', label: 'No update today', icon: 'ti-message-off', count: vc.noupdate },
+        { view: 'recent',   label: 'Recently completed', icon: 'ti-circle-check' },
         { view: 'watching', label: 'Watching',  icon: 'ti-eye',            count: vc.watching },
       ].filter(it => canView(it.view));
-      items.push({ key: 'tasks', label: 'Tasks', dropdown: taskItems, matches: ['all', 'mine', 'hot', 'today', 'overdue', 'watching'] });
+      items.push({ key: 'tasks', label: 'Tasks', dropdown: taskItems, matches: ['all', 'mine', 'hot', 'today', 'overdue', 'stuck', 'review', 'noupdate', 'recent', 'watching'] });
     }
     if (canView('projects')) items.push({ key: 'projects', label: 'Projects', view: 'projects' });
     if (teamItems.length) items.push({ key: 'team', label: 'Team', dropdown: teamItems, matches: teamItems.map(t => t.view) });

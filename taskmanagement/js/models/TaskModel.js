@@ -155,6 +155,17 @@ App.TaskModel = class TaskModel {
     // `t.due &&`: due === '' must not read as overdue ('' < any ISO date).
     else if (view === 'overdue') tasks = tasks.filter(t => t.due && t.due < t0 && !App.taxonomy.isDone(t));
     else if (view === 'watching') tasks = tasks.filter(t => (t.watchers || []).includes(currentUser));
+    // Stuck: the Stuck status or an "I'm stuck" flag (task.stuck, migration 063), unless done.
+    else if (view === 'stuck') tasks = tasks.filter(t => !App.taxonomy.isDone(t) && (t.status === 'hold' || !!t.stuck));
+    // Ops cockpit. In review = ops verifies the update, proof or next step before it moves on.
+    else if (view === 'review') tasks = tasks.filter(t => !App.taxonomy.isDone(t) && t.status === 'review');
+    // Open work nobody has touched today (activity, creation, or an update in the thread).
+    else if (view === 'noupdate') tasks = tasks.filter(t => t.id !== clockTaskId && !App.taxonomy.isDone(t) && App.hqDateOf(App.taskTouchedAt(t)) < t0);
+    // Finished in the last 7 days, by completion time.
+    else if (view === 'recent') {
+      const since = App.utils.todayISO(-6);
+      tasks = tasks.filter(t => App.taxonomy.isDone(t) && t.completedAt && App.hqDateOf(t.completedAt) >= since);
+    }
     else if (view.startsWith('company:')) {
       const c = view.split(':')[1];
       tasks = tasks.filter(t => App.utils.taskInCompany(t, c));
@@ -484,4 +495,25 @@ App.TaskModel = class TaskModel {
     this._markDirty(taskId);
     App.EventBus.emit('tasks:changed');
   }
+};
+
+/* Ops cockpit helpers. HQ calendar date of an instant, so "today" means the same day for everyone. */
+App.hqDateOf = function hqDateOf(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: App.HQ_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  } catch (e) { return d.toISOString().slice(0, 10); }
+};
+
+/* When a task was last touched: the newest of its activity, its creation, and any update posted
+   in its thread. Thread posts don't write task.activity, so App.commentTouch (task id -> newest
+   comment time) is filled from the recent-comments feed and on every post. */
+App.taskTouchedAt = function taskTouchedAt(t) {
+  let latest = String((t && t.createdAt) || '');
+  (t && t.activity || []).forEach(a => { if (a && a.at && String(a.at) > latest) latest = String(a.at); });
+  const c = App.commentTouch && t && App.commentTouch[t.id];
+  if (c && String(c) > latest) latest = String(c);
+  return latest;
 };

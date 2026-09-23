@@ -183,6 +183,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Resolve the user's accessible companies + active company before any view
   // renders, so the first paint is already company-scoped.
   controller.initCompanyContext();
+  // Prime "last update" times from the recent thread posts (one small RLS-scoped query).
+  controller.loadRecentComments();
 
   // Expose models on App for console debugging (read-only contract — don't
   // mutate from console in production, but inspect freely).

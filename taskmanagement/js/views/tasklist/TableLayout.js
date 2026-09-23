@@ -77,7 +77,14 @@
     const lblLabel = App.taxonomy.labelLabel(t.company, lblKey);
     const lblColor = (App.taxonomy.color && App.taxonomy.color('label', t.company, lblKey, t.type)) || '#8a857e';
     const isDone = App.taxonomy.isDone(t);
-    const isStuck = statusKey === 'hold' && !isDone;
+    const isStuck = !isDone && (statusKey === 'hold' || !!t.stuck);
+    // Name the blocker on the row itself, so it isn't only visible after opening the task.
+    const stuckOn = t.stuck && t.stuck.on ? (App.directory.person(t.stuck.on) || { name: t.stuck.on }).name : '';
+    const stuckText = stuckOn ? `STUCK · blocked on ${stuckOn}` : 'STUCK';
+    const stuckTip = t.stuck && t.stuck.reason ? t.stuck.reason : '';
+    // What changed last: the newest activity entry, shown muted under the title of open work.
+    const lastAct = isDone ? null : (t.activity || []).reduce((a, b) => (!a || String(b && b.at || '') > String(a.at || '')) ? b : a, null);
+    const lastWhen = lastAct ? App.utils.timeAgo(lastAct.at) : '';
     const selected = view.controller.uiState.selectedTaskId === t.id;
     const bulkSel = view.controller.isBulkSelected(t.id);
     const canWrite = App.can('tasks.write');
@@ -136,7 +143,8 @@
       <span class="qt-pdot ${priority.cls}" title="${esc(priority.label)}"></span>
       <div class="qt-tcell">
         <span class="qt-ttitle">${esc(t.title)}${subCount ? `<span class="qt-steps">${subDone}/${subCount}</span>` : ''}</span>
-        ${isStuck ? `<div><span class="qt-stuckbadge"><i class="ti ti-alert-hexagon"></i>STUCK · ${esc(stLabel)}</span></div>` : ''}
+        ${isStuck ? `<div><span class="qt-stuckbadge"${stuckTip ? ` title="${esc(stuckTip)}"` : ''}><i class="ti ti-alert-hexagon"></i>${esc(stuckText)}</span></div>` : ''}
+        ${lastAct && lastAct.what ? `<div class="qt-lastupd" title="${esc(`${lastAct.who || ''} ${lastAct.what}`.trim())}"><b>${esc(lastAct.who || 'Someone')}</b> ${esc(lastAct.what)}${lastWhen ? ` · ${esc(lastWhen)}` : ''}</div>` : ''}
       </div>
       <div class="qt-cell-status">${canWrite
         ? `<button class="qt-cellbtn status-${statusKey}" data-action="open-status" data-current="${statusKey}" title="Change status" aria-haspopup="listbox" aria-expanded="false"><span class="dot"></span><span class="nm">${esc(stLabel)}</span><span class="chv"><i class="ti ti-chevron-down"></i></span></button>`
@@ -308,6 +316,8 @@
   }
 
   layouts.table = {
+    // Exposed for tests only: the row builder is pure apart from `view`.
+    _qtRow: qtRow,
     // Once-per-session wiring for the STATIC .list-header filter buttons
     // (app.html) — they exist only while the Table layout is shown, but the
     // elements persist in the DOM, so guard against re-binding on re-mount.

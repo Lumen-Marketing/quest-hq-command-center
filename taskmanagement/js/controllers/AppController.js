@@ -624,6 +624,10 @@ App.AppController = class AppController {
       hot: count('hot'),
       today: count('today'),
       overdue: count('overdue'),
+      stuck: count('stuck'),
+      review: count('review'),
+      noupdate: count('noupdate'),
+      recent: count('recent'),
       watching: count('watching'),
     };
   }
@@ -720,7 +724,19 @@ App.AppController = class AppController {
       this._recentComments = this._recentComments || [];
     }
     this._recentCommentsAt = now;
+    this._indexCommentTouch(this._recentComments);
     return this._recentComments;
+  }
+
+  // Newest thread post per task, for the "No update today" view. Re-filters only when it changed.
+  _indexCommentTouch(list) {
+    const next = Object.assign({}, App.commentTouch || {});
+    (list || []).forEach(c => {
+      if (c && c.taskId && c.createdAt && String(c.createdAt) > String(next[c.taskId] || '')) next[c.taskId] = c.createdAt;
+    });
+    if (JSON.stringify(next) === JSON.stringify(App.commentTouch || {})) return;
+    App.commentTouch = next;
+    App.EventBus.emit('tasks:changed');
   }
 
   // Lazy-load a task's comments into task.comments, then re-render the detail.
@@ -755,6 +771,7 @@ App.AppController = class AppController {
     t.comments = t.comments || [];
     t.comments.push(saved);
     t._commentsLoaded = true;
+    this._indexCommentTouch([{ taskId, createdAt: (saved && saved.createdAt) || new Date().toISOString() }]);
     this._notifyComment(t, text, mentions || []);
     App.EventBus.emit('comments:changed', taskId);
   }

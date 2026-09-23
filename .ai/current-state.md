@@ -2,6 +2,67 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 Ops cockpit views, clearer task rows and a calmer notification bell
+
+The operating model is team → ops review (Alexia) → escalate to the owner only when needed. The
+task app now gives the reviewer the views for that, all built from existing data with no schema,
+permission or delivery change:
+
+- **Task rows:** the STUCK badge names who the task is blocked on, with the reason on hover, and
+  also covers tasks flagged "I'm stuck". Each open task shows its latest change muted under the
+  title ("Kristin uploaded the agreement · 2h ago"). `tests/task-row-visibility.test.mjs`.
+- **Cockpit views** in the Tasks menu, mobile drawer and bottom nav, with counts and top-bar titles:
+  - Needs review: open tasks in the In review status. The header says it means ops verifies the
+    update, proof or next step.
+  - No update today: open tasks whose newest activity, creation or thread post is before today in
+    HQ time. Thread posts don't write `task.activity`, so `App.commentTouch` is filled from the
+    existing recent-comments query (primed at boot, cached 60s) and on every post.
+  - Recently completed: done within the last 7 days by `completed_at`.
+  - Stuck, Today and Overdue already existed, and group-by-assignee covers "by owner".
+  - `tests/task-ops-cockpit.test.mjs`.
+- **Notification bell (Questbase host):** back-to-back identical notifications (one edit fanned
+  out several times) collapse into one row with a ×N count, and 12 distinct items show instead of
+  12 copies. The meta line drops the generic "Inbox" label and is lighter. Display only: rows,
+  read state and delivery are unchanged, so the unread badge still counts every copy.
+  `tests/notification-grouping.test.mjs`.
+
+Task setup for Quest Roofing was also changed in the app (data, not code): types renamed to Lead /
+Follow-up, Invoice / Payment and Software / Web, a Job / Field Work type added (key `field_work`),
+and every type now runs Pending (default) → Working on it → Stuck → In review → Done.
+
+## 2026-09-23 A Stuck view shows every blocked task in one place
+
+The task app could already mark work blocked, either with the Stuck status or the "I'm stuck"
+flag (`task.stuck`: reason, blocked-on person, time; migration 063). But finding blocked work
+meant scanning the whole list for the red STUCK badge. A **Stuck** quick view now sits beside
+Urgent, Today and Overdue in the Tasks menu, the mobile drawer and the bottom nav, with a live
+count. It lists open tasks in the Stuck status or flagged stuck; done work never appears. The
+header reads "Blocked: needs help or a decision". No schema change: `TaskModel.getFiltered` gains
+a `stuck` view and `badgeCounts` a `stuck` count. Covered by `tests/task-stuck-view.test.mjs`.
+
+## 2026-09-23 Task copy steers updates toward what happened, what's next, blockers and proof
+
+The owner could not see what was happening across people and jobs without chasing everyone,
+partly because the task app never asked for it. Copy only, no schema or behavior change:
+
+- New/edit task description placeholder: "What needs to happen? Include details, location,
+  client, photos needed, or next step."
+- Update composer: "What happened? What's next? Blocked by anything? Paste a photo/proof link.
+  @mention to notify." The empty thread says the same. The stuck prompt now asks what decision
+  or help is needed.
+- Attachments in updates are still not built. The paperclip now says so and tells people to
+  paste a photo or file link instead.
+- Questbase now uses the task app's status words (Working on it, Stuck, In review) instead of
+  To do / On hold / Review, and lists statuses Pending first.
+- Questbase knows a `field_work` type ("Job / Field Work"), and the type labels match the new
+  names (Lead / Follow-up, Bid / Estimate, Invoice / Payment, Software / Web). The real type and
+  status rows are per company in `task_types` / `task_type_statuses` and are renamed, added and
+  reordered in the task app's Task setup screen. Without `field_work` in `TASK_TYPES`, a task
+  saved through a host path (native Tasks, Quick Create, recycle restore) would fall back to
+  `admin`.
+
+Covered by `tests/task-visibility-copy.test.mjs`.
+
 ## 2026-09-23 Operational health map on the dashboard
 
 The owner needs to see where everything stands without reading every task. The Executive and

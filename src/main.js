@@ -1619,9 +1619,9 @@ function persistDealStages() { DEAL_STAGES = DEAL_STAGES.filter((stage) => stage
 const ACCOUNT_TYPES = ['Customer', 'Prospect', 'Partner', 'Vendor'];
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task', 'stage_change', 'system'];
 const JOB_TABS = ['list', 'calendar', 'pipeline', 'profile'];
-const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
+const TASK_STATUSES = ['pending', 'todo', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
-const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
+const TASK_TYPES = ['lead', 'bid', 'field_work', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
 const CALENDAR_EVENT_TYPES = ['Company event', 'Job visit / inspection', 'Estimate appointment', 'Install / field work', 'Internal meeting', 'Personal reminder'];
 const CALENDAR_FILTER_TYPES = ['Task due', 'Invoice due', 'Approval', 'Time'].concat(CALENDAR_EVENT_TYPES);
 const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
@@ -5867,19 +5867,40 @@ function renderNotificationCenter(companyId) {
           <button type="button" data-action="mark-all-notifications-read" ${unreadCount ? '' : 'disabled'}>Mark all read</button>
         </div>
         <div class="notification-list">
-          ${notifications.slice(0, 12).map((item) => renderNotificationItem(item)).join('') || emptyState('No notifications yet.')}
+          ${groupRepeatedNotifications(notifications).slice(0, 12).map((item) => renderNotificationItem(item)).join('') || emptyState('No notifications yet.')}
         </div>
       </div>
     </div>
   `;
 }
 
+// Display only: back-to-back notifications with the same type, title and text (one edit
+// fanned out several times) collapse into one row with a count. The row is unread if any copy
+// is, and opens the newest copy. Delivery and stored rows are untouched.
+function groupRepeatedNotifications(list = []) {
+  const groups = [];
+  list.forEach((item) => {
+    const last = groups[groups.length - 1];
+    if (last && last.type === item.type && last.title === item.title && last.body === item.body) {
+      last.repeat += 1;
+      if (!item.read_at) last.read_at = null;
+      return;
+    }
+    groups.push({ ...item, repeat: 1 });
+  });
+  return groups;
+}
+
 function renderNotificationItem(item) {
+  // "Inbox" is the fallback type label and says nothing, so only specific types are named.
+  const typeLabel = notificationTypeLabel(item.type);
+  const meta = [typeLabel === 'Inbox' ? '' : typeLabel, item.title, timeAgo(item.created_at)].filter(Boolean).join(' · ');
+  const repeat = item.repeat > 1 ? ` <em class="notification-repeat" title="${h(String(item.repeat))} identical notifications">×${h(String(item.repeat))}</em>` : '';
   return `
     <button class="notification-item ${item.read_at ? 'read' : 'unread'}" type="button" data-action="open-notification" data-notification-id="${h(item.id)}">
       <span></span>
       <div>
-        <small>${h(notificationTypeLabel(item.type))} - ${h(item.title)} - ${h(timeAgo(item.created_at))}</small>
+        <small>${h(meta)}${repeat}</small>
         <strong>${h(item.body)}</strong>
       </div>
     </button>
@@ -47616,23 +47637,24 @@ function compactUnique(values) {
 
 function statusLabel(status) {
   return {
-    todo: 'To do',
+    todo: 'Working on it',
     pending: 'Pending',
-    hold: 'On hold',
-    review: 'Review',
+    hold: 'Stuck',
+    review: 'In review',
     done: 'Done',
   }[status] || titleCase(status);
 }
 
 function taskTypeLabel(type) {
   return {
-    lead: 'Lead',
-    bid: 'Bid',
+    lead: 'Lead / Follow-up',
+    bid: 'Bid / Estimate',
+    field_work: 'Job / Field Work',
     admin: 'Admin',
-    invoicing: 'Invoicing',
+    invoicing: 'Invoice / Payment',
     ar: 'AR',
     meeting: 'Meeting',
-    web_dev: 'Web dev',
+    web_dev: 'Software / Web',
   }[type] || titleCase(type);
 }
 

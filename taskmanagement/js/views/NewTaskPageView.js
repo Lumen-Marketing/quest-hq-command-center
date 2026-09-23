@@ -169,7 +169,7 @@ App.NewTaskPageView = class NewTaskPageView {
 
             <div class="nt-sec" data-sec="detail">
               <div class="nt-sec-h"><span class="nt-n">03</span><span class="nt-t">Detail</span><span class="nt-sop-note" id="nt-sop-note" aria-live="polite"></span></div>
-              <textarea id="nt-desc" class="nt-desc" placeholder="Add context, links, scope…" aria-label="Description"></textarea>
+              <textarea id="nt-desc" class="nt-desc" placeholder="What needs to happen? Include details, location, client, photos needed, or next step." aria-label="Description"></textarea>
               <div class="nt-sublist" id="nt-subtasks"></div>
               <div class="nt-chkrow">
                 <input id="nt-subtask-input" placeholder="Add a checklist step, press Enter" />

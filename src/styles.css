@@ -2028,7 +2028,20 @@ button { cursor: pointer; }
 .notification-item small {
   margin-bottom: 5px;
   font-size: 11px;
-  font-weight: 950;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* "×5": identical notifications collapsed into one row (groupRepeatedNotifications). */
+.notification-item .notification-repeat {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  color: inherit;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .notification-item strong {
