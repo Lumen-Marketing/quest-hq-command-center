@@ -1079,9 +1079,9 @@ const DASHBOARD_RANGE_OPTIONS = [
   ['quarter', 'Quarter'],
 ];
 const DASHBOARD_WIDGET_DEFAULTS = {
-  exec: ['calls', 'kpis', 'avgTicket', 'revGrowth', 'goalPacing', 'leaderboard', 'backlog', 'pipelineCoverage', 'jobs', 'revenue', 'reviews'],
+  exec: ['calls', 'health', 'kpis', 'avgTicket', 'revGrowth', 'goalPacing', 'leaderboard', 'backlog', 'pipelineCoverage', 'jobs', 'revenue', 'reviews'],
   sales: ['calls', 'kpis', 'leaderboard', 'callsTrend', 'sources', 'funnel', 'speed'],
-  ops: ['calls', 'jobs', 'dispatch', 'weather', 'kpis', 'revenue'],
+  ops: ['calls', 'health', 'jobs', 'dispatch', 'weather', 'kpis', 'revenue'],
   scale: ['pipelineCoverage', 'utilization', 'quota', 'dso', 'concentration', 'serviceMix', 'scorecard'],
   eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
 };
@@ -6607,7 +6607,7 @@ function loadDashboardWidgetRegistry() {
   if (!dashboardWidgetRegistryPending) {
     dashboardWidgetRegistryPending = import('./home/widget-registry.js').then((mod) => {
       dashboardWidgetRegistryModule = mod.createWidgetRegistry({
-        accountName, companyFinanceInvoices, companyTasks, dashboardJobsParts, renderModalShell, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardHorizontalBars, renderDashboardJobsWidget, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
+        accountName, companyFinanceInvoices, companyTasks, dashboardJobsParts, renderModalShell, renderOperationalHealthMap, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardHorizontalBars, renderDashboardJobsWidget, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
       });
       return dashboardWidgetRegistryModule;
     }).catch((error) => {
@@ -8679,6 +8679,72 @@ function dashboardMetricTile(icon, value, label, sub = '') {
       </span>
     </div>
   `;
+}
+
+// ---- Operational health map --------------------------------------------------
+// One calm container per operational workspace, with a health level and a few counts, so the
+// owner sees where work stands without reading tasks. Existing task fields only.
+const OPERATIONAL_HEALTH_LEVELS = {
+  stuck: { label: 'Stuck', icon: 'ti-alert-triangle' },
+  urgent: { label: 'Urgent', icon: 'ti-bolt' },
+  review: { label: 'Needs review', icon: 'ti-eye-check' },
+  watch: { label: 'Watch', icon: 'ti-eye' },
+  good: { label: 'Good', icon: 'ti-circle-check' },
+  quiet: { label: 'No open work', icon: 'ti-moon' },
+};
+
+// Pure: `today` is a YYYY-MM-DD key and `dateKey` turns an instant into one, so tests pin both.
+function operationalHealth(tasks = [], today = isoDate(0), dateKey = (ts) => localDateKey(new Date(ts))) {
+  const open = tasks.filter((task) => task.status !== 'done' && !task.cleared_at);
+  const touched = (task) => {
+    let latest = String(task.created_at || '');
+    (task.activity || []).forEach((entry) => { if (entry?.at && String(entry.at) > latest) latest = String(entry.at); });
+    return latest;
+  };
+  const counts = {
+    open: open.length,
+    stuck: open.filter((task) => task.status === 'hold' || task.stuck).length,
+    overdue: open.filter((task) => task.due && task.due < today).length,
+    urgent: open.filter((task) => task.priority === 'critical' || task.priority === 'urgent').length,
+    review: open.filter((task) => task.status === 'review').length,
+    dueToday: open.filter((task) => task.due === today).length,
+    noUpdate: open.filter((task) => { const at = touched(task); return !at || dateKey(at) < today; }).length,
+  };
+  const level = !counts.open ? 'quiet'
+    : counts.stuck ? 'stuck'
+      : (counts.overdue || counts.urgent) ? 'urgent'
+        : counts.review ? 'review'
+          : (counts.dueToday || counts.noUpdate) ? 'watch'
+            : 'good';
+  return { ...counts, level };
+}
+
+function renderOperationalHealthMap(companyId) {
+  const workspaces = allowedOperationalWorkspaces(companyId);
+  if (!workspaces.length) return dashboardEmptyNote('No operational workspaces yet.');
+  const defaultId = defaultOperationalWorkspaceId(companyId);
+  const tasks = (state.tasks || []).filter((task) => task.company_id === canonicalCompanyId(companyId));
+  const signal = (count, label) => (count ? `<li><b>${h(String(count))}</b>${h(label)}</li>` : '');
+  return `
+    <div class="health-map">
+      ${workspaces.map((workspace) => {
+        const health = operationalHealth(tasks.filter((task) => recordBelongsToWorkspace(task, workspace.id, defaultId)));
+        const level = OPERATIONAL_HEALTH_LEVELS[health.level];
+        const signals = [
+          signal(health.stuck, 'stuck'), signal(health.overdue, 'overdue'), signal(health.urgent, 'urgent'),
+          signal(health.review, 'in review'), signal(health.dueToday, 'due today'), signal(health.noUpdate, 'no update today'),
+        ].join('');
+        return `
+          <a class="health-zone health-${h(health.level)}" href="${appHref(companyPath('tasks', { workspace: workspace.id }, companyId))}" data-router>
+            <div class="health-zone-head">
+              <strong>${h(workspace.name || 'Workspace')}</strong>
+              <span class="health-level"><i class="ti ${h(level.icon)}"></i>${h(level.label)}</span>
+            </div>
+            <div class="health-zone-open"><b>${h(String(health.open))}</b> open</div>
+            ${signals ? `<ul class="health-signals">${signals}</ul>` : `<p class="health-calm">${health.open ? 'Moving. Nothing stuck or late.' : 'Nothing open here.'}</p>`}
+          </a>`;
+      }).join('')}
+    </div>`;
 }
 
 function renderDashboardLeaderboard(companyId, ctx) {
@@ -12606,9 +12672,16 @@ function renderJobEditor(companyId, job) {
   return questLoader('Loading job form');
 }
 
+// Embedded TaskManagement stays the default. ?task_ui=native opts in for a platform admin or an
+// active company Owner/Admin -- a view choice only: native reads and writes the same
+// public.tasks rows through normalizeTask/taskPayload, and RLS still scopes every one.
 function nativeTasksModuleEnabled(route) {
-  return CONFIG.nativeTasksModule
-    || (state.platformAdmin === true && route?.params?.get('task_ui') === 'native');
+  if (CONFIG.nativeTasksModule) return true;
+  if (route?.params?.get('task_ui') !== 'native') return false;
+  if (state.platformAdmin === true) return true;
+  const profile = activeSession()?.profile;
+  const membership = profile ? membershipForProfile(route.companyId || activeCompanyId(), profile.id) : null;
+  return membership?.status === 'active' && ['owner', 'admin'].includes(String(membership.role).toLowerCase());
 }
 
 function taskPath(params = {}, companyId = activeCompanyId()) {
@@ -12679,6 +12752,12 @@ function renderEmbeddedTasksPage(route, companyId) {
 
   const params = new URLSearchParams({ embed: '1' });
   params.set('workspace_id', workspaceId);
+  // The task app's own gate reads the legacy profiles.role, which defaults to 'member' --
+  // a value it grants nothing. Hand it the workspace task permission instead -- the same
+  // keys the tasks RLS policies check, so this only unlocks the UI the database allows.
+  const taskAccess = can('tasks.manage', companyId, workspaceId) ? 'manage'
+    : (can('tasks.view', companyId, workspaceId) ? 'view' : '');
+  if (taskAccess) params.set('task_access', taskAccess);
   if (job) params.set('project_id', job.id);
   params.set('return_url', window.location.href);
   // Forward CC's deep-link params to the task app's own hash routes so every
@@ -43775,6 +43854,9 @@ function normalizeTask(input) {
     urgency: TASK_PRIORITIES.includes(String(input.urgency || '').toLowerCase()) ? String(input.urgency).toLowerCase() : priority,
     status,
     watchers: Array.isArray(input.watchers) ? input.watchers : [],
+    // "I'm stuck" flag from the task app ({ reason, on, at }, migration 063). Read-only here:
+    // taskPayload does not send it, so a host save never clears it.
+    stuck: input.stuck && typeof input.stuck === 'object' ? input.stuck : null,
     subtasks: Array.isArray(input.subtasks) ? input.subtasks : [],
     activity: Array.isArray(input.activity) ? input.activity : [],
     cleared_at: input.cleared_at || null,
