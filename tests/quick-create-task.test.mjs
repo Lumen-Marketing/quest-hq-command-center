@@ -110,7 +110,8 @@ test('saving goes through the one shared writer, so it lands in My Tasks', () =>
   const fn = task.slice(task.indexOf('async function createTaskFromRecord'));
   assert.ok(fn.includes('wbCreateTaskFromPost(companyId'), "the record modal writes its own task row");
   assert.ok(fn.includes('contactId: seed.contactId'), "the contact link is dropped on the way");
-  const writer = main.slice(main.indexOf('async function wbCreateTaskFromPost'), main.indexOf('async function wbCreateTaskFromPost') + 1500);
+  const writerAt = main.indexOf('async function wbCreateTaskFromPost');
+  const writer = main.slice(writerAt, main.indexOf('\n}\n', writerAt));
   assert.ok(writer.includes("requirePermission('tasks.manage'"));
   assert.ok(writer.includes("client.from('tasks').insert(taskPayload(task))"));
   assert.ok(writer.includes('notifyTaskChange(saved)'), "the assignee is never told");
@@ -203,6 +204,10 @@ test("who will work on it is asked on the modal, from the company's own people",
   const modal = task.slice(task.indexOf('function renderRecordTaskModal'), task.indexOf('function noteOnRecord'));
   assert.ok(modal.includes('<option value="">Me</option>'), "an unassigned task belongs to nobody");
   assert.ok(modal.includes('wbMembers(companyId)'));
-  const writer = main.slice(main.indexOf('async function wbCreateTaskFromPost'), main.indexOf('async function wbCreateTaskFromPost') + 1200);
-  assert.ok(writer.includes('assignee_id: assigneeId || creatorId'), 'blank would save an unassigned task');
+  const writerAt = main.indexOf('async function wbCreateTaskFromPost');
+  const writer = main.slice(writerAt, main.indexOf('\n}\n', writerAt));
+  // Blank is Me; a chosen person is translated from their profile id to the roster id the
+  // tasks table stores (tests/task-assignee-identity.test.mjs pins the translation itself).
+  assert.ok(writer.includes('assigneeId ? taskAssigneeId(assigneeId, companyId) : creatorId'), 'blank would save an unassigned task');
+  assert.ok(writer.includes('assignee_id: rosterAssigneeId'));
 });

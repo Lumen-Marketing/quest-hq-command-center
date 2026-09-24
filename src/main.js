@@ -42,6 +42,7 @@ import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscri
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { INACTIVE_COMPANY_STATUSES, filterCompanyRows, paginate } from './platform-directory.js';
 import { computeTeamWorkload } from './data/team-workload.js';
+import { resolveTaskAssigneeId } from './tasks/task-assignees.js';
 import { addRecordLabel, newRecordLabel, singularize } from './workspace/naming.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
@@ -6306,7 +6307,7 @@ function loadRenderTeamWorkloadPage() {
   if (!renderTeamWorkloadPagePending) {
     renderTeamWorkloadPagePending = import('./team/workload-page.js').then((mod) => {
       renderTeamWorkloadPageModule = mod.createTeamWorkloadPage({
-        appHref, companyAccessUsers, companyPath, companyTasks, emptyState, h, state,
+        appHref, companyPath, companyTaskAssignees, companyTasks, emptyState, h, state,
       });
       return renderTeamWorkloadPageModule;
     }).catch((error) => {
@@ -10813,14 +10814,7 @@ function companyTaskAssignees(companyId = activeCompanyId()) {
 }
 
 function taskAssigneeId(value, companyId = activeCompanyId()) {
-  const needle = String(value || '').trim().toLowerCase();
-  if (!needle) return '';
-  const assignee = companyTaskAssignees(companyId).find((member) => (
-    [member.id, member.profile_id, member.member_id, member.name, member.full_name, member.email]
-      .filter(Boolean)
-      .some((candidate) => String(candidate).trim().toLowerCase() === needle)
-  ));
-  return assignee?.id || '';
+  return resolveTaskAssigneeId(value, companyTaskAssignees(companyId));
 }
 
 async function createContactTask(contactId, taskInput) {
@@ -14762,7 +14756,7 @@ function wbFeedPost(companyId, workspace, post) {
   const liked = myId && post.likes.includes(myId);
   const body = wbFeedPostBody(companyId, post);
   const taskChip = post.task && post.task.title
-    ? `<div class="wb-post-task"><i class="ti ti-circle-check" aria-hidden="true"></i><span>${h(post.task.title)}</span>${post.task.assigneeId ? `<em>· ${h(wbMemberById(companyId, post.task.assigneeId).name)}</em>` : ''}${post.task.dueDate ? `<em>· due ${h(post.task.dueDate)}</em>` : ''}</div>`
+    ? `<div class="wb-post-task"><i class="ti ti-circle-check" aria-hidden="true"></i><span>${h(post.task.title)}</span>${post.task.assigneeId ? `<em>· ${h(memberName(post.task.assigneeId))}</em>` : ''}${post.task.dueDate ? `<em>· due ${h(post.task.dueDate)}</em>` : ''}</div>`
     : '';
   const acts = (mine || canManage)
     ? `<span class="wb-post-menu"><button class="wb-post-act" type="button" data-wb-post-del="${h(post.id)}" title="Delete post"><i class="ti ti-trash" aria-hidden="true"></i></button></span>`
@@ -15955,6 +15949,11 @@ async function wbCreateTaskFromPost(companyId, { title, assigneeId, due, body, c
   if (!requirePermission('tasks.manage', companyId, 'Your role cannot create tasks.', 'Workspaces')) return null;
   const creatorId = activeTaskCreatorId(companyId);
   if (!creatorId) { showToast('Your profile is missing a task creator ID.', 'error', 'Tasks'); return null; }
+  // The pickers that call this (record New task, post composer, activity task) list people by
+  // profile id; tasks.assignee_id only accepts the roster id. Translate, and refuse rather than
+  // write an id the foreign key will reject.
+  const rosterAssigneeId = assigneeId ? taskAssigneeId(assigneeId, companyId) : creatorId;
+  if (!rosterAssigneeId) { showToast('That person cannot be assigned tasks yet.', 'error', 'Tasks'); return null; }
   const task = normalizeTask({
     ...blankTask(companyId),
     id: `task-${crypto.randomUUID()}`,
@@ -15962,7 +15961,7 @@ async function wbCreateTaskFromPost(companyId, { title, assigneeId, due, body, c
     title: String(title || 'Follow-up from workspace post').slice(0, 140),
     description: body || '',
     creator_id: creatorId,
-    assignee_id: assigneeId || creatorId,
+    assignee_id: rosterAssigneeId,
     // Only when there is one: blankTask already supplies '', and writing an empty string over
     // it would be the same value with a worse name.
     ...(contactId ? { contact_id: contactId } : {}),
@@ -36129,6 +36128,10 @@ async function saveTask(form) {
     contact_id: linkedContact?.id || linkedJob?.contact_id || linkedDeal?.primary_contact_id || '',
     deal_id: linkedDeal?.id || linkedJob?.deal_id || '',
     creator_id: previous?.creator_id || creatorId,
+    // The command palette's picker lists people by profile id; tasks.assignee_id takes the roster
+    // id. A value that resolves is translated; one that does not (a legacy assignee no longer in
+    // the active list) is kept as it was, so editing an old task never reassigns it.
+    ...(formData.assignee_id ? { assignee_id: taskAssigneeId(formData.assignee_id, companyId) || String(formData.assignee_id) } : {}),
     urgency: formData.priority || 'medium',
     watchers: previous?.watchers || [],
     subtasks: previous?.subtasks || [],

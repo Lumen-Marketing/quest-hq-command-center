@@ -1,5 +1,32 @@
 # Known issues and risks
 
+## Task identity: one roster id can belong to several logins (structural, migration pending)
+
+`tasks.assignee_id` / `creator_id`, the task RLS policies (`current_member_id()`), comments,
+reactions, timers and notifications all key a person by `profiles.member_id` -> `team_members.id`,
+a slug of the email local part. Production's `handle_new_user` has no collision suffix and no
+unique index guards `profiles.member_id`, so every `info@` login shares `info` (verified
+2026-09-23: `info@questroofing.com`, `info@questconstruction.com` and
+`info@lumenmarketingusa.com`), and `sync_team_member_from_profile` lets the last-updated profile
+overwrite the shared roster row's name, email, `active` and `company_ids`. Those logins can read
+and edit each other's tasks inside shared workspaces. The UI stabilization of 2026-09-23 counts
+work under a shared id on one "Shared login" row rather than crediting a person, and translates
+profile ids to roster ids before writing; it does not fix the model. The fix is a trigger change,
+a split of the shared id, then a unique index — each needs explicit approval. Record history
+(`record_history.actor_profile_id`) is profile-keyed and is the evidence for attributing any
+historical `info` row: all three `info` tasks in Quest Roofing were created by the Lumen login.
+
+## "Needs review" means status only; the review/approval contract is undefined
+
+Documented, deliberately unchanged. Three surfaces use three definitions:
+- Task app **Needs review** view (#21): open tasks whose status is `review` (In review).
+- Operational **health map**: counts `review` only.
+- Questbase **Approvals** (`approvalItems`) and the operations task metrics: `review` **and**
+  `pending`. `pending` is the default status, so every new task appears there as "Task review".
+None of them records who must review, who approved, when, or against what evidence. Do not widen
+or narrow any of them until the product defines the review/approval contract (reviewer, approver,
+decision owner, required proof, outcome).
+
 ## The in-app company delete may abort on the system-role guard (unverified)
 
 Found by reading, not reproduced. `delete_company_workspace` deletes the company row and lets

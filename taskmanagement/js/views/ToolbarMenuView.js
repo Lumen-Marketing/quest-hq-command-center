@@ -73,6 +73,25 @@ App.ToolbarMenuView = class ToolbarMenuView {
     if (this._handle) this._handle.close('api');
   }
 
+  /* The ops cockpit views (Stuck, Needs review, No update today, Recently
+     completed) live in the sidebar, which Questbase hides when it embeds this
+     app -- so inside Questbase they had no way in. There they are offered in
+     the More menu instead, with the sidebar's own counts, plus "All tasks" as
+     the way back out. Standalone, the sidebar already carries them: nothing. */
+  _cockpitViews() {
+    if (!document.body.classList.contains('embedded-in-job-center')) return [];
+    const canView = (v) => this.controller.canView(v);
+    const c = this.controller.badgeCounts() || {};
+    const current = this.controller.uiState && this.controller.uiState.view;
+    const views = [];
+    if (App.can('tasks.view')) views.push({ view: 'all', label: 'All tasks', icon: 'ti-list-check' });
+    if (canView('stuck'))    views.push({ view: 'stuck',    label: 'Stuck',              icon: 'ti-alert-hexagon', count: c.stuck || null });
+    if (canView('review'))   views.push({ view: 'review',   label: 'Needs review',       icon: 'ti-eye-check',     count: c.review || null });
+    if (canView('noupdate')) views.push({ view: 'noupdate', label: 'No update today',    icon: 'ti-message-off',   count: c.noupdate || null });
+    if (canView('recent'))   views.push({ view: 'recent',   label: 'Recently completed', icon: 'ti-circle-check' });
+    return views.map(v => ({ ...v, active: v.view === current }));
+  }
+
   _items() { return this.menu ? [...this.menu.querySelectorAll('.toolbar-menu-item')] : []; }
 
   _focusItem(idx, preferActive) {
@@ -217,13 +236,28 @@ App.ToolbarMenuView = class ToolbarMenuView {
         ...(canClear ? [{ key: 'clear', label: 'Clear done', icon: 'ti-eraser' }] : []),
         { key: 'export', label: 'Export',        icon: 'ti-download' },
       ];
+      const views = this._cockpitViews();
       this.menu.innerHTML = `
+        ${views.length ? `
+          <div class="toolbar-menu-title">Views</div>
+          ${views.map(v => `
+            <div class="toolbar-menu-item${v.active ? ' active' : ''}" data-cockpit-view="${v.view}">
+              <i class="ti ${v.icon}"></i><span>${v.label}</span>${v.count ? `<b class="toolbar-menu-count">${v.count}</b>` : ''}
+            </div>`).join('')}
+          <div class="toolbar-menu-sep"></div>` : ''}
         <div class="toolbar-menu-title">More</div>
         ${rows.map(r => `
           <div class="toolbar-menu-item" data-more="${r.key}">
             <i class="ti ${r.icon}"></i><span>${r.label}</span>
           </div>`).join('')}
       `;
+      this.menu.querySelectorAll('[data-cockpit-view]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.controller.setView(el.dataset.cockpitView);
+          this.close();
+        });
+      });
       const anchor = this.anchor;   // the More button — sub-menus re-anchor here
       this.menu.querySelectorAll('[data-more]').forEach(el => {
         el.addEventListener('click', (e) => {

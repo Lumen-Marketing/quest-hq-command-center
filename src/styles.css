@@ -35321,3 +35321,56 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   }
 }
+
+/* The 761-980px band. Below 981px the desktop sidebar is gone and the bottom tab bar is the
+   navigation (the dead-zone fix above), but the tab bar's positioning and button styling only
+   exist at 760px and below -- so between 761 and 980 it rendered as an unstyled list sitting in
+   the page, and the top bar's right side switched to a grid that wrapped the avatar onto a
+   second row. Give the band the same tab bar as phones (sized to however many buttons there
+   are, so four buttons fill the bar rather than leaving a fifth slot empty) and a one-row top
+   bar that keeps the search. */
+@media (min-width: 761px) and (max-width: 980px) {
+  .mobile-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 4px 6px max(4px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 -14px 30px rgba(15, 23, 42, .08);
+  }
+  .mobile-tabbar a,
+  .mobile-tabbar button {
+    position: relative;
+    display: grid;
+    place-items: center;
+    gap: 2px;
+    min-height: 50px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 850;
+  }
+  .mobile-tabbar i { font-size: 20px; }
+  .mobile-tabbar b {
+    position: absolute;
+    top: 4px;
+    right: 17px;
+    min-width: 17px;
+    height: 17px;
+    display: block;
+    line-height: 17px;
+    text-align: center;
+    border-radius: 999px;
+    background: var(--amber);
+    color: #111318;
+    font-size: 10px;
+  }
+  .topbar .topbar-right { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; }
+  .topbar .topbar-right .global-search { flex: 1 1 auto; min-width: 0; }
+}

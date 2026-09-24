@@ -2,6 +2,44 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-23 Tasks stabilization: identity translation, dates, cockpit reach, responsive layout
+
+A production walkthrough after the #19-#24 merges found the UI misrepresenting the current data
+model. Fixed without any database, auth or data change:
+
+- **Team Workload** keyed people by profile id while task rows hold roster ids, so every person
+  showed 0 open and Abraham appeared three times. It now builds one row per roster id from
+  `companyTaskAssignees` (`taskRosterPeople`, `src/tasks/task-assignees.js`). A roster id shared by
+  several logins (`info`) is one row named "Shared login" — its work is not credited to a person.
+- **Task creation** from the record New task modal, the post composer, the activity task modal
+  (all through `wbCreateTaskFromPost`) and the command palette (through `saveTask`) passed a profile
+  id into `tasks.assignee_id`, which the foreign key to `team_members` rejects. They now translate
+  through `taskAssigneeId`, whose matching moved into the pure `resolveTaskAssigneeId` and now
+  checks the most specific identifier first (a roster id beats someone else's display name).
+  The shared writer refuses, with a toast, a person it cannot resolve. The post card shows the
+  assignee through `memberName`, which reads roster and profile ids.
+- **Due dates** in the embedded app named the previous day west of UTC ("Sep 24" for 2026-09-25 in
+  Phoenix). Ported TaskManagementQuest b4f655e + ed074c0 (`formatDue` parses local midnight) and
+  its test.
+- **Cockpit views** (Stuck, Needs review, No update today, Recently completed) lived only in the
+  task app sidebar, which the embed hides. Inside Questbase the More (…) menu now lists them with
+  the sidebar's counts, plus All tasks as the way back. Standalone is unchanged.
+- **Menus** in the embedded app could not see a click or Escape on the Questbase page around the
+  frame; an open menu now closes when focus leaves the frame.
+- **Task table** at 721-1100px frame widths (every embedded width tested: 758, 900, 938, 1022):
+  titles drew over Status/Priority and the TASK header ran into STATUS because the fixed columns
+  (~726px) left the title no width and the inline title never ellipsized. The band uses tighter
+  columns, a 140px minimum title, drops the Label column, and lays the head widgets two-up so the
+  Focus/progress cards stop clipping. Measured on production data by injecting the CSS: no overlap,
+  no clipped card, no horizontal scroll at 758/900/938/1022; 1180 keeps the 8-column grid.
+- **761-980px shell**: the tab bar rendered as an unstyled list inside the page and the top bar
+  wrapped the avatar to a second row. The band now gets the phone tab bar (pinned, sized to its
+  button count) and a one-row top bar that keeps search.
+
+Covered by `tests/task-assignee-identity.test.mjs`, `tests/taskapp-format-due.test.mjs` and
+`tests/task-embed-stabilization.test.mjs`. Identity model and "Needs review" semantics are
+recorded in known-issues.md; neither is changed here.
+
 ## 2026-09-23 Ops cockpit views, clearer task rows and a calmer notification bell
 
 The operating model is team → ops review (Alexia) → escalate to the owner only when needed. The
