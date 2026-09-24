@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,24 @@ const migration = readFileSync(
   join(root, 'supabase', 'migrations', '202608082000_default_roles_and_roles_manage.sql'),
   'utf8',
 );
+
+// The Manager seed waits in plans/ until a migration can land (Area 1 of the roles
+// enhancement; see .ai/plans/seed-manager-role.md). Read it from supabase/migrations once it
+// lands, from .ai/plans until then — so the pin stops being enforced on neither day.
+function managerSeedMigration() {
+  const migrationsDir = join(root, 'supabase', 'migrations');
+  const landed = existsSync(migrationsDir)
+    ? readdirSync(migrationsDir, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && /seed_manager_role\.sql$/.test(entry.name))
+        .map((entry) => entry.name)
+        .sort()
+        .at(-1)
+    : undefined;
+  const file = landed
+    ? join(migrationsDir, landed)
+    : join(root, '.ai', 'plans', 'seed-manager-role.proposed.sql');
+  return readFileSync(file, 'utf8');
+}
 
 test('a new company gets Owner and Member', () => {
   const fn = migration.slice(migration.indexOf('function app_private.seed_company_default_roles'));
@@ -41,6 +59,40 @@ test("Member's permissions are the product's own preset, verbatim", () => {
   for (const forbidden of ['roles.manage', 'users.manage', 'settings.manage', 'billing.manage', 'plugins.manage', "'*'"]) {
     assert.ok(!seeded.includes(forbidden), `Member must not be granted ${forbidden}`);
   }
+});
+
+test("Manager's permissions are the product's own preset, verbatim", () => {
+  const managerMigration = managerSeedMigration();
+  const preset = main.slice(main.indexOf('  manager: ['));
+  const keys = [...preset.slice(0, preset.indexOf(']')).matchAll(/'([\w.]+)'/g)].map((m) => m[1]);
+  assert.ok(keys.length >= 30, 'expected to find ROLE_PRESETS.manager');
+  const fn = managerMigration.slice(managerMigration.indexOf('function app_private.seed_company_default_roles'));
+  const managerBlockStart = fn.indexOf("values (target_company_id, 'Manager'");
+  const managerBlock = fn.slice(managerBlockStart, fn.indexOf('end if;', managerBlockStart));
+  const seeded = managerBlock.slice(managerBlock.indexOf('from unnest(array['), managerBlock.indexOf(']) as key'));
+  for (const key of keys) {
+    assert.ok(seeded.includes(`'${key}'`), `${key} is in ROLE_PRESETS.manager but not seeded`);
+  }
+  // A Manager may run the operation but must not be able to change who anybody is, grant
+  // full access, or hold denial-level power. Manager inherits nothing by rank.
+  for (const forbidden of ['roles.manage', 'users.manage', 'settings.manage', 'billing.manage', 'plugins.manage', "'*'", "'deny'"]) {
+    assert.ok(!seeded.includes(forbidden), `Manager must not be granted ${forbidden}`);
+  }
+});
+
+test('Manager is seeded as an immutable system role, and never widens a hand-made one', () => {
+  const managerMigration = managerSeedMigration();
+  const body = managerMigration.slice(
+    managerMigration.indexOf('function app_private.seed_company_default_roles'),
+    managerMigration.indexOf('$$;'),
+  );
+  assert.match(body, /values \(target_company_id, 'Manager', '#3b82f6', 500, true, actor_id\)/);
+  // The grants happen inside the create branch, so a manager somebody already built is not
+  // topped up — the same create-only rule Member has.
+  const managerBlock = body.slice(body.indexOf('if manager_role_id is null then'));
+  assert.match(managerBlock, /insert into public\.role_permissions/, 'the grants belong inside the create branch');
+  const afterBranch = body.slice(body.lastIndexOf('end if;'));
+  assert.ok(!/insert into public\.role_permissions/.test(afterBranch), 'nothing may be granted outside it');
 });
 
 test('the seeder never widens a role somebody already built', () => {
