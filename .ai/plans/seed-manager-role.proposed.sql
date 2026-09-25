@@ -28,7 +28,13 @@ create or replace function app_private.seed_company_default_roles(
 returns void
 language plpgsql
 security definer
-set search_path to 'public', 'pg_temp'
+-- Empty on purpose. 20260901200003_harden_remaining_app_private_search_paths set this
+-- function to `search_path = ''`; `create or replace` would otherwise re-apply whatever is
+-- written here, and naming a mutable schema in a SECURITY DEFINER function hands that
+-- schema's objects to anyone who can create in it. The body below is already
+-- schema-qualified (app_private.* and public.*) so nothing needs to be resolvable, and
+-- tests/app-private-search-path-hardening.test.mjs pins that hardening.
+set search_path = ''
 as $$
 declare
   member_role_id uuid;
@@ -83,7 +89,7 @@ begin
 
   -- Same create-only rule as Member: a company that already built its own `manager` keeps it
   -- exactly as its owner configured it. Manager is elevated by capability, not by rank -- it
-  -- inherits nothing from `owner`/`admin`/`developer`, so its 35 keys are exactly what it does.
+  -- inherits nothing from `owner`/`admin`/`developer`, so its 36 keys are exactly what it does.
   -- is_system = true means only an Owner can edit or delete it, the same guard Member has.
   if manager_role_id is null then
     insert into public.roles (company_id, name, color, priority, is_system, created_by)
@@ -92,20 +98,23 @@ begin
 
     -- ROLE_PERMISSIONS.manager from src/main.js, unchanged. A manager does the work a member
     -- does and can also run the operation: jobs, tasks, files, forms, CRM, underwriter,
-    -- price book and finance read, team visibility, clock, approvals, calendar (including the
-    -- team calendar), role and workspace building, client portals. It cannot change billing or
-    -- people, and never holds `*`.
+    -- price book and finance read, team visibility, time, clock, approvals, calendar
+    -- (including the team calendar), role and workspace building, client portals. It cannot
+    -- change billing or people, and never holds `*`.
+    -- `time.track` is Member's own-hours key and `clock.manage` is the separate team-wide
+    -- dashboard; a Manager needs both, or it could approve the team's time but not log its
+    -- own. The two are distinct modules, not elevations of one another.
     insert into public.role_permissions (role_id, permission_key, effect)
     select manager_role_id, key, 'allow'
     from unnest(array[
       'jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage',
       'forms.view', 'forms.manage', 'crm.view', 'crm.manage', 'underwriter.view',
       'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view',
-      'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view', 'calendar.manage',
-      'calendar.view_team', 'users.view', 'settings.view', 'billing.view', 'roles.view',
-      'messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups',
-      'messages.attach_files', 'client_portals.view', 'client_portals.manage',
-      'workspaces.view', 'workspaces.manage'
+      'time.track', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view',
+      'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view',
+      'roles.view', 'messages.view', 'messages.send', 'messages.create_group',
+      'messages.manage_groups', 'messages.attach_files', 'client_portals.view',
+      'client_portals.manage', 'workspaces.view', 'workspaces.manage'
     ]) as key
     on conflict (role_id, permission_key) do nothing;
   end if;

@@ -8,6 +8,13 @@
 --   * system Owner role  holds `*` / allow               seed_company_default_roles
 --   * system Member role holds exactly the ROLE_PRESETS.member list from src/main.js:582,
 --     verbatim in 202608082000_default_roles_and_roles_manage.sql
+--   * system Manager role holds exactly the ROLE_PERMISSIONS.manager list from src/main.js:581,
+--     verbatim in .ai/plans/seed-manager-role.proposed.sql (NOT YET APPLIED -- see below)
+--
+-- The role checks apply to is_system roles only. A company that hand-built its own `member`
+-- or `manager` keeps it, and the seeder is create-only by design, so a hand-made role
+-- legitimately holds whatever its owner gave it. Asserting on every role named `manager`
+-- would make this probe fail on correct data.
 --
 -- Checks are sorted-set comparisons, so byte order in the live arrays cannot false-fail.
 -- Nothing is written: only SELECT and DO/exception blocks. The transaction always ends in
@@ -15,6 +22,20 @@
 -- Run as database owner (psql, `supabase db query`, or the SQL editor).
 
 begin;
+
+-- 0. The Manager contract only exists once the seed has been applied. Until then a probe
+--    that demands it is just noise, so report rather than fail.
+do $$
+declare
+  v_seeded integer;
+begin
+  select count(*) into v_seeded
+  from public.roles r
+  where r.is_system and lower(r.name) = 'manager';
+  if v_seeded = 0 then
+    raise notice 'no system Manager role exists yet; Area 1 of the roles enhancement is not applied';
+  end if;
+end $$;
 
 -- 1. Preset contract. A drift here means a NEW company would be entitled to a different
 --    set of modules than the product ships, regardless of the stored company rows.
@@ -61,6 +82,7 @@ end $$;
 
 -- 2. System-role contract across every company. The seed backfilled all companies and runs
 --    on every create, so each company must carry its two system roles with these exact keys.
+--    Manager is checked separately in 2b, and only where it already exists.
 do $$
 declare
   expected_member constant text[] := array[
@@ -106,6 +128,75 @@ begin
   limit 1;
   if v_bad is not null then
     raise exception 'system Member in company % drifted from ROLE_PRESETS.member', v_bad;
+  end if;
+end $$;
+
+-- 2b. Manager contract, once Area 1 is applied. Scoped to is_system roles for the reason in
+--     the header: a hand-made `manager` is left alone by the seeder and may hold anything its
+--     owner chose. Every company that was backfilled must have one, and its keys must match
+--     ROLE_PERMISSIONS.manager exactly -- no `*`, no users/roles/settings/billing management,
+--     and every row an 'allow'.
+do $$
+declare
+  expected_manager constant text[] := array[
+    'jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage',
+    'forms.view', 'forms.manage', 'crm.view', 'crm.manage', 'underwriter.view',
+    'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view',
+    'time.track', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view',
+    'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view',
+    'roles.view', 'messages.view', 'messages.send', 'messages.create_group',
+    'messages.manage_groups', 'messages.attach_files', 'client_portals.view',
+    'client_portals.manage', 'workspaces.view', 'workspaces.manage'
+  ];
+  v_seeded integer;
+  v_bad text;
+begin
+  select count(*) into v_seeded
+  from public.roles r
+  where r.is_system and lower(r.name) = 'manager';
+
+  if v_seeded = 0 then
+    raise notice 'Area 1 not applied: no system Manager role to check';
+    return;
+  end if;
+
+  -- Every company predates the seed, so every one of them should now carry a system Manager.
+  select c.id into v_bad
+  from public.companies c
+  where not exists (
+          select 1 from public.roles r
+          where r.company_id = c.id and r.is_system and lower(r.name) = 'manager'
+        )
+  limit 1;
+  if v_bad is not null then
+    raise exception 'company % has no system Manager role; the backfill did not reach it', v_bad;
+  end if;
+
+  -- Keys, compared as a sorted set in both directions by exact array equality.
+  select r.company_id into v_bad
+  from public.roles r
+  where r.is_system and lower(r.name) = 'manager'
+    and (select coalesce(array_agg(rp.permission_key order by rp.permission_key), array[]::text[])
+         from public.role_permissions rp
+         where rp.role_id = r.id and rp.effect = 'allow')
+        <> (select array_agg(k order by k) from unnest(expected_manager) k)
+  limit 1;
+  if v_bad is not null then
+    raise exception 'system Manager in company % drifted from ROLE_PERMISSIONS.manager', v_bad;
+  end if;
+
+  -- A Manager is elevated by capability, not by rank: it must hold no wildcard and no deny.
+  select r.company_id into v_bad
+  from public.roles r
+  where r.is_system and lower(r.name) = 'manager'
+    and exists (
+          select 1 from public.role_permissions rp
+          where rp.role_id = r.id
+            and (rp.permission_key = '*' or rp.effect = 'deny')
+        )
+  limit 1;
+  if v_bad is not null then
+    raise exception 'system Manager in company % holds a wildcard or a deny effect', v_bad;
   end if;
 end $$;
 
