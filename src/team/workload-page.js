@@ -2,17 +2,19 @@
 // before the click needs it. The body is unchanged from where it lived.
 
 import { computeTeamWorkload } from '../data/team-workload.js';
+import { taskRosterPeople } from '../tasks/task-assignees.js';
 
 export function createTeamWorkloadPage(ctx) {
   const {
-    appHref, companyAccessUsers, companyPath, companyTasks, emptyState, h, state,
+    appHref, companyPath, companyTaskAssignees, companyTasks, emptyState, h, state,
   } = ctx;
 
   function renderTeamWorkloadPage(companyId) {
-    const members = companyAccessUsers(companyId)
-      .filter((user) => user.status === 'active')
-      .map((user) => ({ id: user.profile_id || user.member_id, name: user.name }))
-      .filter((user) => user.id && user.name);
+    // Task rows name people by ROSTER id (tasks.assignee_id -> team_members.id), so the board is
+    // keyed the same way: one row per roster id. Keying by profile id matched nothing and showed
+    // everyone at 0. A roster id shared by several logins is one row named for the id, never
+    // credited to whichever account is listed first.
+    const members = taskRosterPeople(companyTaskAssignees(companyId));
     const now = new Date();
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const wl = computeTeamWorkload({ members, tasks: companyTasks(companyId), todayIso });
