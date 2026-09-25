@@ -1,5 +1,23 @@
 # Known issues and risks
 
+## `tests/task-assignee-identity.test.mjs` fails on any Windows checkout (line endings)
+
+Five of its twelve tests fail wherever `src/main.js` is checked out with CRLF, which is every
+Windows clone: `core.autocrlf=true` is set and the repository has no `.gitattributes` to override
+it. The tests locate code with `between(main, 'async function wbCreateTaskFromPost(', '\n}\n')`,
+and `\n}\n` cannot occur in CRLF text, so `indexOf` returns -1 and the assertion reports
+*"Missing source marker"* rather than anything about assignees. Reproduced on `origin/main` at
+4b5eb14 (2026-09-26), so it arrived with PR #25, and it passes CI because CI checks out LF.
+
+Consequence: `npm test` and therefore `npm run check` are red on Windows and green on CI for
+reasons unrelated to the change under review. Nothing else in the suite is affected — the full
+5276 tests pass under an LF checkout. Two ways out, both small: add a `.gitattributes` marking
+`*.js text eol=lf` so the working tree is normalized regardless of `core.autocrlf`, or make the
+`between()` helper match `/\r?\n}\r?\n/`. The first is the better fix because it also stops the
+same class of bug appearing in future source-scanning tests, but it touches every file in the
+repository and should be its own change. Until then, do not read a Windows `npm test` failure in
+this file as a real regression.
+
 ## Task identity: one roster id can belong to several logins (structural, migration pending)
 
 `tasks.assignee_id` / `creator_id`, the task RLS policies (`current_member_id()`), comments,
