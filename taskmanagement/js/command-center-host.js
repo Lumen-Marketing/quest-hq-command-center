@@ -30,5 +30,15 @@ window.App = window.App || {};
       }
     }
     if (returnLink && integration.returnUrl) returnLink.href = integration.returnUrl;
+
+    // Inside Questbase, a click or an Escape on the page AROUND this frame never
+    // reaches this document, so App.Menu's click-away and Escape handlers cannot
+    // see it and an open menu stayed open. Focus leaving the frame is the one
+    // signal that does arrive: close the open menu on it.
+    if (integration.embedded) {
+      window.addEventListener('blur', () => {
+        if (App.Menu && App.Menu.isOpen) App.Menu.closeCurrent('away');
+      });
+    }
   });
 })();

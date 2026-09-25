@@ -2681,6 +2681,15 @@ body.sidebar-minimized .app { grid-template-columns: 68px minmax(0, 1fr); }
 .toolbar-menu-item.active { background: var(--amber-bg); color: var(--amber-ink); }
 .toolbar-menu-item i { font-size: 14px; color: var(--ink-3); }
 .toolbar-menu-item.active i { color: var(--amber); }
+/* More menu inside Questbase: the ops cockpit views sit above the More actions. */
+.toolbar-menu-sep { height: 1px; margin: 6px 4px; background: var(--border); }
+.toolbar-menu-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+.toolbar-menu-item.active .toolbar-menu-count { color: var(--amber-ink); }
 .toolbar-menu-hint {
   font-size: 10.5px;
   color: var(--ink-3);
