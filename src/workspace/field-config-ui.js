@@ -840,7 +840,7 @@ export function createFieldInput(ctx) {
       case 'file': input = `
         <div class="wb-file-field" data-wb-file ${f.config.multiple ? 'data-wb-file-multi' : ''}>
           <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
-          <input type="file" hidden accept="${acceptAttr('document')}" data-wb-file-input ${f.config.multiple ? 'multiple' : ''} />
+          <input type="file" hidden accept="${acceptAttr('fieldfile')}" data-wb-file-input ${f.config.multiple ? 'multiple' : ''} />
           <button type="button" class="wb-file-drop" data-wb-file-open>
             <i class="ti ti-cloud-upload" data-wb-file-ico></i>
             <span class="wb-file-label" data-wb-file-label></span>

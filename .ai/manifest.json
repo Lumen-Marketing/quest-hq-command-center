@@ -7,7 +7,7 @@
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "edf78341ee6327c1b6029b7248965ec23dcfbeba",
-    "latest_migration": "20260917223000_maintenance_ledger_covers_the_recycle_purge.sql"
+    "latest_migration": "20260926103000_uncapp_the_workspace_file_field.sql"
   },
   "live": {
     "supabase_verified_at": "2026-09-17T23:24:30.000000+00:00",

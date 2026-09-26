@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { acceptAttr, hasDangerousExtension, validateUpload } from '../src/security/upload-policy.js';
+import { acceptAttr, hasDangerousExtension, UPLOAD_POLICIES, validateUpload } from '../src/security/upload-policy.js';
 
 // A minimal File-like stub: validateUpload only needs name/type/size and a
 // slice(...).arrayBuffer() that yields the leading bytes for the magic check.
@@ -16,6 +16,7 @@ function fakeFile(name, bytes, type = '') {
 
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
 const ZIP = [0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0];
+const PDF = [0x25, 0x50, 0x44, 0x46, 0x2d, 0, 0, 0];
 
 test('a real PNG passes the image policy', async () => {
   const result = await validateUpload(fakeFile('logo.png', PNG, 'image/png'), 'image');
@@ -80,6 +81,35 @@ test('a re-encoding policy takes what a storing one will not', async () => {
   const runaway = fakeFile('logo.png', PNG, 'image/png');
   runaway.size = 200 * 1024 * 1024;
   assert.equal((await validateUpload(runaway, 'workspaceicon')).ok, false);
+});
+
+test('the workspace file field is uncapped, and that is deliberate', async () => {
+  // `fieldfile` is what src/workspace/file-field.js validates a File field against, and it sets
+  // max to Infinity on purpose. The only ceiling left is Supabase's project-wide Global file size
+  // limit, which lives in the dashboard; quest-job-files has file_size_limit = NULL so the bucket
+  // adds none. If someone later puts a number here, this test is the thing that should stop them.
+  assert.equal(UPLOAD_POLICIES.fieldfile.max, Infinity);
+
+  // A size nothing else in this file would let through: 2 GB, four times the old 25 MB cap.
+  const plans = fakeFile('site-plans.pdf', PDF, 'application/pdf');
+  plans.size = 2 * 1024 * 1024 * 1024;
+  assert.equal((await validateUpload(plans, 'fieldfile')).ok, true, 'a 2 GB file is not refused by the app');
+
+  // It is the SIZE cap that is gone, not the other two layers. A 2 GB file with a dangerous
+  // extension is still refused, and so is one whose bytes are not what its name claims.
+  assert.equal((await validateUpload(fakeFile('invoice.pdf.exe', PDF, 'application/pdf'), 'fieldfile')).ok, false);
+  const disguised = fakeFile('plans.pdf', ZIP, 'application/pdf');
+  disguised.size = 2 * 1024 * 1024 * 1024;
+  assert.equal((await validateUpload(disguised, 'fieldfile')).ok, false, 'ZIP bytes named .pdf are still caught');
+  assert.equal((await validateUpload(fakeFile('plans.exe', PDF, 'application/pdf'), 'fieldfile')).ok, false);
+
+  // The type list is `document`'s, unchanged, so the File field never quietly became a free-for-all.
+  assert.deepEqual(UPLOAD_POLICIES.fieldfile.exts, UPLOAD_POLICIES.document.exts);
+  assert.equal((await validateUpload(fakeFile('page.php', PDF, 'text/plain'), 'fieldfile')).ok, false);
+
+  // `document` itself is untouched, so the Files module, job files, message attachments and the
+  // client portal all keep the cap they had.
+  assert.equal(UPLOAD_POLICIES.document.max, 25 * 1024 * 1024);
 });
 
 test('the workspace icon policy keeps every content check the image policy applies', async () => {

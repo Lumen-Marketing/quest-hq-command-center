@@ -231,7 +231,7 @@ export const HELP_TOPICS = [
     readingMinutes: 1,
     moduleId: 'files',
     route: { section: 'files', label: 'Open Files' },
-    answer: 'Files live under the Files module (and on each job). Drag a file in or click to browse; PDFs and images preview inline. Uploads are limited to 25 MB and to document/image types.',
+    answer: 'Files live under the Files module (and on each job). Drag a file in or click to browse; PDFs and images preview inline. Uploads are limited to 25 MB and to document/image types. A File field on a workspace app takes a file of any size.',
   },
   {
     id: 'forms',

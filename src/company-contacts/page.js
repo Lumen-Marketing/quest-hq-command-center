@@ -1721,7 +1721,7 @@ export function createCompanyContactsPage(ctx) {
         return `<label class="span-2">${label}
           <div class="wb-file-field" data-wb-file data-wb-file-scope="Company Contacts" data-wb-file-hint="Shared with every workspace" data-wb-file-drive="${h(drive)}" ${multiple ? 'data-wb-file-multi' : ''}>
             <input type="hidden" name="${h(name)}" data-f="${h(field.id)}" value="${h(value)}" />
-            <input type="file" hidden accept="${h(acceptAttr('document'))}" data-wb-file-input ${multiple ? 'multiple' : ''} />
+            <input type="file" hidden accept="${h(acceptAttr('fieldfile'))}" data-wb-file-input ${multiple ? 'multiple' : ''} />
             <button type="button" class="wb-file-drop" data-wb-file-open>
               <i class="ti ti-cloud-upload" data-wb-file-ico></i>
               <span class="wb-file-label" data-wb-file-label></span>

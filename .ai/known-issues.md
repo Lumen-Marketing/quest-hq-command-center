@@ -1,5 +1,29 @@
 # Known issues and risks
 
+## The uncapped File field depends on a dashboard setting, and has no server-side size backstop
+
+The Workspace App Builder File field stopped enforcing a size cap on 2026-09-26: a new `fieldfile`
+policy in `src/security/upload-policy.js` sets `max: Infinity`, and
+`20260926103000_uncapp_the_workspace_file_field.sql` sets `quest-job-files.file_size_limit = null`,
+which storage resolves as "this bucket imposes no limit". Two consequences to carry forward:
+
+1. **The real ceiling is a dashboard control.** Supabase -> Storage -> Settings -> Global file size
+   limit still applies to every bucket and is the only limit left on this path. It is not yet
+   raised; until it is, a large File-field upload still stops at whatever that setting says. Free
+   cannot exceed 50 MB, Pro and up reach 500 GB. No migration can set it.
+2. **`file_size_limit` was the only non-bypassable size check, and it is now gone from a shared
+   bucket.** `quest-job-files` also serves Company Drive, job files and message attachments
+   (`src/workspace/attachments.js`). Those keep their 25 MB `document` client cap, but a caller
+   posting straight to the Storage API does not have to honour it. With Free-plan storage at 1 GB,
+   one member holding `files.manage` can make exhausting the project's disk cheap. The fixes, if
+   that ever matters more than an uncapped field, are to raise the storage quota or to give the App
+   Builder field its own bucket; both were declined on 2026-09-26 in favour of no cap.
+
+Also still outstanding from the same change: the migration is unapplied and
+`.ai/database/*` still describes the 2026-09-17 live state, so `npm run tenancy:check` is red until
+someone with live Supabase access applies the migration and refreshes the snapshot
+(`.ai/operations.md`, "Database changes"). Do not hand-edit the snapshot to make that gate pass.
+
 ## Task identity: one roster id can belong to several logins (structural, migration pending)
 
 `tasks.assignee_id` / `creator_id`, the task RLS policies (`current_member_id()`), comments,

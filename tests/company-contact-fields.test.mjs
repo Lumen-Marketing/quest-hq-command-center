@@ -282,7 +282,7 @@ test('a file field is the App Builder uploader, not a box to paste a link into',
   const file = control.slice(control.indexOf("case 'file':"), control.indexOf("case 'location':"));
   assert.match(file, /class="wb-file-field" data-wb-file/);
   assert.match(file, /data-wb-file-input/);
-  assert.match(file, /acceptAttr\('document'\)/, 'images, PDFs, spreadsheets and documents');
+  assert.match(file, /acceptAttr\('fieldfile'\)/, 'images, PDFs, spreadsheets and documents');
   assert.match(file, /data-wb-file-progress/);
   // The hidden input carries BOTH: data-f is how the uploader finds it, name is how FormData
   // collects it. Either one alone leaves the file unsaved or the field unbound.
@@ -304,7 +304,7 @@ test('an upload says whose it is, in the toast and in Company Drive', () => {
   assert.match(mount, /const scope = zone\.dataset\.wbFileScope \|\| 'Workspaces';/);
   assert.match(mount, /const driveLabels = zone\.dataset\.wbFileDrive \? JSON\.parse\(zone\.dataset\.wbFileDrive\) : null;/);
   assert.match(mount, /wbMirrorFileToDrive\(file, objectPath, companyId, hidden\.getAttribute\('data-f'\), driveLabels\)/);
-  assert.ok(mount.includes("guardUpload(rawFile, photo || isImage ? 'image' : 'document', scope)"), 'the size and type guard still runs');
+  assert.ok(mount.includes("guardUpload(rawFile, photo || isImage ? 'image' : 'fieldfile', scope)"), 'the size and type guard still runs');
   assert.match(page, /data-wb-file-scope="Company Contacts"/);
   assert.match(page, /root: 'Company Contacts', group: '', field: field\.label/);
   // A caller with no middle level gets two folders, not an empty one called "".

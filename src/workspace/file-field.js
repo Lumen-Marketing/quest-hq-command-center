@@ -124,7 +124,7 @@ export function createFileField(ctx) {
       const upload = async (rawFile) => {
         if (!rawFile) return;
         const photo = /.(png|jpe?g|webp)$/i.test(rawFile.name || '');
-        if (!(await guardUpload(rawFile, photo || isImage ? 'image' : 'document', scope))) return;
+        if (!(await guardUpload(rawFile, photo || isImage ? 'image' : 'fieldfile', scope))) return;
         const file = photo ? await shrinkUpload(rawFile) : rawFile;
         openBtn.disabled = true;
         progress.hidden = false;

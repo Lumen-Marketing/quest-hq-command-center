@@ -141,6 +141,31 @@ export const UPLOAD_POLICIES = {
     max: 25 * MB,
     label: 'document',
   },
+  // The Workspace App Builder File field, and the same field Company Contacts renders. It takes
+  // `document`'s type list unchanged -- an allowed extension, a MIME that agrees with it, and
+  // matching magic bytes are all still required -- and carries NO size cap.
+  //
+  // That is a deliberate instruction rather than an oversight, so the reasoning is recorded here
+  // instead of being left to be re-derived: a file field is where a set of plans, a photo set or a
+  // walkthrough video actually gets attached, and a cap there refuses the work instead of trimming
+  // it. The one ceiling left is not ours to set. `quest-job-files` has file_size_limit = NULL
+  // (migration 20260926103000), which storage resolves as "this bucket imposes no limit", so what
+  // remains is only the project-wide Global file size limit in the Supabase dashboard. Set that as
+  // high as the plan allows.
+  //
+  // What it gives up, stated plainly: file_size_limit was the only NON-BYPASSABLE cap on size. This
+  // bucket also backs Company Drive, job files and message attachments, so those lose that
+  // backstop as well -- they keep their own client-side caps, which a caller talking straight to the
+  // Storage API has no reason to honour. On a 1 GB Free-plan quota that makes filling the project's
+  // disk cheap for one member with `files.manage`, so this is a trade, not a free win.
+  fieldfile: {
+    exts: [
+      'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'csv',
+      'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip',
+    ],
+    max: Infinity,
+    label: 'file',
+  },
   // What the image/media button on a comment takes: something you look at or play, as opposed
   // to something you open in another program. Bigger than `document` because a phone clip of a
   // roof is measured in tens of megabytes and refusing it is refusing the feature.

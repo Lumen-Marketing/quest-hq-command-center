@@ -1,0 +1,43 @@
+-- Remove the size ceiling on quest-job-files, so a Workspace App Builder File field stops
+-- refusing files at 25 MB.
+--
+-- NULL is the value that means "no limit", and it is worth being exact about why. Supabase
+-- Storage resolves the effective maximum in src/storage/uploader.ts
+-- (getStandardMaxFileSizeLimit): it takes the project-wide limit and, ONLY IF the bucket's
+-- file_size_limit is a number, the smaller of the two. A NULL bucket value therefore contributes
+-- no ceiling of its own -- the project-wide Global file size limit is left as the only one. Setting
+-- this to a large number instead would have been strictly worse: storage takes the MINIMUM, so a
+-- big bucket limit can never widen anything, and on a Free-plan project (whose global limit cannot
+-- exceed 50 MB) a 500 GB bucket value would have looked generous while changing nothing.
+--
+-- The remaining ceiling is a dashboard control this migration cannot touch: Supabase -> Storage ->
+-- Settings -> Global file size limit. It applies to every bucket and is the real answer to "how
+-- big can a file be". On Free it cannot be raised past 50 MB; Pro and up go to 500 GB. Raise it
+-- there, or the File field will still stop at whatever the global setting says.
+--
+-- The client half is the `fieldfile` upload policy in src/security/upload-policy.js, which is what
+-- src/workspace/file-field.js validates against. It keeps the full type list -- extension, an
+-- agreeing MIME, and matching magic bytes are all still required, so no renamed executable gets in
+-- -- and sets max to Infinity. `document` and every other policy are unchanged, so the Files
+-- module, job files, message attachments and the client portal keep their existing 25 MB
+-- client-side caps and their buckets keep their own file_size_limit.
+--
+-- What this deliberately gives up: file_size_limit was the only NON-BYPASSABLE cap on size, since
+-- the client checks live in the browser. quest-job-files is also Company Drive, job files and
+-- (via src/workspace/attachments.js) message attachments, so those three lose that backstop too --
+-- their client-side caps remain, but a caller going straight at the Storage API does not have to
+-- honour them. With Free-plan storage at 1 GB, that makes exhausting the project's disk cheap for
+-- one member holding `files.manage`. Raising the Storage quota, or splitting the App Builder field
+-- onto its own bucket, would put the ceiling back only for that surface; both were considered and
+-- declined in favour of an uncapped File field.
+--
+-- Only file_size_limit is touched. 202607111000 created this bucket with a narrow MIME allowlist,
+-- but a later migration widened allowed_mime_types with the OOXML Office types,
+-- msword/ms-excel/ms-powerpoint and application/zip -- values the live bucket carries and that the
+-- client's canonical Content-Type depends on. Re-running that original insert-on-conflict here
+-- would write the stale narrow list back over the widened one and break every Word, Excel,
+-- PowerPoint and zip upload while leaving this change looking correct.
+
+update storage.buckets
+   set file_size_limit = null
+ where id = 'quest-job-files';

@@ -131,9 +131,10 @@ test('the cap is 100MB, and it is a decode guard rather than a storage limit', (
 
 test('a photo is judged as an image whatever field it was dropped on', () => {
   // A File field used the document policy, so a 30MB photo attached to one was refused for
-  // being a document. What it is decides, not which field took it.
+  // being a document. What it is decides, not which field took it. The other branch is
+  // `fieldfile` -- the uncapped policy the File field now uses, same type list, no size ceiling.
   assert.ok(fileField.includes("(png|jpe?g|webp)$/i.test(rawFile.name"), 'a photo is no longer recognised by its extension');
-  assert.match(fileField, /guardUpload\(rawFile, photo \|\| isImage \? 'image' : 'document', scope\)/);
+  assert.match(fileField, /guardUpload\(rawFile, photo \|\| isImage \? 'image' : 'fieldfile', scope\)/);
 });
 
 test('a GIF is never re-encoded', () => {

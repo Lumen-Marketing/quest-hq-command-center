@@ -2,6 +2,45 @@
 
 Latest review: 2026-09-10 (local time). Read the newest dated section first; older entries are historical release evidence, not the current deployment state. Exact live capture metadata is in manifest.json.
 
+## 2026-09-26 A workspace File field is no longer size-capped
+
+"Remove the 25mb limit on file field type, on workspace app builder, so the file field can upload
+more than 25mb", then, after a 50 MB cap was proposed and declined: "make no limits on uploading
+files on the files field on workspace apps".
+
+- **The cap lived in three places and only two of them are ours.** The client `document` policy
+  (`src/security/upload-policy.js`) held 25 MB, `quest-job-files` held `file_size_limit` 26214400,
+  and above both sits Supabase's project-wide **Global file size limit** -- a dashboard control no
+  migration can set. The first pass raised the two we own to 50 MB, which is the Free plan's
+  ceiling; the decision then went further and removed the cap from the File field entirely.
+- **`file_size_limit = null` is how you say "no limit".** Storage resolves the effective maximum in
+  `getStandardMaxFileSizeLimit`: it takes the project-wide limit and, *only if the bucket value is
+  a number*, the smaller of the two. NULL therefore contributes no ceiling, and a large number
+  would have been strictly worse -- storage takes the minimum, so it can never widen anything.
+- **`fieldfile` is a new policy, not a widened `document`.** It carries `document`'s type list
+  unchanged and sets `max: Infinity`. `src/workspace/file-field.js` validates the File field
+  against it, which is why the change stops at this one field: the Files module, job files, Company
+  Drive, message attachments and the client portal all keep their own 25 MB `document` cap and
+  their buckets keep their own limits. Earlier drafts raised `document` instead, which would have
+  silently uncapped all six surfaces at once.
+- **The ceiling that remains is the dashboard's.** Supabase -> Storage -> Settings -> Global file
+  size limit, still to be raised as far as the plan allows (Free cannot exceed 50 MB, Pro reaches
+  500 GB). Until it is, the field still stops at whatever that says.
+- **What was given up, on the record:** `file_size_limit` was the only NON-BYPASSABLE cap on size,
+  because every other check lives in the browser. `quest-job-files` is also Company Drive, job
+  files and message attachments, so those three lose that backstop as well -- their client caps
+  remain, but a caller going straight at the Storage API need not honour them. Against Free-plan
+  storage of 1 GB, that makes filling the project's disk cheap for one member holding
+  `files.manage`. Raising the quota, or giving the App Builder field its own bucket, would put a
+  ceiling back for that surface only; both were considered and declined.
+- **The size cap is not the security cap.** The extension allowlist, the MIME-agreement check and
+  magic-byte inspection are untouched, and `tests/upload-policy.test.mjs` asserts that a 2 GB file
+  is accepted while the same bytes named `invoice.pdf.exe`, `page.php`, or ZIP-as-`.pdf` are each
+  still refused.
+- Only `file_size_limit` is touched by the migration, for the reason recorded in
+  `202607111000`: re-running that insert-on-conflict would write its stale narrow MIME list back
+  over the widened one the live bucket carries and break every Office and zip upload.
+
 ## 2026-09-23 Tasks stabilization: identity translation, dates, cockpit reach, responsive layout
 
 A production walkthrough after the #19-#24 merges found the UI misrepresenting the current data
