@@ -575,11 +575,20 @@ const DEFAULT_MEMBER_PERMISSIONS = ['jobs.view', 'tasks.view', 'users.view', 'se
 
 // Demo and local-only sessions have no database to consult, so they fall back to this
 // static table. Live Supabase sessions must never use it — see `can`.
+//
+// Manager is elevated by capability, not by rank, so this list is exactly what a Manager
+// does. It is the same source the system Manager role is seeded from
+// (.ai/plans/seed-manager-role.proposed.sql) and tests/default-roles-and-roles-manage.test.mjs
+// pins the two as equal sets in both directions. Change one and change the other.
+// A Manager does the work a Member does and can also run the operation, so it holds
+// Member's `time.track` — its own hours — alongside `clock.manage`, which is the separate
+// team-wide dashboard. Without the first a Manager could approve the team's time but not
+// log their own.
 const ROLE_PERMISSIONS = {
   developer: ['*'],
   admin: ['*'],
   owner: ['*'],
-  manager: ['jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage', 'forms.view', 'forms.manage', 'crm.view', 'crm.manage', 'underwriter.view', 'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view', 'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view', 'roles.view', 'messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'client_portals.view', 'client_portals.manage', 'workspaces.view', 'workspaces.manage'],
+  manager: ['jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage', 'forms.view', 'forms.manage', 'crm.view', 'crm.manage', 'underwriter.view', 'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view', 'time.track', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view', 'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view', 'roles.view', 'messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'client_portals.view', 'client_portals.manage', 'workspaces.view', 'workspaces.manage'],
   member: ['jobs.view', 'tasks.view', 'tasks.manage', 'files.view', 'forms.view', 'time.track', 'approvals.view', 'calendar.view', 'users.view', 'messages.view', 'messages.send', 'messages.attach_files'],
 };
 
