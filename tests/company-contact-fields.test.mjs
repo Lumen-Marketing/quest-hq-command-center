@@ -275,6 +275,25 @@ test('a phone field refuses letters, using the formatter the app already had', (
   assert.match(main, /const formatted = formatPhoneNumber\(cleaned\);/);
 });
 
+test('every phone box formats on the way out, not only the ones that were tagged', () => {
+  // The reported symptom: the same number came out `602-555-0198` on some screens and
+  // `6025550198` on others. The cause was a marker attribute only some phone inputs carried, so
+  // the four that never got it stored the number raw. The fix keys on the shape of the field
+  // rather than the marker, so a new phone box is covered whether or not anybody tags it.
+  assert.match(main, /function isPhoneInput\(el\) \{/);
+  const guard = main.slice(main.indexOf('function isPhoneInput(el)'), main.indexOf('function onDocumentFocusOut'));
+  assert.match(guard, /el\.type === 'tel'/, 'a browser already tells us this, with no marker needed');
+  assert.match(guard, /el\.matches\('\[data-phone-format\]'\)/, 'the tagged boxes still count');
+  assert.match(guard, /el\.dataset\?\.wbContactaddPhone !== undefined/, 'the quick-add tile phone');
+  assert.match(guard, /el\.name === 'phone'/, 'the job, vendor, account and draft phone boxes');
+
+  // Blur rather than keystroke: a dash appearing ahead of the caret moves it, which is why live
+  // formatting felt like the field was fighting back.
+  assert.match(main, /document\.addEventListener\('focusout', onDocumentFocusOut\);/);
+  assert.match(main, /function onDocumentFocusOut\(event\) \{/);
+  assert.match(main, /const cleaned = raw\.replace\(\/\[\^0-9\+\\-\]\/g, ''\);/);
+});
+
 test('a file field is the App Builder uploader, not a box to paste a link into', () => {
   // "I want this File fields like the file fields in the app builder where I can upload a
   // file like images, document, pdf, excel, etc."

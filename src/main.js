@@ -2977,6 +2977,7 @@ function init() {
   document.addEventListener('input', onProtectedFormDraftChange);
   document.addEventListener('change', onDocumentChange);
   document.addEventListener('change', onProtectedFormDraftChange);
+  document.addEventListener('focusout', onDocumentFocusOut);
   // Wheel over the pipeline board pans it sideways. Delegated rather than bound per render,
   // because the board's markup is replaced on every paint and a listener on the node would
   // go with it. passive: false so the vertical scroll can be swapped for a horizontal one.
@@ -42740,6 +42741,44 @@ function formatPhoneNumber(value) {
   if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
   if (digits.length === 11 && digits[0] === '1') return `${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
   return raw;
+}
+
+// Is this box a phone number, however it was written?
+//
+// Deliberately keyed on the shape of the field rather than on a marker attribute, because the
+// marker was the reason the same number came out formatted on one screen and raw on another:
+// four phone boxes never got it. Naming the selectors here means a new phone input is formatted
+// whether or not anybody remembered to tag it, and `type="tel"` is what a browser already tells
+// us without being asked.
+function isPhoneInput(el) {
+  if (!el || el.tagName !== 'INPUT') return false;
+  if (el.type === 'tel') return true;
+  if (el.matches('[data-phone-format]')) return true;
+  if (el.dataset?.wbContactaddPhone !== undefined) return true;
+  return el.name === 'phone' || el.name === 'contact_phone';
+}
+
+/**
+ * Format a phone box on the way out, not on every keystroke.
+ *
+ * Two things were wrong before. Some boxes formatted live and some did not, so the same number
+ * was stored two ways; and formatting mid-typing moved the caret, because a dash appearing three
+ * characters ahead of it shifts everything after. Blur is when the number is actually finished,
+ * which is also the moment the value is read -- so the entry a person sees is the entry that gets
+ * saved.
+ *
+ * Runs on focusout, which bubbles, so one delegated listener covers every phone box on every
+ * screen including ones added later.
+ */
+function onDocumentFocusOut(event) {
+  const el = event.target;
+  if (!isPhoneInput(el)) return;
+  const raw = String(el.value || '');
+  // Only digits, a leading '+' and dashes. Anything else is a paste artefact or a typo, and
+  // leaving it in is what stops a number from ever being recognised as a phone number again.
+  const cleaned = raw.replace(/[^0-9+\-]/g, '');
+  const formatted = formatPhoneNumber(cleaned);
+  if (formatted !== raw) el.value = formatted;
 }
 
 function mapsSearchUrl(address) {
