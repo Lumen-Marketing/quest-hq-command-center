@@ -139,8 +139,11 @@ test('mobile dashboard uses scrollable controls and two-column compact metrics',
     },
     { gap: '8px', padding: '10px' },
   );
+  // Range is the only control left in the bar, so the label/value grid is scoped to it. The
+  // selector used to be the shared .dash-filter-field, which the two removed dropdowns used to
+  // sit inside.
   assert.equal(
-    declarationsAt(hostCss, '.dash-filter-field')['grid-template-columns'],
+    declarationsAt(hostCss, '.dash-filter-range')['grid-template-columns'],
     '48px minmax(0, 1fr)',
   );
 });

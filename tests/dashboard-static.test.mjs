@@ -9,7 +9,6 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/home/company-dashboard.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const smokeScript = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
-const dashboardRepOptionsBody = source.slice(source.indexOf('function dashboardRepOptions(companyId)'), source.indexOf('function dashboardOwnerKey'));
 
 test('dashboard replaces home as the canonical core workspace route', () => {
   assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'users', 'settings', 'automations'\]\);/);
@@ -61,7 +60,6 @@ test('dashboard restores customizable handoff framework controls', () => {
   assert.match(source, /function renderDashboardWidgetLibraryModal\(companyId\)/);
   assert.match(source, /function renderDashboardViewManagerModal\(companyId\)/);
   assert.match(source, /data-action="dashboard-role"/);
-  assert.match(source, /data-dashboard-rep/);
   assert.match(source, /data-action="dashboard-range"/);
   assert.match(source, /data-action="dashboard-toggle-tray"/);
   assert.match(source, /data-action="dashboard-toggle-customize"/);
@@ -72,9 +70,28 @@ test('dashboard restores customizable handoff framework controls', () => {
   assert.match(source, /data-action="dashboard-toggle-role-view"/);
   assert.match(source, /data-action="dashboard-move-role-view"/);
   assert.match(source, /state\.modal = 'dashboard-widget-library'/);
-  assert.match(dashboardRepOptionsBody, /companyAccessUsers\(companyId\)[\s\S]*\.filter\(\(user\) => user\.status === 'active'\)/);
-  assert.doesNotMatch(dashboardRepOptionsBody, /companyContacts\(companyId\)|companyDeals\(companyId\)|companyJobs\(companyId\)|companyActivities\(companyId\)/);
   assert.match(source, /Needs data source/);
+});
+
+test('the dashboard filter bar carries Range only', () => {
+  // The Workspace and Rep dropdowns were removed. Workspace duplicated the left rail, and Rep
+  // was a scoping control nobody was using. Range stays because it changes every number on the
+  // page and has no other home.
+  assert.match(source, /class="dash-filter-bar"/);
+  assert.match(source, /data-action="dashboard-range"/);
+  assert.doesNotMatch(source, /data-dashboard-rep/, 'the rep dropdown is gone');
+  assert.doesNotMatch(source, /data-dashboard-workspace/, 'the workspace dropdown is gone');
+  assert.doesNotMatch(source, /function dashboardRepOptions\(/, 'and nothing builds the option list any more');
+  assert.doesNotMatch(source, /state\.dashboardRep/, 'the state it wrote is gone too');
+});
+
+test('dashboardContext no longer filters by rep', () => {
+  // With the control gone the value could only ever be 'all', so this compared every row against
+  // a constant. Range still filters, because Range is still a control.
+  const body = source.slice(source.indexOf('function dashboardContext('), source.indexOf('function dashboardAppWidgets('));
+  assert.doesNotMatch(body, /matchesRep/);
+  assert.match(body, /dashboardRangeWindow\(state\.dashboardRange\)/);
+  assert.match(body, /companyJobs\(companyId\)\.filter\(inRange\)/);
 });
 
 test('dashboard CSS includes responsive KPI, chart, and list layouts', () => {

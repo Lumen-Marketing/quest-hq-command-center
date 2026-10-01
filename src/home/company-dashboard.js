@@ -4,9 +4,9 @@
 
 export function createCompanyDashboard(ctx) {
   const {
-    DASHBOARD_RANGE_OPTIONS, activeSession, activeWorkspaceId, allowedOperationalWorkspaces,
+    DASHBOARD_RANGE_OPTIONS, activeSession,
     appHref, canViewModule, companyMessageUnreadCount, companyName,
-    companyPath, dashboardActivityItems, dashboardContext, dashboardRepOptions, dashboardVisibleRoleViews, dashboardWidgetLayout,
+    companyPath, dashboardActivityItems, dashboardContext, dashboardVisibleRoleViews, dashboardWidgetLayout,
     dashboardWidgetRegistry, dayPart, emptyState, field, firstName, h,
     homeNextTasks, homeUnreadMessages, isLaunchHiddenDashboardWidget, moduleById, renderAvatar, renderCompanySwitch,
     renderDashboardWidgetCard, renderEmptyWorkspacePrompt, renderHomeActivity, renderHomeMessage, renderHomeNextTask, renderPilotLaunchChecklist,
@@ -24,19 +24,7 @@ export function createCompanyDashboard(ctx) {
     const ctx = dashboardContext(companyId);
     const registry = dashboardWidgetRegistry(companyId, ctx);
     const layout = dashboardWidgetLayout(companyId, role).filter((id) => registry[id] && !isLaunchHiddenDashboardWidget(registry[id]));
-    const repOptions = dashboardRepOptions(companyId);
-    if (!repOptions.some((rep) => rep.id === state.dashboardRep)) state.dashboardRep = 'all';
-    const activeRep = repOptions.find((rep) => rep.id === state.dashboardRep) || repOptions[0];
     const activeRange = DASHBOARD_RANGE_OPTIONS.find(([id]) => id === state.dashboardRange) || DASHBOARD_RANGE_OPTIONS[1];
-    // Which workspace these numbers are ALREADY about. Every list this page reads --
-    // deals, jobs, tasks, contacts -- is filtered to the open workspace before it gets here, so
-    // the dashboard has always been one workspace's dashboard. This only says which, and lets it
-    // be changed without going back to the left rail for it.
-    //
-    // Drawn only when there is a choice to make: on a company with one workspace it is a control
-    // whose every use is a no-op.
-    const workspaces = allowedOperationalWorkspaces(companyId);
-    const currentWorkspaceId = activeWorkspaceId();
 
     return `
       <section class="home-cockpit dash">
@@ -70,19 +58,6 @@ export function createCompanyDashboard(ctx) {
         </section>
 
         <section class="dash-filter-bar">
-          ${workspaces.length > 1 ? `
-            <div class="dash-filter-field">
-              <label>Workspace</label>
-              <select data-dashboard-workspace>
-                ${workspaces.map((workspace) => `<option value="${h(workspace.id)}" ${workspace.id === currentWorkspaceId ? 'selected' : ''}>${h(workspace.name)}</option>`).join('')}
-              </select>
-            </div>` : ''}
-          <div class="dash-filter-field">
-            <label>Rep</label>
-            <select data-dashboard-rep>
-              ${repOptions.map((rep) => `<option value="${h(rep.id)}" ${rep.id === activeRep.id ? 'selected' : ''}>${h(rep.name)}</option>`).join('')}
-            </select>
-          </div>
           <div class="dash-filter-field dash-filter-range">
             <label>Range</label>
             <div class="dash-range-seg">
