@@ -2723,7 +2723,6 @@ const state = {
   // rank who is having real conversations.
   callsWidgetRange: '7d',
   callsWidgetCustom: { from: '', to: '' },
-  dashboardRep: 'all',
   dashboardCustomize: false,
   dashboardTrayOpen: false,
   dashboardLayouts: readJson(DASHBOARD_LAYOUT_CACHE_KEY, {}),
@@ -8203,7 +8202,7 @@ function loadCompanyDashboard() {
       companyDashboardModule = mod.createCompanyDashboard({
         DASHBOARD_RANGE_OPTIONS, activeSession, activeWorkspaceId, allowedOperationalWorkspaces,
         appHref, canViewModule, companyMessageUnreadCount, companyName,
-        companyPath, dashboardActivityItems, dashboardContext, dashboardRepOptions, dashboardVisibleRoleViews, dashboardWidgetLayout,
+        companyPath, dashboardActivityItems, dashboardContext, dashboardVisibleRoleViews, dashboardWidgetLayout,
         dashboardWidgetRegistry, dayPart, emptyState, field, firstName, h,
         homeNextTasks, homeUnreadMessages, isLaunchHiddenDashboardWidget, moduleById, renderAvatar, renderCompanySwitch,
         renderDashboardWidgetCard, renderEmptyWorkspacePrompt, renderHomeActivity, renderHomeMessage, renderHomeNextTask, renderPilotLaunchChecklist,
@@ -8227,14 +8226,15 @@ function renderCompanyDashboard(companyId) {
 
 function dashboardContext(companyId) {
   const window = dashboardRangeWindow(state.dashboardRange);
-  const repId = state.dashboardRep || 'all';
   const inRange = (item) => dashboardInRange(item, window);
-  const matchesRep = (item) => repId === 'all' || dashboardOwnerKey(dashboardOwnerName(item)) === repId;
-  const contacts = companyContacts(companyId).filter(inRange).filter(matchesRep);
-  const deals = companyDeals(companyId).filter(inRange).filter(matchesRep);
-  const jobs = companyJobs(companyId).filter(inRange).filter(matchesRep);
-  const tasks = companyTasks(companyId).filter(inRange).filter(matchesRep);
-  const activities = companyActivities(companyId).filter(inRange).filter(matchesRep);
+  // No rep filter. The control that set it is gone, so the value could only ever be 'all' and
+  // the filter was a comparison against a constant. The helpers it used -- personOwnerLabel,
+  // dashboardOwnerKey -- stay, because the rep breakdown widget still reads owners off items.
+  const contacts = companyContacts(companyId).filter(inRange);
+  const deals = companyDeals(companyId).filter(inRange);
+  const jobs = companyJobs(companyId).filter(inRange);
+  const tasks = companyTasks(companyId).filter(inRange);
+  const activities = companyActivities(companyId).filter(inRange);
   const invoices = companyFinanceInvoices(companyId).filter((item) => dashboardInRange(item, window, ['issued_at', 'created_at', 'updated_at']));
   const payments = companyFinancePayments(companyId).filter((item) => dashboardInRange(item, window, ['received_at', 'created_at', 'updated_at']));
   const fin = financeSummary(companyId);
@@ -8858,25 +8858,6 @@ function dashboardMonthlyValues(items, dateField, valueField) {
 
 function dashboardEmptyNote(text) {
   return `<div class="dash-empty-note">${h(text)}</div>`;
-}
-
-function dashboardRepOptions(companyId) {
-  const companyKey = dashboardOwnerKey(companyName(companyId));
-  const reps = companyAccessUsers(companyId)
-    .filter((user) => user.status === 'active')
-    .map((user) => dashboardRepDisplayName(user))
-    .filter(Boolean)
-    .filter((name) => dashboardOwnerKey(name) !== companyKey)
-    .map((name) => ({ id: dashboardOwnerKey(name), name }));
-  const uniqueReps = compactUnique(reps.map((rep) => rep.id))
-    .map((id) => reps.find((rep) => rep.id === id))
-    .filter(Boolean)
-    .sort((a, b) => a.name.localeCompare(b.name));
-  return [{ id: 'all', name: 'Whole team' }].concat(uniqueReps);
-}
-
-function dashboardRepDisplayName(user) {
-  return personOwnerDisplayName(user?.name || user?.email);
 }
 
 function isInternalDashboardRepName(name) {
@@ -35278,19 +35259,6 @@ function onDocumentChange(event) {
     const formatted = String(formatContactField(cf.name, cf.value));
     if (formatted !== cf.value) cf.value = formatted;
     // fall through: no early return, this is a passive normalization
-  }
-  if (event.target.matches('[data-dashboard-rep]')) {
-    state.dashboardRep = event.target.value || 'all';
-    render();
-    return;
-  }
-  // The SAME switch the left rail makes, not a second idea of which workspace is open. Two
-  // places that each remembered their own answer would sooner or later disagree, and the
-  // dashboard would be showing one workspace's numbers under another one's name.
-  if (event.target.matches('[data-dashboard-workspace]')) {
-    const next = event.target.value || '';
-    if (next && next !== activeWorkspaceId()) setActiveWorkspace(next);
-    return;
   }
   if (event.target.matches('[data-calls-widget-custom]')) {
     const edge = event.target.dataset.callsWidgetCustom === 'to' ? 'to' : 'from';
