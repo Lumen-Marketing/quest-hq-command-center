@@ -52,16 +52,30 @@ export function createPluginsPanel(ctx) {
   }
 
   function renderPluginCard(companyId, workspaceId, plugin, canManagePlugins) {
-    // 'installed' is entitled, 'disabled' is a platform decision to withhold, and anything
-    // else means nobody has decided -- which the company may now decide for itself.
+    // 'installed' is the only value that permits an install. 'disabled' is a platform decision to
+    // withhold, and a MISSING ROW is nobody having decided yet.
+    //
+    // The old comment here claimed the missing-row case meant the company could decide for itself,
+    // and drew a bright Activate button for it. setWorkspacePlugin did not agree: it refuses
+    // anything that is not already 'installed', so the click answered "This company account is not
+    // entitled to that plugin." A card that offers a button the handler will refuse is worse than
+    // one that says why. Both now read entitlement the same way.
+    //
+    // This was reachable without anyone doing anything wrong. 'calls' was added to the catalog
+    // after the presets were written and is in none of them, so a company seeded from any preset
+    // had no company_plugins row for it at all.
     const entitlement = companyPluginStatus(companyId, plugin.id);
-    const withheld = entitlement === 'disabled';
     const entitled = entitlement === 'installed';
+    // Deliberately 'not installed' rather than 'equals disabled': a missing row is exactly the
+    // case that used to draw a button which could not work.
+    const withheld = !entitled;
     const status = workspacePluginStatus(companyId, plugin.id, workspaceId);
     plugin.status = status;
     if (LAUNCH_HIDE_FUTURE_MODULES && plugin.status === 'coming_soon') return '';
     const installed = status === 'installed';
     const disabled = status === 'disabled';
+    // A workspace that has genuinely turned it off is a normal Re-enable, entitlement or not --
+    // the row exists and says 'disabled', so this is a company turning its own module back on.
     const available = status === 'available' && !withheld;
     const unavailable = status === 'available' && withheld;
     const comingSoon = status === 'coming_soon';
@@ -81,7 +95,7 @@ export function createPluginsPanel(ctx) {
           <small>${h(moduleLabels)}</small>
           <small class="plugin-scope-badge ${h(plugin.dataScope)}"><i class="ti ti-database" aria-hidden="true"></i>${h(scope.label)}</small>
           <small class="plugin-scope-description">${h(scope.description)}</small>
-          ${unavailable ? '<small class="plugin-card-note">Withheld for your company. Ask Quest to turn it on.</small>' : ''}
+          ${unavailable ? `<small class="plugin-card-note">${entitlement === 'disabled' ? 'Turned off for your company by Quest.' : 'Not yet enabled for your company. Ask Quest to turn it on.'}</small>` : ''}
           ${prerequisiteNote ? `<small class="plugin-card-note">${h(prerequisiteNote)}</small>` : ''}
           ${conflictLabels && !installed ? `<small class="plugin-card-note warning">Installing ${h(plugin.label)} disables ${h(conflictLabels)}.</small>` : ''}
         </div>
@@ -89,7 +103,7 @@ export function createPluginsPanel(ctx) {
         <div class="plugin-card-actions">
           ${installed ? `<button class="btn" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="disabled" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-power"></i>Disable</button>` : ''}
           ${available || disabled ? `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="installed" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-download"></i>${disabled ? 'Re-enable' : 'Activate'}</button>` : ''}
-          ${unavailable ? '<button class="btn" type="button" disabled><i class="ti ti-lock"></i>Withheld by Quest</button>' : ''}
+          ${unavailable ? `<button class="btn" type="button" disabled><i class="ti ti-lock"></i>${entitlement === 'disabled' ? 'Turned off by Quest' : 'Not enabled yet'}</button>` : ''}
           ${comingSoon ? '<button class="btn" type="button" disabled><i class="ti ti-clock"></i>Coming soon</button>' : ''}
         </div>
       </article>
