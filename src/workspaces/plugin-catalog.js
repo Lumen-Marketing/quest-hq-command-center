@@ -54,10 +54,16 @@ export const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true, dataScope: PLUGIN_DATA_SCOPES.COMPANY_SHARED },
 ];
 
+// 'calls' was added to the catalog after these presets were written and was in none of them, so a
+// company seeded from any preset had no company_plugins row for it. That is not merely a missing
+// feature: the settings card then offered an Activate button whose click was refused with "This
+// company account is not entitled to that plugin" (main.js, setWorkspacePlugin). Included now so
+// new companies are entitled from the start. Existing companies still need the row backfilled --
+// a preset only applies at creation.
 export const WORKSPACE_PLUGIN_PRESETS = Object.freeze({
-  roofing: Object.freeze(['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks']),
-  construction: Object.freeze(['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks']),
-  generic: Object.freeze(['crm', 'files', 'messages', 'workspace_builder', 'tasks']),
+  roofing: Object.freeze(['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'calls', 'tasks']),
+  construction: Object.freeze(['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'calls', 'tasks']),
+  generic: Object.freeze(['crm', 'files', 'messages', 'workspace_builder', 'calls', 'tasks']),
 });
 
 export const WORKSPACE_PLUGIN_PRESET_LABELS = Object.freeze({

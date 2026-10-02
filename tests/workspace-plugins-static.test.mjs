@@ -70,9 +70,13 @@ test('quest crm plugin contents match the contacts quotes jobs workspace', () =>
 });
 
 test('workspace presets install industry plugin bundles', () => {
-  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.roofing, ['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks']);
-  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.construction, ['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks']);
-  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.generic, ['crm', 'files', 'messages', 'workspace_builder', 'tasks']);
+  // 'calls' is in every non-blank preset. It reached the catalog and the database allowlist
+  // without ever reaching a preset, so a company seeded from any of these had no
+  // company_plugins row for it -- which is what produced a Calls card offering an Activate
+  // button the handler refused. See 20261002120000_calls_plugin_preset_and_backfill.sql.
+  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.roofing, ['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'calls', 'tasks']);
+  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.construction, ['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'calls', 'tasks']);
+  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.generic, ['crm', 'files', 'messages', 'workspace_builder', 'calls', 'tasks']);
   assert.match(source, /name="preset_code"/);
   assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: 'blank', icon_key: iconKey \}\)/);
   assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey, owner_email: ownerEmail \}\)/);
