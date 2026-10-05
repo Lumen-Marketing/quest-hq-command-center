@@ -70,12 +70,13 @@ test('the first render starts only after all top-level module state initializes'
   assert.ok(initIndex > lastDeclarationIndex, 'init must run after every top-level declaration to keep cached deep links out of the temporal dead zone');
 });
 
-test('dashboard rep filter hides internal placeholder account ids', () => {
-  assert.match(source, /function dashboardRepDisplayName\s*\(/);
+test('dashboard hides internal placeholder account ids from owner labels', () => {
+  // The rep dropdown and its option builder are gone, but the sanitising these two do is still
+  // load-bearing: the rep breakdown widget and every owner label read through personOwnerLabel,
+  // and a raw 'basic-quest-user' would otherwise surface on a customer's dashboard.
   assert.match(source, /function isInternalDashboardRepName\s*\(/);
   assert.match(source, /function personOwnerDisplayName\s*\(/);
   assert.match(source, /key === 'basic-quest-user'/);
-  assert.match(source, /\.map\(\(user\) => dashboardRepDisplayName\(user\)\)/);
   assert.match(source, /dashboardOwnerKey\(clean\) === dashboardOwnerKey\(companyName\(companyId\)\)/);
   assert.match(source, /return personOwnerLabel\(item\?\.owner_name/);
 });
