@@ -1,15 +1,26 @@
 name: CI
 
+# push only for main, pull_request for everything else.
+#
+# `push: branches: ['**']` ran the whole suite twice for every pull request: once for the branch
+# push and once for the pull_request event, both against the same SHA. Branch protection counts
+# every check run against the head SHA, and `test-and-build` is a required check, so both had to
+# go green -- which meant a merge could be held up by one of two identical runs, and cancelling a
+# stuck one turned the other into a cancelled check that cannot be overridden at all.
+#
+# main keeps its own push run so a direct push or a merge commit is still verified.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # One group per pull request, keyed on the PR number rather than github.ref, so the push and
+  # pull_request runs for the same branch cancel each other instead of queueing side by side.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
