@@ -58,16 +58,23 @@ test('the platform panel reads the entitlement it writes', () => {
   assert.match(main, /companyPluginStatus,/, 'and main.js has to pass it');
 });
 
-test('a company admin can activate a plugin that has no entitlement yet', () => {
+test('a plugin with no company entitlement is not offered an Activate it will be refused', () => {
   const card = panelBody.slice(panelBody.indexOf('function renderPluginCard('));
   const body = card.slice(0, card.length);
-  assert.match(body, /const withheld = entitlement === 'disabled';/);
+  // This test used to assert the opposite: that a company admin could activate a plugin with no
+  // entitlement yet, and that the card drew a live Activate button for it. setWorkspacePlugin
+  // never allowed that -- it refuses anything not already 'installed' at the company level -- so
+  // the card was promising something the handler could not deliver. Reported on Calls, which is
+  // in no preset and so had no company_plugins row at all.
+  //
+  // Entitlement at the COMPANY level is a platform decision, granted from the platform panel's
+  // per-company plugin strip. A workspace can then install or disable what it is entitled to.
+  assert.match(body, /const withheld = !entitled;/, 'no entitlement means withheld, not merely disabled');
+  assert.doesNotMatch(body, /const withheld = entitlement === 'disabled';/);
   assert.match(body, /const available = status === 'available' && !withheld;/);
   assert.match(body, /const unavailable = status === 'available' && withheld;/);
-  // The Activate button used to require `entitled`, which only the platform could grant.
-  assert.ok(
-    !/data-action="set-workspace-plugin"[^`]*canManagePlugins && entitled/.test(body),
-    'Activate must no longer require a platform-granted entitlement',
-  );
-  assert.match(body, /Withheld for your company/, 'a withheld plugin says who to ask');
+  // A workspace that switched its own plugin off is still a working Re-enable: the row exists.
+  assert.match(body, /\$\{available \|\| disabled \? `<button[^>]*data-status="installed"/);
+  // Withheld says who to ask, and which of the two situations it is.
+  assert.match(body, /entitlement === 'disabled' \? 'Turned off for your company by Quest\.' : 'Not yet enabled for your company\./);
 });
