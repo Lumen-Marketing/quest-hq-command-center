@@ -53,12 +53,12 @@ export function createRingCentralClient({ clientId, clientSecret, jwt, serverUrl
     return cachedToken;
   }
 
-  async function fetchPaged(path, params = {}) {
+  async function fetchPaged(path, params = {}, { pageSize = PAGE_SIZE, maxPages = MAX_PAGES } = {}) {
     const token = await getAccessToken();
     const records = [];
 
-    for (let page = 1; page <= MAX_PAGES; page += 1) {
-      const query = new URLSearchParams({ ...params, page: String(page), perPage: String(PAGE_SIZE) });
+    for (let page = 1; page <= maxPages; page += 1) {
+      const query = new URLSearchParams({ ...params, page: String(page), perPage: String(pageSize) });
       const response = await fetchImpl(`${base}${path}?${query.toString()}`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },

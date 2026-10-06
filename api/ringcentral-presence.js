@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { setApiHeaders, errorResponse, HttpError } from './_lib/http-security.js';
+import { setApiHeaders, errorResponse, requireAllowedOrigin, HttpError } from './_lib/http-security.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
 import { resolveCompanyAdmin } from './_lib/user-auth.js';
 import { createRingCentralClient, deriveDisplayStatus } from './_lib/ringcentral.js';
 
@@ -56,6 +57,17 @@ export default async function handler(request, response) {
     const companyId = String(request.query?.company_id || '').trim();
     if (!companyId) throw new HttpError(400, 'company_id is required.');
 
+    // This handler predates defineEndpoint and owns its own try/catch, so it does not get the
+    // wrapper's rate limit and origin check. It is a GET with a database write and an upstream
+    // fetch behind it, which means a cross-origin page could drive RingCentral consumption and
+    // presence upserts without the caller being able to read the answer.
+    //
+    // enforceRateLimit is the in-house helper for exactly this shape -- the local ceiling only,
+    // no durable window, because this is admin-gated rather than a guessable secret. 30/min is
+    // well above the live board's own poll interval and well below what would matter to RingCentral.
+    requireAllowedOrigin(request);
+    if (!enforceRateLimit(request, response, { namespace: 'ringcentral-presence', limit: 30, windowMs: 60_000 })) return;
+
     const supabaseUrl = env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
     const serviceKey = env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
     if (!supabaseUrl || !serviceKey) throw new HttpError(503, 'Presence is not configured.');
@@ -110,6 +122,11 @@ export default async function handler(request, response) {
       records = await ringcentral.fetchPaged(
         `/restapi/v1.0/account/${account.data.rc_account_id}/presence`,
         { detailedTelephonyState: 'true' },
+        // Presence is one row per extension on the account -- a snapshot, not a log. The shared
+        // 250 x 40 ceiling is sized for call history, and applied here it let one request pull
+        // 10,000 records to render a board that has at most a few dozen rows. 100 x 3 is still
+        // 300, comfortably past any real seat count, at a third of the requests.
+        { pageSize: 100, maxPages: 3 },
       );
     } catch (upstreamError) {
       stale = true;
