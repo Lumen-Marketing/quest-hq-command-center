@@ -71,9 +71,14 @@ test('Team Workload counts Alexia\'s task and keeps "info" work on the shared ro
   assert.equal(wl.unassignedOpen, 0);
 });
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-const workloadPage = readFileSync(new URL('../src/team/workload-page.js', import.meta.url), 'utf8');
-const recordTask = readFileSync(new URL('../src/workspace/record-task.js', import.meta.url), 'utf8');
+// Normalized to LF on read. `between()` below looks for bare '\n}\n' end-of-function markers, and
+// those cannot occur in CRLF text -- so on a Windows checkout with core.autocrlf=true these five
+// tests failed while passing on CI. Normalizing here rather than relying on a checkout
+// configuration is what the other source-scanning tests in this repo already do, and it is what
+// .gitattributes is explicitly not a substitute for.
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const workloadPage = readFileSync(new URL('../src/team/workload-page.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const recordTask = readFileSync(new URL('../src/workspace/record-task.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 function between(source, start, end) {
   const at = source.indexOf(start);
