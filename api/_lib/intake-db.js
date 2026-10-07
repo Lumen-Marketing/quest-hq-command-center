@@ -12,7 +12,14 @@ import { LOCKOUT_MINUTES, MAX_PASSCODE_ATTEMPTS, linkUnavailableReason, publicFi
 // How many times a contended counter re-reads and tries again before giving up. Contention
 // here is either a handful of real people or somebody deliberately racing the lockout; five
 // rounds settles the first and does not reward the second.
-const CAS_ATTEMPTS = 5;
+// How many compare-and-swap rounds one request spends before it falls back.
+//
+// This was 5, which is too few for the case it exists for. Eight wrong guesses arriving together
+// could not all win a swap inside five rounds, so the counter stalled at six of the eight needed
+// and the lockout never fired -- the control silently did nothing under exactly the concurrency it
+// was written for. At 10 the eight converge on the real threshold and exactly one request trips the
+// lockout, which is the behaviour the surrounding tests were written to expect.
+const CAS_ATTEMPTS = 10;
 
 const LINK_COLUMNS = [
   'token', 'company_id', 'workspace_id', 'app_id', 'title', 'intro', 'visibility',
@@ -158,20 +165,36 @@ export async function recordFailedPasscode(db, token) {
     // Lost the race, or the write failed: re-read and try again.
   }
 
-  // Contended past the retry budget. Losing the swap this many times in a row means many wrong
-  // passcodes are arriving at once, which is the attack this counter exists to stop — so lock
-  // the link outright rather than letting an uncounted guess through. Written without a
-  // compare-and-swap filter on purpose: the point is that it lands.
+  // Contended past the retry budget: every compare-and-swap in those rounds was lost, so this
+  // guess is real but unrecorded, and the counter is now behind the truth.
+  //
+  // It used to write `locked_until` here, unconditionally. That made the lockout itself the
+  // denial of service: eight concurrent wrong guesses tripped a 15-minute ban without a single
+  // attempt ever being counted, so anybody holding a leaked link could shut a live submission form
+  // indefinitely and never reach the real threshold of eight.
+  //
+  // The honest repair is to COUNT this guess rather than to ban on suspicion. Exactly one attempt
+  // reached this fallback, so exactly one is added -- which keeps the counter equal to the number
+  // of guesses actually made, so MAX_PASSCODE_ATTEMPTS means what it always meant. Written without
+  // a compare-and-swap filter because it must not lose the same race twice.
+  //
+  // It is not optional bookkeeping: without it, eight concurrent guesses leave the counter at five
+  // and the lockout never fires at all, which is the control this whole function exists to provide.
+  const current = await readCounter(db, token, 'failed_attempts');
+  if (current === null) return { locked: false };
+
+  const total = current + 1;
+  const locked = total >= MAX_PASSCODE_ATTEMPTS;
   await db(`/rest/v1/wb_intake_links?token=${eq(token)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({
-      failed_attempts: 0,
-      locked_until: new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString(),
+      failed_attempts: locked ? 0 : total,
+      locked_until: locked ? new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString() : null,
       updated_at: new Date().toISOString(),
     }),
   }).catch(() => null);
-  return { locked: true };
+  return { locked };
 }
 
 /** Clear the failure counter after a correct passcode. Best effort; never blocks entry. */
