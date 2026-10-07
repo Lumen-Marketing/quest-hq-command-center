@@ -68,3 +68,9 @@ twa/
 
 # Office lock files, created whenever a workbook in reports/ is open.
 ~$*
+
+# Private audit output. docs/private/ holds security findings that carry working
+# exploit chains against unfixed production endpoints, so it must never be
+# committed or pushed to a public remote. The architecture and hardening
+# findings from the same audit live in docs/audits/ and ARE tracked.
+docs/private/
