@@ -74,3 +74,8 @@ twa/
 # committed or pushed to a public remote. The architecture and hardening
 # findings from the same audit live in docs/audits/ and ARE tracked.
 docs/private/
+
+# Generated status reports restate the security findings in a shareable form, so
+# they stay out of the public remote too. docs/audits/*.md remains tracked on
+# purpose -- that is the material meant to be reviewed in the open.
+docs/audits/*.pdf
