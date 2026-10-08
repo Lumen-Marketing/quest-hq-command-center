@@ -60,9 +60,12 @@ test('761-980px shell: the tab bar is pinned and styled, the top bar stays one r
   assert.match(band, /\.topbar \.topbar-right \{ display: flex;[^}]*flex-wrap: nowrap;/);
 });
 
-test('styles.css keeps its CRLF line endings', () => {
+// Previously asserted "every line ending is CRLF", which is what kept the file committed with
+// CRLF -- and with a doubled CR on some lines, which a CRLF-pair count cannot see. The repo
+// policy is LF everywhere (.gitattributes). Asserting zero CR bytes catches both.
+test('styles.css carries no CR byte', () => {
   const raw = readFileSync(new URL('../src/styles.css', import.meta.url));
-  let bare = 0;
-  for (let i = 0; i < raw.length; i += 1) if (raw[i] === 0x0a && raw[i - 1] !== 0x0d) bare += 1;
-  assert.equal(bare, 0);
+  let cr = 0;
+  for (let i = 0; i < raw.length; i += 1) if (raw[i] === 0x0d) cr += 1;
+  assert.equal(cr, 0, `styles.css must be LF-only; found ${cr} CR byte(s)`);
 });
