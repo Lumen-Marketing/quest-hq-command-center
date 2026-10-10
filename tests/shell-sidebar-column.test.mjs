@@ -22,8 +22,15 @@ test('the fix comes after the old 218px rule, so it wins at equal specificity', 
   assert.ok(old > -1 && fix > old, 'fix must be declared after the 1180px rule it corrects');
 });
 
-test('styles.css keeps its CRLF line endings', () => {
-  const crlf = raw.toString('latin1').split('\r\n').length - 1;
-  const lf = raw.toString('latin1').split('\n').length - 1;
-  assert.equal(lf, crlf, 'every line ending is CRLF');
+// This used to assert styles.css keeps CRLF endings, which is what pinned the corruption in
+// place: the file was committed with CRLF (and, on some lines, a doubled CR) and the test made
+// that the expected state. The repository policy is now LF everywhere, via .gitattributes.
+//
+// Asserting "no CR byte at all" is strictly stronger than counting CRLF pairs: it catches CRLF
+// endings AND the doubled CR (\r\r\n) that a CRLF-only check waves through, because a doubled CR
+// still contains one CR.
+test('styles.css carries no CR byte', () => {
+  let cr = 0;
+  for (let i = 0; i < raw.length; i += 1) if (raw[i] === 0x0d) cr += 1;
+  assert.equal(cr, 0, `styles.css must be LF-only; found ${cr} CR byte(s)`);
 });

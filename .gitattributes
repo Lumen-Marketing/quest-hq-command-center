@@ -1,0 +1,58 @@
+# Working-tree line endings are normalized to LF everywhere.
+#
+# Why this file exists: `core.autocrlf=true` is set on the Windows clones this repository is
+# developed on, and with no rules to override it, git checked every text file out as CRLF.
+# That is invisible until a test reads source and searches for a literal "\n". It already
+# happened: `tests/task-assignee-identity.test.mjs` searches `src/main.js` for '\n}\n', which
+# cannot occur in CRLF text, so five of its tests failed on every Windows checkout and passed
+# on CI. See .ai/known-issues.md.
+#
+# `text=auto` lets git detect text by content and normalize it; `eol=lf` then fixes the working
+# tree to LF on every platform. The explicit extension list below makes the text files certain
+# rather than detected, because a file git guesses wrong about stays wrong silently.
+#
+# Note for future source-scanning tests: normalizing the WORKING TREE is not a substitute for
+# normalizing on READ. Still write `readFileSync(...).replace(/\r\n/g, '\n')`, as the other
+# source-scanning tests do, so a test cannot be broken by a checkout configuration.
+
+* text=auto eol=lf
+
+# Text, stated rather than detected.
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.ts    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.sql   text eol=lf
+*.yml   text eol=lf
+*.py    text eol=lf
+*.csv   text eol=lf
+*.svg   text eol=lf
+*.webmanifest text eol=lf
+.gitignore text eol=lf
+.env.example text eol=lf
+
+# Binary. Never normalized, never diffed as text, never line-ending converted. These must be
+# listed explicitly: `text=auto` alone is a content guess, and a misjudged binary becomes a
+# corrupted file rather than a failed check.
+*.png   binary
+*.jpg   binary
+*.webp  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.pdf   binary
+*.xlsx  binary
+*.apk   binary
+*.zip   binary
+
+# Windows batch files. LF works, but CRLF is what every other .bat on the machine has and what
+# cmd.exe was built around; leave them alone.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
