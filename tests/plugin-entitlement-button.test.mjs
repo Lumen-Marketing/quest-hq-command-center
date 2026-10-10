@@ -59,7 +59,7 @@ test('a workspace that switched its own plugin off can still turn it back on', (
   // status as well as entitlement.
   assert.match(
     cardBody,
-    /const available = status === 'available' && !withheld;[\s\S]*\$\{available \|\| disabled \? `<button[^>]*data-status="installed"/,
+    /const available = status === 'available' && !withheld;[\s\S]*\$\{canManagePlugins && \(available \|\| disabled\) \? `<button[^>]*data-status="installed"/,
     'Re-enable is offered for a workspace-level disable',
   );
 });

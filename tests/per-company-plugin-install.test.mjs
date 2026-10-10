@@ -74,7 +74,7 @@ test('a plugin with no company entitlement is not offered an Activate it will be
   assert.match(body, /const available = status === 'available' && !withheld;/);
   assert.match(body, /const unavailable = status === 'available' && withheld;/);
   // A workspace that switched its own plugin off is still a working Re-enable: the row exists.
-  assert.match(body, /\$\{available \|\| disabled \? `<button[^>]*data-status="installed"/);
+  assert.match(body, /\$\{canManagePlugins && \(available \|\| disabled\) \? `<button[^>]*data-status="installed"/);
   // Withheld says who to ask, and which of the two situations it is.
   assert.match(body, /entitlement === 'disabled' \? 'Turned off for your company by Quest\.' : 'Not yet enabled for your company\./);
 });

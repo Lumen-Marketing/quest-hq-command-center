@@ -101,8 +101,8 @@ export function createPluginsPanel(ctx) {
         </div>
         <b class="status-pill ${installed ? 'active' : comingSoon || unavailable ? 'muted' : disabled ? 'pending' : ''}">${h(unavailable ? 'Withheld' : pluginStatusLabel(status))}</b>
         <div class="plugin-card-actions">
-          ${installed ? `<button class="btn" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="disabled" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-power"></i>Disable</button>` : ''}
-          ${available || disabled ? `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="installed" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-download"></i>${disabled ? 'Re-enable' : 'Activate'}</button>` : ''}
+          ${installed && canManagePlugins ? `<button class="btn" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="disabled"><i class="ti ti-power"></i>Disable</button>` : ''}
+          ${canManagePlugins && (available || disabled) ? `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="installed"><i class="ti ti-download"></i>${disabled ? 'Re-enable' : 'Activate'}</button>` : ''}
           ${unavailable ? `<button class="btn" type="button" disabled><i class="ti ti-lock"></i>${entitlement === 'disabled' ? 'Turned off by Quest' : 'Not enabled yet'}</button>` : ''}
           ${comingSoon ? '<button class="btn" type="button" disabled><i class="ti ti-clock"></i>Coming soon</button>' : ''}
         </div>
